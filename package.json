@@ -13,6 +13,14 @@
 		"format": "prettier --write .",
 		"lint": "prettier --check . && eslint ."
 	},
+	"dependencies": {
+		"@atcute/atproto": "^3.1.7",
+		"@atcute/bluesky": "^3.2.7",
+		"@atcute/client": "^4.0.5",
+		"@atcute/identity": "^1.1.1",
+		"@atcute/lexicons": "^1.2.2",
+		"lru-cache": "^11.2.2"
+	},
 	"devDependencies": {
 		"@eslint/compat": "^1.4.0",
 		"@eslint/js": "^9.36.0",
