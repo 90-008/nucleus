@@ -14,10 +14,12 @@
     "npm:@tailwindcss/forms@~0.5.10": "0.5.10_tailwindcss@4.1.14",
     "npm:@tailwindcss/vite@^4.1.13": "4.1.14_vite@7.1.10__@types+node@24.8.0__picomatch@4.0.3_@types+node@24.8.0",
     "npm:@types/node@24": "24.8.0",
+    "npm:@wora/cache-persist@^2.2.1": "2.2.1",
     "npm:eslint-config-prettier@^10.1.8": "10.1.8_eslint@9.37.0",
     "npm:eslint-plugin-svelte@^3.12.4": "3.12.4_eslint@9.37.0_svelte@5.40.1__acorn@8.15.0_postcss@8.5.6",
     "npm:eslint@^9.36.0": "9.37.0",
     "npm:globals@^16.4.0": "16.4.0",
+    "npm:hash-wasm@^4.12.0": "4.12.0",
     "npm:lru-cache@^11.2.2": "11.2.2",
     "npm:prettier-plugin-svelte@^3.4.0": "3.4.0_prettier@3.6.2_svelte@5.40.1__acorn@8.15.0",
     "npm:prettier-plugin-tailwindcss@~0.6.14": "0.6.14_prettier@3.6.2_prettier-plugin-svelte@3.4.0__prettier@3.6.2__svelte@5.40.1___acorn@8.15.0_svelte@5.40.1__acorn@8.15.0",
@@ -725,6 +727,12 @@
         "eslint-visitor-keys@4.2.1"
       ]
     },
+    "@wora/cache-persist@2.2.1": {
+      "integrity": "sha512-X9MHiML5F8z3mabnl6J8hAwjn9g6Sria6+wUGwo97UDLMOWpZtJ+Jp/DQ7GjI1JirVXMQUDXBftVDgpvjhpNcw==",
+      "dependencies": [
+        "idb"
+      ]
+    },
     "acorn-jsx@5.3.2_acorn@8.15.0": {
       "integrity": "sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==",
       "dependencies": [
@@ -1101,6 +1109,12 @@
     },
     "has-flag@4.0.0": {
       "integrity": "sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ=="
+    },
+    "hash-wasm@4.12.0": {
+      "integrity": "sha512-+/2B2rYLb48I/evdOIhP+K/DD2ca2fgBjp6O+GBEnCDk2e4rpeXIK8GvIyRPjTezgmWn9gmKwkQjjx6BtqDHVQ=="
+    },
+    "idb@4.0.5": {
+      "integrity": "sha512-P+Fk9HT2h1DhXoE1YNK183SY+CRh2GHNh28de94sGwhe0bUA75JJeVJWt3SenE5p0BXK7maflIq29dl6UZHrFw=="
     },
     "ignore@5.3.2": {
       "integrity": "sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g=="
@@ -1707,10 +1721,12 @@
         "npm:@tailwindcss/forms@~0.5.10",
         "npm:@tailwindcss/vite@^4.1.13",
         "npm:@types/node@24",
+        "npm:@wora/cache-persist@^2.2.1",
         "npm:eslint-config-prettier@^10.1.8",
         "npm:eslint-plugin-svelte@^3.12.4",
         "npm:eslint@^9.36.0",
         "npm:globals@^16.4.0",
+        "npm:hash-wasm@^4.12.0",
         "npm:lru-cache@^11.2.2",
         "npm:prettier-plugin-svelte@^3.4.0",
         "npm:prettier-plugin-tailwindcss@~0.6.14",

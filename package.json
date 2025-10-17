@@ -19,6 +19,8 @@
 		"@atcute/client": "^4.0.5",
 		"@atcute/identity": "^1.1.1",
 		"@atcute/lexicons": "^1.2.2",
+		"@wora/cache-persist": "^2.2.1",
+		"hash-wasm": "^4.12.0",
 		"lru-cache": "^11.2.2"
 	},
 	"devDependencies": {
