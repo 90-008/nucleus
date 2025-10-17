@@ -53,7 +53,7 @@
 			newAccounts.map(async (account) => {
 				const client = $clients.get(account.did);
 				if (!client) return;
-				const accPosts = await fetchPostsWithReplyBacklinks(client, account.did, undefined, 10);
+				const accPosts = await fetchPostsWithReplyBacklinks(client, account.did, undefined, 20);
 				if (!accPosts.ok) {
 					console.error(`failed to fetch posts for account ${account.handle}: ${accPosts.error}`);
 					return;

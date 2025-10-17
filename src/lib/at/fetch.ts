@@ -29,7 +29,10 @@ export const fetchPostsWithReplyBacklinks = async (
 					key: r.uri as CanonicalResourceUri,
 					value: {
 						post: r.value as AppBskyFeedPost.Main,
-						replies: res.ok ? res.value : res.error
+						// filter out posts from the same repo
+						replies: res.ok
+							? { ...res.value, records: res.value.records.filter((r) => r.did !== repo) }
+							: res.error
 					}
 				}))
 		)
