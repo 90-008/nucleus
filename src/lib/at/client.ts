@@ -9,13 +9,16 @@ import { safeParse, type Handle, type InferOutput } from '@atcute/lexicons';
 import {
 	isHandle,
 	parseCanonicalResourceUri,
+	parseResourceUri,
 	type ActorIdentifier,
 	type AtprotoDid,
 	type CanonicalResourceUri,
 	type Nsid,
-	type RecordKey
+	type RecordKey,
+	type ResourceUri
 } from '@atcute/lexicons/syntax';
 import type {
+	InferInput,
 	InferXRPCBodyOutput,
 	ObjectSchema,
 	RecordKeySchema,
@@ -74,12 +77,27 @@ export class AtpClient {
 		return ok(null);
 	}
 
+	async getRecordUri<
+		Collection extends Nsid,
+		TObject extends ObjectSchema & { shape: { $type: v.LiteralSchema<Collection> } },
+		TKey extends RecordKeySchema,
+		Schema extends RecordSchema<TObject, TKey>,
+		Output extends InferInput<Schema>
+	>(schema: Schema, uri: ResourceUri): Promise<Result<Output, string>> {
+		const parsedUri = expect(parseResourceUri(uri));
+		if (parsedUri.collection !== schema.object.shape.$type.expected)
+			return err(
+				`collections don't match: ${parsedUri.collection} != ${schema.object.shape.$type.expected}`
+			);
+		return await this.getRecord(schema, parsedUri.repo!, parsedUri.rkey!);
+	}
+
 	async getRecord<
 		Collection extends Nsid,
 		TObject extends ObjectSchema & { shape: { $type: v.LiteralSchema<Collection> } },
 		TKey extends RecordKeySchema,
 		Schema extends RecordSchema<TObject, TKey>,
-		Output extends InferOutput<Schema>
+		Output extends InferInput<Schema>
 	>(schema: Schema, repo: ActorIdentifier, rkey: RecordKey): Promise<Result<Output, string>> {
 		const collection = schema.object.shape.$type.expected;
 		const cacheKey = `${repo}:${collection}:${rkey}`;

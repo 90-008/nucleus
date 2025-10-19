@@ -1,5 +1,5 @@
 export const theme = $state({
-	bg: '#0f172a', // slate-900 - deep blue-grey background
+	bg: '#11001c', // slate-900 - deep blue-grey background
 	fg: '#f8fafc', // slate-50 - crisp white foreground
 	accent: '#ec4899', // pink-500 - vibrant pink accent
 	accent2: '#8b5cf6' // violet-500 - purple secondary accent

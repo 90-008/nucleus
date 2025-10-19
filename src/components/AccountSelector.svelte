@@ -4,17 +4,21 @@
 	import type { Did, Handle } from '@atcute/lexicons';
 	import { theme } from '$lib/theme.svelte';
 
-	let {
-		accounts = [],
-		selectedDid = $bindable(null),
-		onAccountSelected,
-		onLoginSucceed
-	}: {
+	interface Props {
 		accounts: Array<Account>;
 		selectedDid?: Did | null;
 		onAccountSelected: (did: Did) => void;
 		onLoginSucceed: (did: Did, handle: Handle, password: string) => void;
-	} = $props();
+		onLogout: (did: Did) => void;
+	}
+
+	let {
+		accounts = [],
+		selectedDid = $bindable(null),
+		onAccountSelected,
+		onLoginSucceed,
+		onLogout
+	}: Props = $props();
 
 	let color = $derived(selectedDid ? (generateColorForDid(selectedDid) ?? theme.fg) : theme.fg);
 
@@ -104,10 +108,10 @@
 <div class="relative">
 	<button
 		onclick={toggleDropdown}
-		class="group flex h-full items-center gap-2 rounded-2xl border-2 px-4 font-medium shadow-lg transition-all hover:scale-105 hover:shadow-xl"
+		class="group flex h-full items-center gap-2 rounded-sm border-2 px-2 font-medium shadow-lg transition-all hover:scale-105 hover:shadow-xl"
 		style="border-color: {theme.accent}66; background: {theme.accent}18; color: {color}; backdrop-filter: blur(8px);"
 	>
-		<span class="text-sm">
+		<span class="font-bold">
 			{selectedAccount ? `@${selectedAccount.handle}` : 'select account'}
 		</span>
 		<svg
@@ -125,7 +129,7 @@
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			class="absolute left-0 z-10 mt-3 min-w-52 overflow-hidden rounded-2xl border-2 shadow-2xl backdrop-blur-lg"
+			class="absolute left-0 z-10 mt-3 min-w-52 overflow-hidden rounded-sm border-2 shadow-2xl backdrop-blur-lg"
 			style="border-color: {theme.accent}; background: {theme.bg}f0;"
 			onclick={(e) => e.stopPropagation()}
 		>
@@ -135,28 +139,48 @@
 						{@const color = generateColorForDid(account.did)}
 						<button
 							onclick={() => selectAccount(account.did)}
-							class="flex w-full items-center gap-3 rounded-xl p-2 text-left text-sm font-medium transition-all {account.did ===
-							selectedDid
-								? 'shadow-lg'
-								: 'hover:scale-[1.02]'}"
+							class="
+    							group flex w-full items-center gap-3 rounded-sm p-2 text-left text-sm font-medium transition-all
+    							{account.did === selectedDid ? 'shadow-lg' : ''}
+							"
 							style="color: {color}; background: {account.did === selectedDid
 								? `linear-gradient(135deg, ${theme.accent}33, ${theme.accent2}33)`
 								: 'transparent'};"
 						>
 							<span>@{account.handle}</span>
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								onclick={() => onLogout(account.did)}
+								class="ml-auto hidden h-5 w-5 transition-all group-hover:[display:block] hover:scale-[1.2] hover:shadow-md"
+								style="color: {theme.accent};"
+								width="24"
+								height="24"
+								viewBox="0 0 20 20"
+								><path
+									fill="currentColor"
+									fill-rule="evenodd"
+									d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443q-1.193.115-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022l.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52l.149.023a.75.75 0 0 0 .23-1.482A41 41 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1zM10 4q1.26 0 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325Q8.74 4 10 4M8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06z"
+									clip-rule="evenodd"
+								/></svg
+							>
+
 							{#if account.did === selectedDid}
 								<svg
-									class="ml-auto h-5 w-5"
+									xmlns="http://www.w3.org/2000/svg"
+									class="ml-auto h-5 w-5 group-hover:hidden"
 									style="color: {theme.accent};"
-									fill="currentColor"
-									viewBox="0 0 20 20"
-								>
-									<path
+									width="24"
+									height="24"
+									viewBox="0 0 24 24"
+									><path
+										fill="currentColor"
 										fill-rule="evenodd"
-										d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+										d="M19.916 4.626a.75.75 0 0 1 .208 1.04l-9 13.5a.75.75 0 0 1-1.154.114l-6-6a.75.75 0 0 1 1.06-1.06l5.353 5.353l8.493-12.74a.75.75 0 0 1 1.04-.207"
 										clip-rule="evenodd"
-									/>
-								</svg>
+										stroke-width="1.5"
+										stroke="currentColor"
+									/></svg
+								>
 							{/if}
 						</button>
 					{/each}
@@ -168,7 +192,7 @@
 			{/if}
 			<button
 				onclick={openLoginModal}
-				class="flex w-full items-center gap-3 p-3 text-left text-sm font-semibold transition-all hover:scale-[1.02]"
+				class="group flex w-full origin-left items-center gap-3 p-3 text-left text-sm font-semibold transition-all hover:scale-[1.1]"
 				style="color: {theme.accent};"
 			>
 				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -197,7 +221,7 @@
 		<!-- svelte-ignore a11y_interactive_supports_focus -->
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div
-			class="w-full max-w-md rounded-3xl border-2 p-5 shadow-2xl"
+			class="w-full max-w-md rounded-sm border-2 p-5 shadow-2xl"
 			style="background: {theme.bg}; border-color: {theme.accent};"
 			onclick={(e) => e.stopPropagation()}
 			role="dialog"
@@ -237,7 +261,7 @@
 						type="text"
 						bind:value={loginHandle}
 						placeholder="example.bsky.social"
-						class="placeholder-opacity-40 w-full rounded-xl border-2 px-4 py-3 font-medium transition-all focus:scale-[1.02] focus:shadow-lg focus:outline-none"
+						class="placeholder-opacity-40 w-full rounded-sm border-2 px-4 py-3 font-medium transition-all focus:scale-[1.02] focus:shadow-lg focus:outline-none"
 						style="background: {theme.accent}08; border-color: {theme.accent}66; color: {theme.fg};"
 						disabled={isLoggingIn}
 					/>
@@ -256,7 +280,7 @@
 						type="password"
 						bind:value={loginPassword}
 						placeholder="xxxx-xxxx-xxxx-xxxx"
-						class="placeholder-opacity-40 w-full rounded-xl border-2 px-4 py-3 font-medium transition-all focus:scale-[1.02] focus:shadow-lg focus:outline-none"
+						class="placeholder-opacity-40 w-full rounded-sm border-2 px-4 py-3 font-medium transition-all focus:scale-[1.02] focus:shadow-lg focus:outline-none"
 						style="background: {theme.accent}08; border-color: {theme.accent}66; color: {theme.fg};"
 						disabled={isLoggingIn}
 					/>
@@ -264,7 +288,7 @@
 
 				{#if loginError}
 					<div
-						class="rounded-xl border-2 p-4"
+						class="rounded-sm border-2 p-4"
 						style="background: #ef444422; border-color: #ef4444;"
 					>
 						<p class="text-sm font-medium" style="color: #fca5a5;">{loginError}</p>
@@ -274,7 +298,7 @@
 				<div class="flex gap-3 pt-3">
 					<button
 						onclick={closeLoginModal}
-						class="flex-1 rounded-xl border-2 px-5 py-3 font-semibold transition-all hover:scale-105"
+						class="flex-1 rounded-sm border-2 px-5 py-3 font-semibold transition-all hover:scale-105"
 						style="background: {theme.bg}; border-color: {theme.fg}33; color: {theme.fg};"
 						disabled={isLoggingIn}
 					>
@@ -282,7 +306,7 @@
 					</button>
 					<button
 						onclick={handleLogin}
-						class="flex-1 rounded-xl border-2 px-5 py-3 font-semibold transition-all hover:scale-105 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
+						class="flex-1 rounded-sm border-2 px-5 py-3 font-semibold transition-all hover:scale-105 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
 						style="background: linear-gradient(135deg, {theme.accent}, {theme.accent2}); border-color: transparent; color: {theme.fg};"
 						disabled={isLoggingIn}
 					>
