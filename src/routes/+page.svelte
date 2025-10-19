@@ -47,6 +47,7 @@
 		$accounts = $accounts.filter((acc) => acc.did !== did);
 		clients.delete(did);
 		posts.delete(did);
+		selectedDid = $accounts[0]?.did;
 	};
 
 	const handleLoginSucceed = async (did: Did, handle: Handle, password: string) => {
