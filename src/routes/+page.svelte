@@ -29,9 +29,9 @@
 
 	onMount(async () => {
 		if ($accounts.length > 0) {
+			loaderState.status = 'LOADING';
 			selectedDid = $accounts[0].did;
 			Promise.all($accounts.map(loginAccount)).then(() => {
-				loaderState.isFirstLoad = true;
 				loadMore();
 			});
 		}
@@ -66,21 +66,27 @@
 	};
 
 	let posts = new SvelteMap<Did, SvelteMap<ResourceUri, AppBskyFeedPost.Main>>();
-	let cursors = new SvelteMap<Did, string | undefined>();
+	let cursors = new SvelteMap<Did, { value?: string; end: boolean }>();
 
 	const fetchTimeline = async (account: Account) => {
 		const client = clients.get(account.did);
 		if (!client) return;
 
 		const cursor = cursors.get(account.did);
-		const accPosts = await fetchPostsWithBacklinks(client, account.did, cursor, 6);
+		if (cursor && cursor.end) return;
+
+		const accPosts = await fetchPostsWithBacklinks(client, account.did, cursor?.value, 6);
 		if (!accPosts.ok) {
 			throw `failed to fetch posts for account ${account.handle}: ${accPosts.error}`;
 		}
 
-		// Update cursor for next fetch
-		cursors.set(account.did, accPosts.value.cursor);
+		// if the cursor is undefined, we've reached the end of the timeline
+		if (!accPosts.value.cursor) {
+			cursors.set(account.did, { ...cursor, end: true });
+			return;
+		}
 
+		cursors.set(account.did, { value: accPosts.value.cursor, end: false });
 		const accTimeline = await hydratePosts(client, accPosts.value.posts);
 		if (!posts.has(account.did)) {
 			posts.set(account.did, new SvelteMap(accTimeline));
@@ -106,6 +112,7 @@
 			loaderState.error();
 		} finally {
 			loading = false;
+			if (cursors.values().every((cursor) => cursor.end)) loaderState.complete();
 		}
 	};
 
@@ -176,16 +183,14 @@
 
 				post.depth = depth;
 
-				if (!childrenMap.has(post.parentUri)) {
-					childrenMap.set(post.parentUri, []);
-				}
+				if (!childrenMap.has(post.parentUri)) childrenMap.set(post.parentUri, []);
 				childrenMap.get(post.parentUri)!.push(post);
 			}
 
 			// Sort children by time (newest first)
-			for (const children of childrenMap.values()) {
-				children.sort((a, b) => b.newestTime - a.newestTime);
-			}
+			childrenMap
+				.values()
+				.forEach((children) => children.sort((a, b) => b.newestTime - a.newestTime));
 
 			// Helper to create a thread from posts
 			const createThread = (
@@ -207,9 +212,7 @@
 				const addWithChildren = (post: ThreadPost) => {
 					result.push(post);
 					const children = childrenMap.get(post.uri) || [];
-					for (const child of children) {
-						addWithChildren(child);
-					}
+					children.forEach(addWithChildren);
 				};
 				addWithChildren(startPost);
 				return result;
@@ -334,30 +337,50 @@
 	</div>
 
 	<div class="mt-4 overflow-y-scroll [scrollbar-width:none]" bind:this={scrollContainer}>
-		<InfiniteLoader
-			{loaderState}
-			triggerLoad={loadMore}
-			intersectionOptions={{ root: scrollContainer }}
-		>
-			{@render threadsView()}
-			{#snippet loading()}
-				<div class="flex justify-center py-4">
-					<div
-						class="h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
-						style="border-color: {theme.accent} {theme.accent} {theme.accent} transparent;"
-					></div>
-				</div>
-			{/snippet}
-			{#snippet error()}
-				<div class="flex justify-center py-4">
-					<p class="text-sm opacity-80" style="color: {theme.fg};">
-						an error occurred while loading posts: {loadError}
-					</p>
-				</div>
-			{/snippet}
-		</InfiniteLoader>
+		{#if $accounts.length > 0}
+			{@render renderThreads()}
+		{:else}
+			<div class="flex justify-center py-4">
+				<p class="text-xl opacity-80" style="color: {theme.fg};">
+					<span class="text-4xl">x_x</span> <br /> no accounts are logged in!
+				</p>
+			</div>
+		{/if}
 	</div>
 </div>
+
+{#snippet renderThreads()}
+	<InfiniteLoader
+		{loaderState}
+		triggerLoad={loadMore}
+		loopDetectionTimeout={0}
+		intersectionOptions={{ root: scrollContainer }}
+	>
+		{@render threadsView()}
+		{#snippet noData()}
+			<div class="flex justify-center py-4">
+				<p class="text-xl opacity-80" style="color: {theme.fg};">
+					all posts seen! <span class="text-2xl">:o</span>
+				</p>
+			</div>
+		{/snippet}
+		{#snippet loading()}
+			<div class="flex justify-center">
+				<div
+					class="h-12 w-12 animate-spin rounded-full border-4 border-t-transparent"
+					style="border-color: {theme.accent} {theme.accent} {theme.accent} transparent;"
+				></div>
+			</div>
+		{/snippet}
+		{#snippet error()}
+			<div class="flex justify-center py-4">
+				<p class="text-xl opacity-80" style="color: {theme.fg};">
+					<span class="text-4xl">:(</span> <br /> an error occurred while loading posts: {loadError}
+				</p>
+			</div>
+		{/snippet}
+	</InfiniteLoader>
+{/snippet}
 
 {#snippet threadsView()}
 	{#each threads as thread (thread.rootUri)}
@@ -365,7 +388,7 @@
 			{#if thread.branchParentPost}
 				{@const post = thread.branchParentPost}
 				<div class="mb-1.5 flex items-center gap-1.5">
-					<span class="text-sm opacity-60" style="color: {theme.fg};"
+					<span class="text-sm text-nowrap opacity-60" style="color: {theme.fg};"
 						>{reverseChronological ? '↱' : '↳'}</span
 					>
 					<BskyPost

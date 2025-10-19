@@ -97,7 +97,7 @@
 			{#if post.ok}
 				{@const record = post.value}
 				<span style="color: {color};">@{handle}</span>: {@render embedBadge(record)}
-				{record.text}
+				<span title={record.text}>{record.text}</span>
 			{:else}
 				{post.error}
 			{/if}
