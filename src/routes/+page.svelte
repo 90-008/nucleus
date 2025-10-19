@@ -16,6 +16,10 @@
 	import { expect } from '$lib/result';
 	import type { AppBskyFeedPost } from '@atcute/bluesky';
 	import { SvelteMap } from 'svelte/reactivity';
+	import { InfiniteLoader, LoaderState } from 'svelte-infinite';
+
+	let loaderState = new LoaderState();
+	let scrollContainer = $state<HTMLDivElement>();
 
 	let selectedDid = $state<Did | null>(null);
 	let clients = new SvelteMap<Did, AtpClient>();
@@ -26,7 +30,10 @@
 	onMount(async () => {
 		if ($accounts.length > 0) {
 			selectedDid = $accounts[0].did;
-			Promise.all($accounts.map(loginAccount)).then(() => fetchTimelines($accounts));
+			Promise.all($accounts.map(loginAccount)).then(() => {
+				loaderState.isFirstLoad = true;
+				loadMore();
+			});
 		}
 	});
 
@@ -47,6 +54,7 @@
 		$accounts = $accounts.filter((acc) => acc.did !== did);
 		clients.delete(did);
 		posts.delete(did);
+		cursors.delete(did);
 		selectedDid = $accounts[0]?.did;
 	};
 
@@ -58,14 +66,21 @@
 	};
 
 	let posts = new SvelteMap<Did, SvelteMap<ResourceUri, AppBskyFeedPost.Main>>();
+	let cursors = new SvelteMap<Did, string | undefined>();
+
 	const fetchTimeline = async (account: Account) => {
 		const client = clients.get(account.did);
 		if (!client) return;
-		const accPosts = await fetchPostsWithBacklinks(client, account.did, undefined, 20);
+
+		const cursor = cursors.get(account.did);
+		const accPosts = await fetchPostsWithBacklinks(client, account.did, cursor, 6);
 		if (!accPosts.ok) {
-			console.error(`failed to fetch posts for account ${account.handle}: ${accPosts.error}`);
-			return;
+			throw `failed to fetch posts for account ${account.handle}: ${accPosts.error}`;
 		}
+
+		// Update cursor for next fetch
+		cursors.set(account.did, accPosts.value.cursor);
+
 		const accTimeline = await hydratePosts(client, accPosts.value.posts);
 		if (!posts.has(account.did)) {
 			posts.set(account.did, new SvelteMap(accTimeline));
@@ -74,10 +89,28 @@
 		const map = posts.get(account.did)!;
 		for (const [uri, record] of accTimeline) map.set(uri, record);
 	};
+
 	const fetchTimelines = (newAccounts: Account[]) => Promise.all(newAccounts.map(fetchTimeline));
 
+	let loading = $state(false);
+	let loadError = $state('');
+	const loadMore = async () => {
+		if (loading || $accounts.length === 0) return;
+
+		loading = true;
+		try {
+			await fetchTimelines($accounts);
+			loaderState.loaded();
+		} catch (error) {
+			loadError = `${error}`;
+			loaderState.error();
+		} finally {
+			loading = false;
+		}
+	};
+
 	let reverseChronological = $state(true);
-	let viewOwnPosts = $state(true);
+	let viewOwnPosts = $state(false);
 
 	type ThreadPost = {
 		uri: ResourceUri;
@@ -240,7 +273,7 @@
 		return threads;
 	};
 
-	// Filtering functions (now much simpler!)
+	// Filtering functions
 	const isOwnPost = (post: ThreadPost, accounts: Account[]) =>
 		accounts.some((account) => account.did === post.did);
 	const hasNonOwnPost = (posts: ThreadPost[], accounts: Account[]) =>
@@ -253,12 +286,11 @@
 			return true;
 		});
 
-	// Usage
 	let threads = $derived(filterThreads(buildThreads(posts), $accounts));
 </script>
 
-<div class="mx-auto max-w-2xl p-4">
-	<div class="mb-6">
+<div class="mx-auto flex h-screen max-w-2xl flex-col p-4">
+	<div class="mb-6 flex-shrink-0">
 		<h1 class="text-3xl font-bold tracking-tight" style="color: {theme.fg};">nucleus</h1>
 		<div class="mt-1 flex gap-2">
 			<div class="h-1 w-11 rounded-full" style="background: {theme.accent};"></div>
@@ -266,7 +298,7 @@
 		</div>
 	</div>
 
-	<div class="space-y-4">
+	<div class="flex-shrink-0 space-y-4">
 		<div class="flex min-h-16 items-stretch gap-2">
 			<AccountSelector
 				accounts={$accounts}
@@ -299,37 +331,62 @@
 			class="h-[4px] w-full rounded-full border-0"
 			style="background: linear-gradient(to right, {theme.accent}, {theme.accent2});"
 		/>
+	</div>
 
-		<div class="flex flex-col">
-			{#each threads as thread (thread.rootUri)}
-				<div class="flex {reverseChronological ? 'flex-col' : 'flex-col-reverse'} mb-6.5">
-					{#if thread.branchParentPost}
-						{@const post = thread.branchParentPost}
-						<div class="mb-1.5 flex items-center gap-1.5">
-							<span class="text-sm opacity-60" style="color: {theme.fg};"
-								>{reverseChronological ? '↱' : '↳'}</span
-							>
-							<BskyPost
-								mini
-								client={viewClient}
-								identifier={post.did}
-								rkey={post.rkey}
-								record={post.record}
-							/>
-						</div>
-					{/if}
-					{#each thread.posts as post (post.uri)}
-						<div class="mb-1.5">
-							<BskyPost
-								client={viewClient}
-								identifier={post.did}
-								rkey={post.rkey}
-								record={post.record}
-							/>
-						</div>
-					{/each}
+	<div class="mt-4 overflow-y-scroll [scrollbar-width:none]" bind:this={scrollContainer}>
+		<InfiniteLoader
+			{loaderState}
+			triggerLoad={loadMore}
+			intersectionOptions={{ root: scrollContainer }}
+		>
+			{@render threadsView()}
+			{#snippet loading()}
+				<div class="flex justify-center py-4">
+					<div
+						class="h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
+						style="border-color: {theme.accent} {theme.accent} {theme.accent} transparent;"
+					></div>
+				</div>
+			{/snippet}
+			{#snippet error()}
+				<div class="flex justify-center py-4">
+					<p class="text-sm opacity-80" style="color: {theme.fg};">
+						an error occurred while loading posts: {loadError}
+					</p>
+				</div>
+			{/snippet}
+		</InfiniteLoader>
+	</div>
+</div>
+
+{#snippet threadsView()}
+	{#each threads as thread (thread.rootUri)}
+		<div class="flex {reverseChronological ? 'flex-col' : 'flex-col-reverse'} mb-6.5">
+			{#if thread.branchParentPost}
+				{@const post = thread.branchParentPost}
+				<div class="mb-1.5 flex items-center gap-1.5">
+					<span class="text-sm opacity-60" style="color: {theme.fg};"
+						>{reverseChronological ? '↱' : '↳'}</span
+					>
+					<BskyPost
+						mini
+						client={viewClient}
+						identifier={post.did}
+						rkey={post.rkey}
+						record={post.record}
+					/>
+				</div>
+			{/if}
+			{#each thread.posts as post (post.uri)}
+				<div class="mb-1.5">
+					<BskyPost
+						client={viewClient}
+						identifier={post.did}
+						rkey={post.rkey}
+						record={post.record}
+					/>
 				</div>
 			{/each}
 		</div>
-	</div>
-</div>
+	{/each}
+{/snippet}

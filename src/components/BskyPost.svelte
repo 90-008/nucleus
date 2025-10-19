@@ -119,7 +119,7 @@
 		{#if post.ok}
 			{@const record = post.value}
 			<div
-				class="rounded-sm border-2 p-3 shadow-lg backdrop-blur-sm transition-all hover:scale-[1.01]"
+				class="rounded-sm border-2 p-3 shadow-lg backdrop-blur-sm transition-all"
 				style="background: {color}18; border-color: {color}66;"
 			>
 				<div class="mb-3 flex items-center gap-1.5">

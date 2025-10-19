@@ -25,6 +25,7 @@
     "npm:prettier-plugin-tailwindcss@~0.6.14": "0.6.14_prettier@3.6.2_prettier-plugin-svelte@3.4.0__prettier@3.6.2__svelte@5.40.1___acorn@8.15.0_svelte@5.40.1__acorn@8.15.0",
     "npm:prettier@^3.6.2": "3.6.2",
     "npm:svelte-check@^4.3.2": "4.3.3_svelte@5.40.1__acorn@8.15.0_typescript@5.9.3",
+    "npm:svelte-infinite@0.5": "0.5.0_svelte@5.40.1__acorn@8.15.0",
     "npm:svelte@^5.39.5": "5.40.1_acorn@8.15.0",
     "npm:tailwindcss@^4.1.13": "4.1.14",
     "npm:typescript-eslint@^8.44.1": "8.46.1_eslint@9.37.0_typescript@5.9.3_@typescript-eslint+parser@8.46.1__eslint@9.37.0__typescript@5.9.3",
@@ -1564,6 +1565,12 @@
         "svelte"
       ]
     },
+    "svelte-infinite@0.5.0_svelte@5.40.1__acorn@8.15.0": {
+      "integrity": "sha512-3ZomRQcQzg8VWtnqO4MvPC0Jt3hvh1wmC47t64BcI+8UXTl0FJYVfB7ky4d1NJ3mf/KZZa+hcIZJPnV9cOt8gQ==",
+      "dependencies": [
+        "svelte"
+      ]
+    },
     "svelte@5.40.1_acorn@8.15.0": {
       "integrity": "sha512-0R3t2oiLxJNJb2buz61MNfPdkjeyj2qTCM7TtIv/4ZfF12zD7Ig8iIo+C8febroy+9S4QJ7qfijtearSdO/1ww==",
       "dependencies": [
@@ -1732,6 +1739,7 @@
         "npm:prettier-plugin-tailwindcss@~0.6.14",
         "npm:prettier@^3.6.2",
         "npm:svelte-check@^4.3.2",
+        "npm:svelte-infinite@0.5",
         "npm:svelte@^5.39.5",
         "npm:tailwindcss@^4.1.13",
         "npm:typescript-eslint@^8.44.1",
