@@ -11,9 +11,10 @@ export interface PersistedLRUOptions {
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export class PersistedLRU<K extends string, V extends {}> {
 	private memory: LRUCache<K, V>;
-	private storage: Cache; // from wora/cache-persist
+	private storage: Cache;
+	private signals: Map<K, (data: V) => void>;
 
-	private prefix = ''; // or derive from options
+	private prefix = '';
 
 	constructor(opts: PersistedLRUOptions) {
 		this.memory = new LRUCache<K, V>({
@@ -22,6 +23,7 @@ export class PersistedLRU<K extends string, V extends {}> {
 		});
 		this.storage = new Cache(opts.persistOptions);
 		this.prefix = opts.prefix ? `${opts.prefix}%` : '';
+		this.signals = new Map();
 
 		this.init();
 	}
@@ -45,9 +47,15 @@ export class PersistedLRU<K extends string, V extends {}> {
 	get(key: K): V | undefined {
 		return this.memory.get(key);
 	}
+	getSignal(key: K): Promise<V> {
+		return new Promise<V>((resolve) => {
+			this.signals.set(key, resolve);
+		});
+	}
 	set(key: K, value: V): void {
 		this.memory.set(key, value);
 		this.storage.set(this.prefixed(key), value);
+		this.signals.get(key)?.(value);
 		this.storage.flush(); // TODO: uh evil and fucked up (this whole file is evil honestly)
 	}
 	has(key: K): boolean {
@@ -56,10 +64,12 @@ export class PersistedLRU<K extends string, V extends {}> {
 	delete(key: K): void {
 		this.memory.delete(key);
 		this.storage.delete(this.prefixed(key));
+		this.storage.flush();
 	}
 	clear(): void {
 		this.memory.clear();
-		this.storage.purge(); // clears stored state
+		this.storage.purge();
+		this.storage.flush();
 	}
 
 	private prefixed(key: K): string {

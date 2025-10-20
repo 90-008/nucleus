@@ -51,11 +51,12 @@
 	};
 
 	const handleLogout = async (did: Did) => {
-		$accounts = $accounts.filter((acc) => acc.did !== did);
+		const newAccounts = $accounts.filter((acc) => acc.did !== did);
+		$accounts = newAccounts;
 		clients.delete(did);
 		posts.delete(did);
 		cursors.delete(did);
-		selectedDid = $accounts[0]?.did;
+		handleAccountSelected(newAccounts[0]?.did);
 	};
 
 	const handleLoginSucceed = async (did: Did, handle: Handle, password: string) => {
@@ -304,6 +305,7 @@
 	<div class="flex-shrink-0 space-y-4">
 		<div class="flex min-h-16 items-stretch gap-2">
 			<AccountSelector
+				client={viewClient}
 				accounts={$accounts}
 				bind:selectedDid
 				onAccountSelected={handleAccountSelected}
@@ -391,23 +393,12 @@
 					<span class="text-sm text-nowrap opacity-60" style="color: {theme.fg};"
 						>{reverseChronological ? '↱' : '↳'}</span
 					>
-					<BskyPost
-						mini
-						client={viewClient}
-						identifier={post.did}
-						rkey={post.rkey}
-						record={post.record}
-					/>
+					<BskyPost mini client={viewClient} {...post} />
 				</div>
 			{/if}
 			{#each thread.posts as post (post.uri)}
 				<div class="mb-1.5">
-					<BskyPost
-						client={viewClient}
-						identifier={post.did}
-						rkey={post.rkey}
-						record={post.record}
-					/>
+					<BskyPost client={viewClient} {...post} />
 				</div>
 			{/each}
 		</div>

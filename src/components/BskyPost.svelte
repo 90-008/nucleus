@@ -1,34 +1,35 @@
 <script lang="ts">
 	import type { AtpClient } from '$lib/at/client';
 	import { AppBskyFeedPost } from '@atcute/bluesky';
-	import type { ActorIdentifier, RecordKey } from '@atcute/lexicons';
+	import type { ActorIdentifier, Did, RecordKey } from '@atcute/lexicons';
 	import { theme } from '$lib/theme.svelte';
 	import { map, ok } from '$lib/result';
 	import { generateColorForDid } from '$lib/accounts';
+	import ProfilePicture from './ProfilePicture.svelte';
 
 	interface Props {
 		client: AtpClient;
-		identifier: ActorIdentifier;
+		did: Did;
 		rkey: RecordKey;
 		// replyBacklinks?: Backlinks;
 		record?: AppBskyFeedPost.Main;
 		mini?: boolean;
 	}
 
-	const { client, identifier, rkey, record, mini /* replyBacklinks */ }: Props = $props();
+	const { client, did, rkey, record, mini /* replyBacklinks */ }: Props = $props();
 
-	const color = generateColorForDid(identifier) ?? theme.accent2;
+	const color = generateColorForDid(did) ?? theme.accent2;
 
-	let handle = $state(identifier);
+	let handle: ActorIdentifier = $state(did);
 	client
-		.resolveDidDoc(identifier)
+		.resolveDidDoc(did)
 		.then((res) => map(res, (data) => data.handle))
 		.then((res) => {
 			if (res.ok) handle = res.value;
 		});
 	const post = record
 		? Promise.resolve(ok(record))
-		: client.getRecord(AppBskyFeedPost.mainSchema, identifier, rkey);
+		: client.getRecord(AppBskyFeedPost.mainSchema, did, rkey);
 	// const replies = replyBacklinks
 	// 	? Promise.resolve(ok(replyBacklinks))
 	// 	: client.getBacklinks(
@@ -65,12 +66,12 @@
 		const months = Math.floor(days / 30);
 		const years = Math.floor(months / 12);
 
-		if (years > 0) return `${years} year${years > 1 ? 's' : ''} ago`;
-		if (months > 0) return `${months} month${months > 1 ? 's' : ''} ago`;
-		if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
-		if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-		if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
-		if (seconds > 0) return `${seconds} second${seconds > 1 ? 's' : ''} ago`;
+		if (years > 0) return `${years}y`;
+		if (months > 0) return `${months}m`;
+		if (days > 0) return `${days}d`;
+		if (hours > 0) return `${hours}h`;
+		if (minutes > 0) return `${minutes}m`;
+		if (seconds > 0) return `${seconds}s`;
 		return 'just now';
 	};
 </script>
@@ -106,7 +107,7 @@
 {:else}
 	{#await post}
 		<div
-			class="rounded-sm border-2 p-3 text-center backdrop-blur-sm"
+			class="rounded-sm border-2 p-2 text-center backdrop-blur-sm"
 			style="background: {color}18; border-color: {color}66;"
 		>
 			<div
@@ -119,13 +120,30 @@
 		{#if post.ok}
 			{@const record = post.value}
 			<div
-				class="rounded-sm border-2 p-3 shadow-lg backdrop-blur-sm transition-all"
+				class="rounded-sm border-2 p-2 shadow-lg backdrop-blur-sm transition-all"
 				style="background: {color}18; border-color: {color}66;"
 			>
-				<div class="mb-3 flex items-center gap-1.5">
-					<span class="font-bold" style="color: {color};">
-						@{handle}
+				<div
+					class="group mb-3 flex w-fit max-w-full items-center gap-1.5 rounded-sm pr-1"
+					style="background: {color}33;"
+				>
+					<ProfilePicture {client} {did} size={8} />
+
+					<span class="flex min-w-0 items-center gap-2 font-bold" style="color: {color};">
+						{#await client.getProfile(did)}
+							{handle}
+						{:then profile}
+							{#if profile.ok}
+								{@const profileValue = profile.value}
+								<span class="min-w-0 overflow-hidden text-nowrap overflow-ellipsis"
+									>{profileValue.displayName}</span
+								><span class="shrink-0 text-nowrap">(@{handle})</span>
+							{:else}
+								{handle}
+							{/if}
+						{/await}
 					</span>
+
 					<!-- <span>·</span>
 				{#await replies}
 					<span style="color: {theme.fg}aa;">… replies</span>
@@ -149,7 +167,9 @@
 					{/if}
 				{/await} -->
 					<span>·</span>
-					<span style="color: {theme.fg}aa;">{getRelativeTime(new Date(record.createdAt))}</span>
+					<span class="text-nowrap" style="color: {theme.fg}aa;"
+						>{getRelativeTime(new Date(record.createdAt))}</span
+					>
 				</div>
 				<p class="leading-relaxed text-wrap" style="color: {theme.fg};">
 					{record.text}

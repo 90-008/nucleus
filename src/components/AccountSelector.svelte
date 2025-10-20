@@ -3,8 +3,11 @@
 	import { AtpClient } from '$lib/at/client';
 	import type { Did, Handle } from '@atcute/lexicons';
 	import { theme } from '$lib/theme.svelte';
+	import ProfilePicture from './ProfilePicture.svelte';
+	import PfpPlaceholder from './PfpPlaceholder.svelte';
 
 	interface Props {
+		client: AtpClient;
 		accounts: Array<Account>;
 		selectedDid?: Did | null;
 		onAccountSelected: (did: Did) => void;
@@ -13,14 +16,13 @@
 	}
 
 	let {
+		client,
 		accounts = [],
 		selectedDid = $bindable(null),
 		onAccountSelected,
 		onLoginSucceed,
 		onLogout
 	}: Props = $props();
-
-	let color = $derived(selectedDid ? (generateColorForDid(selectedDid) ?? theme.fg) : theme.fg);
 
 	let isDropdownOpen = $state(false);
 	let isLoginModalOpen = $state(false);
@@ -99,8 +101,6 @@
 	const closeDropdown = () => {
 		isDropdownOpen = false;
 	};
-
-	let selectedAccount = $derived(accounts.find((acc) => acc.did === selectedDid));
 </script>
 
 <svelte:window onclick={closeDropdown} />
@@ -108,21 +108,13 @@
 <div class="relative">
 	<button
 		onclick={toggleDropdown}
-		class="group flex h-full items-center gap-2 rounded-sm border-2 px-2 font-medium shadow-lg transition-all hover:scale-105 hover:shadow-xl"
-		style="border-color: {theme.accent}66; background: {theme.accent}18; color: {color}; backdrop-filter: blur(8px);"
+		class="flex h-16 w-16 items-center justify-center rounded-sm shadow-lg transition-all hover:scale-105 hover:shadow-xl"
 	>
-		<span class="font-bold">
-			{selectedAccount ? `@${selectedAccount.handle}` : 'select account'}
-		</span>
-		<svg
-			class="h-4 w-4 transition-transform {isDropdownOpen ? 'rotate-180' : ''}"
-			style="color: {theme.accent};"
-			fill="none"
-			stroke="currentColor"
-			viewBox="0 0 24 24"
-		>
-			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7" />
-		</svg>
+		{#if selectedDid}
+			<ProfilePicture {client} did={selectedDid} size={15} />
+		{:else}
+			<PfpPlaceholder color={theme.accent} size={15} />
+		{/if}
 	</button>
 
 	{#if isDropdownOpen}

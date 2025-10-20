@@ -13,6 +13,7 @@ import {
 	type ActorIdentifier,
 	type AtprotoDid,
 	type CanonicalResourceUri,
+	type Did,
 	type Nsid,
 	type RecordKey,
 	type ResourceUri
@@ -30,6 +31,7 @@ import { MiniDocQuery, type MiniDoc } from './slingshot';
 import { BacklinksQuery, type Backlinks, type BacklinksSource } from './constellation';
 import type { Records } from '@atcute/lexicons/ambient';
 import { PersistedLRU } from '$lib/cache';
+import { AppBskyActorProfile } from '@atcute/bluesky';
 
 const cacheTtl = 1000 * 60 * 60 * 24;
 const handleCache = new PersistedLRU<Handle, AtprotoDid>({
@@ -104,22 +106,35 @@ export class AtpClient {
 
 		const cached = recordCache.get(cacheKey);
 		if (cached) return ok(cached.value as Output);
+		const cachedSignal = recordCache.getSignal(cacheKey);
 
-		const result = await fetchMicrocosm(this.slingshotUrl, ComAtprotoRepoGetRecord.mainSchema, {
-			repo,
-			collection,
-			rkey
-		});
+		const result = await Promise.race([
+			fetchMicrocosm(this.slingshotUrl, ComAtprotoRepoGetRecord.mainSchema, {
+				repo,
+				collection,
+				rkey
+			}).then((result): Result<Output, string> => {
+				if (!result.ok) return result;
+
+				const parsed = safeParse(schema, result.value.value);
+				if (!parsed.ok) return err(parsed.message);
+
+				recordCache.set(cacheKey, result.value);
+
+				return ok(parsed.value as Output);
+			}),
+			cachedSignal.then((d): Result<Output, string> => ok(d.value as Output))
+		]);
 
 		if (!result.ok) return result;
-		// console.info(`fetched record:`, result.value);
 
-		const parsed = safeParse(schema, result.value.value);
-		if (!parsed.ok) return err(parsed.message);
+		return ok(result.value as Output);
+	}
 
-		recordCache.set(cacheKey, result.value);
-
-		return ok(parsed.value as Output);
+	async getProfile(repo?: ActorIdentifier): Promise<Result<AppBskyActorProfile.Main, string>> {
+		repo = repo ?? this.didDoc?.did;
+		if (!repo) return err('not authenticated');
+		return await this.getRecord(AppBskyActorProfile.mainSchema, repo, 'self');
 	}
 
 	async listRecords<Collection extends keyof Records>(
@@ -146,14 +161,14 @@ export class AtpClient {
 	async resolveHandle(handle: Handle): Promise<Result<AtprotoDid, string>> {
 		const cached = handleCache.get(handle);
 		if (cached) return ok(cached);
+		const cachedSignal = handleCache.getSignal(handle);
 
-		const res = await fetchMicrocosm(
-			this.slingshotUrl,
-			ComAtprotoIdentityResolveHandle.mainSchema,
-			{
+		const res = await Promise.race([
+			fetchMicrocosm(this.slingshotUrl, ComAtprotoIdentityResolveHandle.mainSchema, {
 				handle
-			}
-		);
+			}),
+			cachedSignal.then((d): Result<{ did: Did }, string> => ok({ did: d }))
+		]);
 
 		const mapped = map(res, (data) => data.did as AtprotoDid);
 
@@ -167,10 +182,14 @@ export class AtpClient {
 	async resolveDidDoc(handleOrDid: ActorIdentifier): Promise<Result<MiniDoc, string>> {
 		const cached = didDocCache.get(handleOrDid);
 		if (cached) return ok(cached);
+		const cachedSignal = didDocCache.getSignal(handleOrDid);
 
-		const result = await fetchMicrocosm(this.slingshotUrl, MiniDocQuery, {
-			identifier: handleOrDid
-		});
+		const result = await Promise.race([
+			fetchMicrocosm(this.slingshotUrl, MiniDocQuery, {
+				identifier: handleOrDid
+			}),
+			cachedSignal.then((d): Result<MiniDoc, string> => ok(d))
+		]);
 
 		if (result.ok) {
 			didDocCache.set(handleOrDid, result.value);
