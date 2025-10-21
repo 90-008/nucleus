@@ -1,6 +1,5 @@
 <script lang="ts">
 	import '../app.css';
-	import { theme } from '$lib/theme.svelte';
 	import favicon from '$lib/assets/favicon.svg';
 
 	let { children } = $props();
@@ -11,8 +10,7 @@
 </svelte:head>
 
 <div
-	class="grain min-h-screen transition-colors duration-300"
-	style="background: {theme.bg}; color: {theme.fg};"
+	class="grain min-h-screen bg-(--nucleus-bg) text-(--nucleus-fg) transition-colors duration-300"
 >
 	{@render children?.()}
 </div>

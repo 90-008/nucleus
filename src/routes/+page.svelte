@@ -2,6 +2,7 @@
 	import BskyPost from '$components/BskyPost.svelte';
 	import PostComposer from '$components/PostComposer.svelte';
 	import AccountSelector from '$components/AccountSelector.svelte';
+	import SettingsPopup from '$components/SettingsPopup.svelte';
 	import { AtpClient, type NotificationsStreamEvent } from '$lib/at/client';
 	import { accounts, addAccount, type Account } from '$lib/accounts';
 	import {
@@ -11,7 +12,6 @@
 		type ResourceUri
 	} from '@atcute/lexicons';
 	import { onMount } from 'svelte';
-	import { theme } from '$lib/theme.svelte';
 	import { fetchPostsWithBacklinks, hydratePosts } from '$lib/at/fetch';
 	import { expect, ok } from '$lib/result';
 	import { AppBskyFeedPost } from '@atcute/bluesky';
@@ -31,6 +31,8 @@
 
 	let posts = new SvelteMap<Did, SvelteMap<ResourceUri, AppBskyFeedPost.Main>>();
 	let cursors = new SvelteMap<Did, { value?: string; end: boolean }>();
+
+	let isSettingsOpen = $state(false);
 
 	const addPosts = (did: Did, accTimeline: Map<ResourceUri, AppBskyFeedPost.Main>) => {
 		if (!posts.has(did)) {
@@ -372,12 +374,34 @@
 </script>
 
 <div class="mx-auto flex h-screen max-w-2xl flex-col p-4">
-	<div class="mb-6 flex-shrink-0">
-		<h1 class="text-3xl font-bold tracking-tight" style="color: {theme.fg};">nucleus</h1>
-		<div class="mt-1 flex gap-2">
-			<div class="h-1 w-11 rounded-full" style="background: {theme.accent};"></div>
-			<div class="h-1 w-8 rounded-full" style="background: {theme.accent2};"></div>
+	<div class="mb-6 flex flex-shrink-0 items-center justify-between">
+		<div>
+			<h1 class="text-3xl font-bold tracking-tight">nucleus</h1>
+			<div class="mt-1 flex gap-2">
+				<div class="h-1 w-11 rounded-full bg-(--nucleus-accent)"></div>
+				<div class="h-1 w-8 rounded-full bg-(--nucleus-accent2)"></div>
+			</div>
 		</div>
+		<button
+			onclick={() => (isSettingsOpen = true)}
+			class="rounded-sm bg-(--nucleus-accent)/7 p-2.5 text-(--nucleus-accent) transition-all hover:scale-110 hover:shadow-lg"
+			aria-label="Settings"
+		>
+			<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					stroke-width="2"
+					d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+				/>
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					stroke-width="2"
+					d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+				/>
+			</svg>
+		</button>
 	</div>
 
 	<div class="flex-shrink-0 space-y-4">
@@ -400,34 +424,36 @@
 				</div>
 			{:else}
 				<div
-					class="flex flex-1 items-center justify-center rounded-sm border-2 px-4 py-2.5 backdrop-blur-sm"
-					style="border-color: {theme.accent}33; background: {theme.accent}0a;"
+					class="flex flex-1 items-center justify-center rounded-sm border-2 border-(--nucleus-accent)/20 bg-(--nucleus-accent)/4 px-4 py-2.5 backdrop-blur-sm"
 				>
-					<p class="text-sm opacity-80" style="color: {theme.fg};">
-						select or add an account to post
-					</p>
+					<p class="text-sm opacity-80">select or add an account to post</p>
 				</div>
 			{/if}
 		</div>
 
 		<hr
 			class="h-[4px] w-full rounded-full border-0"
-			style="background: linear-gradient(to right, {theme.accent}, {theme.accent2});"
+			style="background: linear-gradient(to right, var(--nucleus-accent), var(--nucleus-accent2));"
 		/>
 	</div>
 
-	<div class="mt-4 overflow-y-scroll [scrollbar-width:none]" bind:this={scrollContainer}>
+	<div
+		class="mt-4 overflow-y-scroll [scrollbar-color:var(--nucleus-accent)_transparent]"
+		bind:this={scrollContainer}
+	>
 		{#if $accounts.length > 0}
 			{@render renderThreads()}
 		{:else}
 			<div class="flex justify-center py-4">
-				<p class="text-xl opacity-80" style="color: {theme.fg};">
+				<p class="text-xl opacity-80">
 					<span class="text-4xl">x_x</span> <br /> no accounts are logged in!
 				</p>
 			</div>
 		{/if}
 	</div>
 </div>
+
+<SettingsPopup bind:isOpen={isSettingsOpen} onClose={() => (isSettingsOpen = false)} />
 
 {#snippet renderThreads()}
 	<InfiniteLoader
@@ -439,7 +465,7 @@
 		{@render threadsView()}
 		{#snippet noData()}
 			<div class="flex justify-center py-4">
-				<p class="text-xl opacity-80" style="color: {theme.fg};">
+				<p class="text-xl opacity-80">
 					all posts seen! <span class="text-2xl">:o</span>
 				</p>
 			</div>
@@ -448,13 +474,13 @@
 			<div class="flex justify-center">
 				<div
 					class="h-12 w-12 animate-spin rounded-full border-4 border-t-transparent"
-					style="border-color: {theme.accent} {theme.accent} {theme.accent} transparent;"
+					style="border-color: var(--nucleus-accent) var(--nucleus-accent) var(--nucleus-accent) transparent;"
 				></div>
 			</div>
 		{/snippet}
 		{#snippet error()}
 			<div class="flex justify-center py-4">
-				<p class="text-xl opacity-80" style="color: {theme.fg};">
+				<p class="text-xl opacity-80">
 					<span class="text-4xl">:(</span> <br /> an error occurred while loading posts: {loadError}
 				</p>
 			</div>
@@ -468,9 +494,7 @@
 			{#if thread.branchParentPost}
 				{@const post = thread.branchParentPost}
 				<div class="mb-1.5 flex items-center gap-1.5">
-					<span class="text-sm text-nowrap opacity-60" style="color: {theme.fg};"
-						>{reverseChronological ? '↱' : '↳'}</span
-					>
+					<span class="text-sm text-nowrap opacity-60">{reverseChronological ? '↱' : '↳'}</span>
 					<BskyPost mini client={viewClient} {...post} />
 				</div>
 			{/if}

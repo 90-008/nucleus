@@ -3,7 +3,6 @@
 	import { ok, err, type Result } from '$lib/result';
 	import type { AppBskyFeedPost } from '@atcute/bluesky';
 	import type { ResourceUri } from '@atcute/lexicons';
-	import { theme } from '$lib/theme.svelte';
 	import { generateColorForDid } from '$lib/accounts';
 
 	interface Props {
@@ -14,7 +13,7 @@
 	const { client, onPostSent }: Props = $props();
 
 	let color = $derived(
-		client.didDoc?.did ? (generateColorForDid(client.didDoc?.did) ?? theme.accent) : theme.accent
+		client.didDoc?.did ? generateColorForDid(client.didDoc?.did) : 'var(--nucleus-accent)'
 	);
 
 	const post = async (
@@ -90,14 +89,15 @@
 		class:right-0={isFocused}
 		class:z-50={isFocused}
 		style="background: {isFocused
-			? `color-mix(in srgb, ${theme.bg} 80%, ${color} 20%)`
-			: `${color}18`}; border-color: {color}{isFocused ? '' : '66'};"
+			? `color-mix(in srgb, var(--nucleus-bg) 80%, ${color} 20%)`
+			: `color-mix(in srgb, ${color} 9%, transparent)`};
+			border-color: color-mix(in srgb, {color} {isFocused ? '100' : '40'}%, transparent);"
 	>
 		<div class="w-full p-2" class:py-3={isFocused}>
 			{#if info.length > 0}
 				<div
 					class="rounded-sm px-3 py-1.5 text-center font-medium text-nowrap overflow-ellipsis"
-					style="background: {color}22; color: {color};"
+					style="background: color-mix(in srgb, {color} 13%, transparent); color: {color};"
 				>
 					{info}
 				</div>
@@ -114,22 +114,24 @@
 							}}
 							placeholder="what's on your mind?"
 							rows="4"
-							class="placeholder-opacity-50 [field-sizing:content] w-full resize-none rounded-sm border-2 px-3 py-2 text-sm font-medium transition-all focus:outline-none"
-							style="background: {theme.bg}66; border-color: {color}44; color: {theme.fg};"
+							class="[field-sizing:content] single-line-input resize-none bg-(--nucleus-bg)/40 focus:scale-100"
+							style="border-color: color-mix(in srgb, {color} 27%, transparent);"
 						></textarea>
 						<div class="flex items-center gap-2">
 							<div class="grow"></div>
 							<span
 								class="text-sm font-medium"
-								style="color: {postText.length > 300 ? '#ef4444' : theme.fg}88;"
+								style="color: color-mix(in srgb, {postText.length > 300
+									? '#ef4444'
+									: 'var(--nucleus-fg)'} 53%, transparent);"
 							>
 								{postText.length} / 300
 							</span>
 							<button
 								onclick={doPost}
 								disabled={postText.length === 0 || postText.length > 300}
-								class="rounded-sm border-none px-5 py-2 text-sm font-bold transition-all hover:scale-105 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
-								style="background: {color}dd; color: {theme.fg}f0;"
+								class="action-button border-none px-5 text-(--nucleus-fg)/94 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+								style="background: color-mix(in srgb, {color} 87%, transparent);"
 							>
 								post
 							</button>
@@ -143,8 +145,8 @@
 							}}
 							type="text"
 							placeholder="what's on your mind?"
-							class="placeholder-opacity-50 flex-1 rounded-sm border-2 px-3 py-2 text-sm font-medium transition-all focus:outline-none"
-							style="background: {theme.bg}66; border-color: {color}44; color: {theme.fg};"
+							class="single-line-input flex-1 bg-(--nucleus-bg)/40"
+							style="border-color: color-mix(in srgb, {color} 27%, transparent);"
 						/>
 					{/if}
 				</div>

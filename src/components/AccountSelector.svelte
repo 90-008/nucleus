@@ -2,7 +2,6 @@
 	import { generateColorForDid, type Account } from '$lib/accounts';
 	import { AtpClient } from '$lib/at/client';
 	import type { Did, Handle } from '@atcute/lexicons';
-	import { theme } from '$lib/theme.svelte';
 	import ProfilePicture from './ProfilePicture.svelte';
 	import PfpPlaceholder from './PfpPlaceholder.svelte';
 
@@ -113,7 +112,7 @@
 		{#if selectedDid}
 			<ProfilePicture {client} did={selectedDid} size={15} />
 		{:else}
-			<PfpPlaceholder color={theme.accent} size={15} />
+			<PfpPlaceholder color="var(--nucleus-accent)" size={15} />
 		{/if}
 	</button>
 
@@ -121,8 +120,7 @@
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			class="absolute left-0 z-10 mt-3 min-w-52 overflow-hidden rounded-sm border-2 shadow-2xl backdrop-blur-lg"
-			style="border-color: {theme.accent}; background: {theme.bg}f0;"
+			class="absolute left-0 z-10 mt-3 min-w-52 animate-fade-in-scale-fast overflow-hidden rounded-sm border-2 border-(--nucleus-accent) bg-(--nucleus-bg)/94 shadow-2xl backdrop-blur-lg transition-all"
 			onclick={(e) => e.stopPropagation()}
 		>
 			{#if accounts.length > 0}
@@ -136,15 +134,14 @@
     							{account.did === selectedDid ? 'shadow-lg' : ''}
 							"
 							style="color: {color}; background: {account.did === selectedDid
-								? `linear-gradient(135deg, ${theme.accent}33, ${theme.accent2}33)`
+								? `linear-gradient(135deg, color-mix(in srgb, var(--nucleus-accent) 20%, transparent), color-mix(in srgb, var(--nucleus-accent2) 20%, transparent))`
 								: 'transparent'};"
 						>
 							<span>@{account.handle}</span>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								onclick={() => onLogout(account.did)}
-								class="ml-auto hidden h-5 w-5 transition-all group-hover:[display:block] hover:scale-[1.2] hover:shadow-md"
-								style="color: {theme.accent};"
+								class="ml-auto hidden h-5 w-5 text-(--nucleus-accent) transition-all group-hover:[display:block] hover:scale-[1.2] hover:shadow-md"
 								width="24"
 								height="24"
 								viewBox="0 0 20 20"
@@ -159,8 +156,7 @@
 							{#if account.did === selectedDid}
 								<svg
 									xmlns="http://www.w3.org/2000/svg"
-									class="ml-auto h-5 w-5 group-hover:hidden"
-									style="color: {theme.accent};"
+									class="ml-auto h-5 w-5 text-(--nucleus-accent) group-hover:hidden"
 									width="24"
 									height="24"
 									viewBox="0 0 24 24"
@@ -178,14 +174,12 @@
 					{/each}
 				</div>
 				<div
-					class="mx-2 h-px"
-					style="background: linear-gradient(to right, {theme.accent}, {theme.accent2});"
+					class="mx-2 h-px bg-gradient-to-r from-(--nucleus-accent) to-(--nucleus-accent2)"
 				></div>
 			{/if}
 			<button
 				onclick={openLoginModal}
-				class="group flex w-full origin-left items-center gap-3 p-3 text-left text-sm font-semibold transition-all hover:scale-[1.1]"
-				style="color: {theme.accent};"
+				class="group flex w-full origin-left items-center gap-3 p-3 text-left text-sm font-semibold text-(--nucleus-accent) transition-all hover:scale-[1.1]"
 			>
 				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path
@@ -203,8 +197,7 @@
 
 {#if isLoginModalOpen}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm"
-		style="background: {theme.bg}cc;"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-(--nucleus-bg)/80 backdrop-blur-sm"
 		onclick={closeLoginModal}
 		onkeydown={handleKeydown}
 		role="button"
@@ -213,24 +206,22 @@
 		<!-- svelte-ignore a11y_interactive_supports_focus -->
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div
-			class="w-full max-w-md rounded-sm border-2 p-5 shadow-2xl"
-			style="background: {theme.bg}; border-color: {theme.accent};"
+			class="w-full max-w-md animate-fade-in-scale rounded-sm border-2 border-(--nucleus-accent) bg-(--nucleus-bg) p-4 shadow-2xl transition-all"
 			onclick={(e) => e.stopPropagation()}
 			role="dialog"
 		>
 			<div class="mb-6 flex items-center justify-between">
 				<div>
-					<h2 class="text-2xl font-bold" style="color: {theme.fg};">add account</h2>
+					<h2 class="text-2xl font-bold">add account</h2>
 					<div class="mt-2 flex gap-2">
-						<div class="h-1 w-10 rounded-full" style="background: {theme.accent};"></div>
-						<div class="h-1 w-9 rounded-full" style="background: {theme.accent2};"></div>
+						<div class="h-1 w-10 rounded-full bg-(--nucleus-accent)"></div>
+						<div class="h-1 w-9 rounded-full bg-(--nucleus-accent2)"></div>
 					</div>
 				</div>
 				<!-- svelte-ignore a11y_consider_explicit_label -->
 				<button
 					onclick={closeLoginModal}
-					class="rounded-xl p-2 transition-all hover:scale-110"
-					style="color: {theme.fg}66; hover:color: {theme.fg};"
+					class="rounded-xl p-2 text-(--nucleus-fg)/40 transition-all hover:scale-110 hover:text-(--nucleus-fg)"
 				>
 					<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -245,7 +236,7 @@
 
 			<div class="space-y-5">
 				<div>
-					<label for="handle" class="mb-2 block text-sm font-semibold" style="color: {theme.fg}cc;">
+					<label for="handle" class="mb-2 block text-sm font-semibold text-(--nucleus-fg)/80">
 						handle
 					</label>
 					<input
@@ -253,18 +244,13 @@
 						type="text"
 						bind:value={loginHandle}
 						placeholder="example.bsky.social"
-						class="placeholder-opacity-40 w-full rounded-sm border-2 px-4 py-3 font-medium transition-all focus:scale-[1.02] focus:shadow-lg focus:outline-none"
-						style="background: {theme.accent}08; border-color: {theme.accent}66; color: {theme.fg};"
+						class="single-line-input border-(--nucleus-accent)/40 bg-(--nucleus-accent)/3"
 						disabled={isLoggingIn}
 					/>
 				</div>
 
 				<div>
-					<label
-						for="password"
-						class="mb-2 block text-sm font-semibold"
-						style="color: {theme.fg}cc;"
-					>
+					<label for="password" class="mb-2 block text-sm font-semibold text-(--nucleus-fg)/80">
 						app password
 					</label>
 					<input
@@ -272,8 +258,7 @@
 						type="password"
 						bind:value={loginPassword}
 						placeholder="xxxx-xxxx-xxxx-xxxx"
-						class="placeholder-opacity-40 w-full rounded-sm border-2 px-4 py-3 font-medium transition-all focus:scale-[1.02] focus:shadow-lg focus:outline-none"
-						style="background: {theme.accent}08; border-color: {theme.accent}66; color: {theme.fg};"
+						class="single-line-input border-(--nucleus-accent)/40 bg-(--nucleus-accent)/3"
 						disabled={isLoggingIn}
 					/>
 				</div>
@@ -288,18 +273,13 @@
 				{/if}
 
 				<div class="flex gap-3 pt-3">
-					<button
-						onclick={closeLoginModal}
-						class="flex-1 rounded-sm border-2 px-5 py-3 font-semibold transition-all hover:scale-105"
-						style="background: {theme.bg}; border-color: {theme.fg}33; color: {theme.fg};"
-						disabled={isLoggingIn}
-					>
+					<button onclick={closeLoginModal} class="flex-1 action-button" disabled={isLoggingIn}>
 						cancel
 					</button>
 					<button
 						onclick={handleLogin}
-						class="flex-1 rounded-sm border-2 px-5 py-3 font-semibold transition-all hover:scale-105 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
-						style="background: linear-gradient(135deg, {theme.accent}, {theme.accent2}); border-color: transparent; color: {theme.fg};"
+						class="flex-1 action-button border-transparent text-(--nucleus-fg)"
+						style="background: linear-gradient(135deg, var(--nucleus-accent), var(--nucleus-accent2));"
 						disabled={isLoggingIn}
 					>
 						{isLoggingIn ? 'logging in...' : 'login'}

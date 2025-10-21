@@ -2,7 +2,6 @@
 	import type { AtpClient } from '$lib/at/client';
 	import { AppBskyFeedPost } from '@atcute/bluesky';
 	import type { ActorIdentifier, Did, RecordKey } from '@atcute/lexicons';
-	import { theme } from '$lib/theme.svelte';
 	import { map, ok } from '$lib/result';
 	import { generateColorForDid } from '$lib/accounts';
 	import ProfilePicture from './ProfilePicture.svelte';
@@ -18,7 +17,7 @@
 
 	const { client, did, rkey, record, mini /* replyBacklinks */ }: Props = $props();
 
-	const color = generateColorForDid(did) ?? theme.accent2;
+	const color = generateColorForDid(did);
 
 	let handle: ActorIdentifier = $state(did);
 	client
@@ -80,7 +79,9 @@
 	{#if record.embed}
 		<span
 			class="rounded-full px-2.5 py-0.5 text-xs font-medium"
-			style="background: {mini ? theme.fg : color}22; color: {mini ? theme.fg : color};"
+			style="background: color-mix(in srgb, {mini
+				? 'var(--nucleus-fg)'
+				: color} 13%, transparent); color: {mini ? 'var(--nucleus-fg)' : color};"
 		>
 			{getEmbedText(record.embed.$type)}
 		</span>
@@ -88,10 +89,7 @@
 {/snippet}
 
 {#if mini}
-	<div
-		class="overflow-hidden text-sm text-nowrap overflow-ellipsis opacity-60"
-		style="color: {theme.fg};"
-	>
+	<div class="overflow-hidden text-sm text-nowrap overflow-ellipsis opacity-60">
 		{#await post}
 			loading...
 		{:then post}
@@ -111,10 +109,9 @@
 			style="background: {color}18; border-color: {color}66;"
 		>
 			<div
-				class="inline-block h-6 w-6 animate-spin rounded-full border-3"
-				style="border-color: {theme.accent}; border-left-color: transparent;"
+				class="inline-block h-6 w-6 animate-spin rounded-full border-3 border-(--nucleus-accent) [border-left-color:transparent]"
 			></div>
-			<p class="mt-3 text-sm font-medium opacity-60" style="color: {theme.fg};">loading post...</p>
+			<p class="mt-3 text-sm font-medium opacity-60">loading post...</p>
 		</div>
 	{:then post}
 		{#if post.ok}
@@ -167,11 +164,11 @@
 					{/if}
 				{/await} -->
 					<span>·</span>
-					<span class="text-nowrap" style="color: {theme.fg}aa;"
+					<span class="text-nowrap text-(--nucleus-fg)/67"
 						>{getRelativeTime(new Date(record.createdAt))}</span
 					>
 				</div>
-				<p class="leading-relaxed text-wrap" style="color: {theme.fg};">
+				<p class="leading-relaxed text-wrap">
 					{record.text}
 					{@render embedBadge(record)}
 				</p>

@@ -34,20 +34,22 @@ import { PersistedLRU } from '$lib/cache';
 import { AppBskyActorProfile } from '@atcute/bluesky';
 import { WebSocket } from '@soffinal/websocket';
 import type { Notification } from './stardust';
+import { get } from 'svelte/store';
+import { settings } from '$lib/settings';
 // import { JetstreamSubscription } from '@atcute/jetstream';
 
 const cacheTtl = 1000 * 60 * 60 * 24;
-const handleCache = new PersistedLRU<Handle, AtprotoDid>({
+export const handleCache = new PersistedLRU<Handle, AtprotoDid>({
 	max: 1000,
 	ttl: cacheTtl,
 	prefix: 'handle'
 });
-const didDocCache = new PersistedLRU<ActorIdentifier, MiniDoc>({
+export const didDocCache = new PersistedLRU<ActorIdentifier, MiniDoc>({
 	max: 1000,
 	ttl: cacheTtl,
 	prefix: 'didDoc'
 });
-const recordCache = new PersistedLRU<
+export const recordCache = new PersistedLRU<
 	string,
 	InferOutput<typeof ComAtprotoRepoGetRecord.mainSchema.output.schema>
 >({
@@ -56,15 +58,9 @@ const recordCache = new PersistedLRU<
 	prefix: 'record'
 });
 
-export let slingshotUrl: URL = new URL(
-	localStorage.getItem('slingshotUrl') ?? 'https://slingshot.microcosm.blue'
-);
-export let spacedustUrl: URL = new URL(
-	localStorage.getItem('spacedustUrl') ?? 'https://spacedust.microcosm.blue'
-);
-export let constellationUrl: URL = new URL(
-	localStorage.getItem('constellationUrl') ?? 'https://constellation.microcosm.blue'
-);
+export const slingshotUrl: URL = new URL(get(settings).endpoints.slingshot);
+export const spacedustUrl: URL = new URL(get(settings).endpoints.spacedust);
+export const constellationUrl: URL = new URL(get(settings).endpoints.constellation);
 
 type NotificationsStreamEncoder = WebSocket.Encoder<undefined, Notification>;
 export type NotificationsStream = WebSocket<NotificationsStreamEncoder>;

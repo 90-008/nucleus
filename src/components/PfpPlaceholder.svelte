@@ -9,7 +9,7 @@
 
 <svg
 	class="rounded-sm"
-	style="background: {color}44; color: {color}; width: calc(var(--spacing) * {size}); height: calc(var(--spacing) * {size});"
+	style="background: color-mix(in srgb, {color} 27%, transparent); color: {color}; width: calc(var(--spacing) * {size}); height: calc(var(--spacing) * {size});"
 	xmlns="http://www.w3.org/2000/svg"
 	width="24px"
 	height="24px"

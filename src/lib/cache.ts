@@ -12,7 +12,7 @@ export interface PersistedLRUOptions {
 export class PersistedLRU<K extends string, V extends {}> {
 	private memory: LRUCache<K, V>;
 	private storage: Cache;
-	private signals: Map<K, (data: V) => void>;
+	private signals: Map<K, ((data: V) => void)[]>;
 
 	private prefix = '';
 
@@ -49,13 +49,21 @@ export class PersistedLRU<K extends string, V extends {}> {
 	}
 	getSignal(key: K): Promise<V> {
 		return new Promise<V>((resolve) => {
-			this.signals.set(key, resolve);
+			if (!this.signals.has(key)) {
+				this.signals.set(key, [resolve]);
+				return;
+			}
+			const signals = this.signals.get(key)!;
+			signals.push(resolve);
+			this.signals.set(key, signals);
 		});
 	}
 	set(key: K, value: V): void {
 		this.memory.set(key, value);
 		this.storage.set(this.prefixed(key), value);
-		this.signals.get(key)?.(value);
+		for (const signal of this.signals.get(key) ?? []) {
+			signal(value);
+		}
 		this.storage.flush(); // TODO: uh evil and fucked up (this whole file is evil honestly)
 	}
 	has(key: K): boolean {
