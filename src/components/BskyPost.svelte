@@ -1,10 +1,19 @@
 <script lang="ts">
 	import type { AtpClient } from '$lib/at/client';
 	import { AppBskyFeedPost } from '@atcute/bluesky';
-	import type { ActorIdentifier, Did, RecordKey } from '@atcute/lexicons';
-	import { map, ok } from '$lib/result';
+	import {
+		parseCanonicalResourceUri,
+		type ActorIdentifier,
+		type Did,
+		type RecordKey,
+		type ResourceUri
+	} from '@atcute/lexicons';
+	import { expect, ok } from '$lib/result';
 	import { generateColorForDid } from '$lib/accounts';
 	import ProfilePicture from './ProfilePicture.svelte';
+	import { isBlob } from '@atcute/lexicons/interfaces';
+	import { blob, img } from '$lib/cdn';
+	import BskyPost from './BskyPost.svelte';
 
 	interface Props {
 		client: AtpClient;
@@ -20,12 +29,10 @@
 	const color = generateColorForDid(did);
 
 	let handle: ActorIdentifier = $state(did);
-	client
-		.resolveDidDoc(did)
-		.then((res) => map(res, (data) => data.handle))
-		.then((res) => {
-			if (res.ok) handle = res.value;
-		});
+	const didDoc = client.resolveDidDoc(did).then((res) => {
+		if (res.ok) handle = res.value.handle;
+		return res;
+	});
 	const post = record
 		? Promise.resolve(ok(record))
 		: client.getRecord(AppBskyFeedPost.mainSchema, did, rkey);
@@ -170,8 +177,51 @@
 				</div>
 				<p class="leading-relaxed text-wrap">
 					{record.text}
-					{@render embedBadge(record)}
 				</p>
+				{#if record.embed}
+					{@const embed = record.embed}
+					<div class="mt-2">
+						{#snippet embedPost(uri: ResourceUri)}
+							{@const parsedUri = expect(parseCanonicalResourceUri(uri))}
+							<!-- reject recursive quotes -->
+							{#if !(did === parsedUri.repo && rkey === parsedUri.rkey)}
+								<BskyPost {client} did={parsedUri.repo} rkey={parsedUri.rkey} />
+							{:else}
+								<span>you think you're funny with that recursive quote but i'm onto you</span>
+							{/if}
+						{/snippet}
+						{#if embed.$type === 'app.bsky.embed.images'}
+							<!-- todo: improve how images are displayed, and pop out on click -->
+							{#each embed.images as image (image.image)}
+								{#if isBlob(image.image)}
+									<img
+										class="rounded-sm"
+										src={img('feed_thumbnail', did, image.image.ref.$link)}
+										alt={image.alt}
+									/>
+								{/if}
+							{/each}
+						{:else if embed.$type === 'app.bsky.embed.video'}
+							{#if isBlob(embed.video)}
+								{#await didDoc then didDoc}
+									{#if didDoc.ok}
+										<!-- svelte-ignore a11y_media_has_caption -->
+										<video
+											class="rounded-sm"
+											src={blob(didDoc.value.pds, did, embed.video.ref.$link)}
+											controls
+										></video>
+									{/if}
+								{/await}
+							{/if}
+						{:else if embed.$type === 'app.bsky.embed.record'}
+							{@render embedPost(embed.record.uri)}
+						{:else if embed.$type === 'app.bsky.embed.recordWithMedia'}
+							{@render embedPost(embed.record.record.uri)}
+						{/if}
+						<!-- todo: implement external link embeds -->
+					</div>
+				{/if}
 			</div>
 		{:else}
 			<div class="rounded-xl border-2 p-4" style="background: #ef444422; border-color: #ef4444;">
