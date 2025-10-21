@@ -2,7 +2,7 @@
 	import BskyPost from '$components/BskyPost.svelte';
 	import PostComposer from '$components/PostComposer.svelte';
 	import AccountSelector from '$components/AccountSelector.svelte';
-	import { AtpClient } from '$lib/at/client';
+	import { AtpClient, type NotificationsStreamEvent } from '$lib/at/client';
 	import { accounts, addAccount, type Account } from '$lib/accounts';
 	import {
 		type Did,
@@ -13,10 +13,12 @@
 	import { onMount } from 'svelte';
 	import { theme } from '$lib/theme.svelte';
 	import { fetchPostsWithBacklinks, hydratePosts } from '$lib/at/fetch';
-	import { expect } from '$lib/result';
-	import type { AppBskyFeedPost } from '@atcute/bluesky';
+	import { expect, ok } from '$lib/result';
+	import { AppBskyFeedPost } from '@atcute/bluesky';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { InfiniteLoader, LoaderState } from 'svelte-infinite';
+	import { notificationStream } from '$lib';
+	import { get } from 'svelte/store';
 
 	let loaderState = new LoaderState();
 	let scrollContainer = $state<HTMLDivElement>();
@@ -27,7 +29,117 @@
 
 	let viewClient = $state<AtpClient>(new AtpClient());
 
+	let posts = new SvelteMap<Did, SvelteMap<ResourceUri, AppBskyFeedPost.Main>>();
+	let cursors = new SvelteMap<Did, { value?: string; end: boolean }>();
+
+	const addPosts = (did: Did, accTimeline: Map<ResourceUri, AppBskyFeedPost.Main>) => {
+		if (!posts.has(did)) {
+			posts.set(did, new SvelteMap(accTimeline));
+			return;
+		}
+		const map = posts.get(did)!;
+		for (const [uri, record] of accTimeline) map.set(uri, record);
+	};
+
+	const fetchTimeline = async (account: Account) => {
+		const client = clients.get(account.did);
+		if (!client) return;
+
+		const cursor = cursors.get(account.did);
+		if (cursor && cursor.end) return;
+
+		const accPosts = await fetchPostsWithBacklinks(client, account.did, cursor?.value, 12);
+		if (!accPosts.ok)
+			throw `failed to fetch posts for account ${account.handle}: ${accPosts.error}`;
+
+		// if the cursor is undefined, we've reached the end of the timeline
+		if (!accPosts.value.cursor) {
+			cursors.set(account.did, { ...cursor, end: true });
+			return;
+		}
+
+		cursors.set(account.did, { value: accPosts.value.cursor, end: false });
+		addPosts(account.did, await hydratePosts(client, accPosts.value.posts));
+	};
+
+	const fetchTimelines = (newAccounts: Account[]) => Promise.all(newAccounts.map(fetchTimeline));
+
+	const handleNotification = async (event: NotificationsStreamEvent) => {
+		if (event.type === 'message') {
+			// console.log(event.data);
+			const parsedSubjectUri = expect(parseCanonicalResourceUri(event.data.link.subject));
+			const subjectPost = await viewClient.getRecord(
+				AppBskyFeedPost.mainSchema,
+				parsedSubjectUri.repo,
+				parsedSubjectUri.rkey
+			);
+			if (!subjectPost.ok) return;
+
+			const parsedSourceUri = expect(parseCanonicalResourceUri(event.data.link.source_record));
+			const hydrated = await hydratePosts(viewClient, [
+				{
+					record: subjectPost.value,
+					uri: event.data.link.subject,
+					replies: ok({
+						cursor: null,
+						total: 1,
+						records: [
+							{
+								did: parsedSourceUri.repo,
+								collection: parsedSourceUri.collection,
+								rkey: parsedSourceUri.rkey
+							}
+						]
+					})
+				}
+			]);
+
+			// console.log(hydrated);
+			addPosts(parsedSubjectUri.repo, hydrated);
+		}
+	};
+
+	// const handleJetstream = async (subscription: JetstreamSubscription) => {
+	// 	for await (const event of subscription) {
+	// 		if (event.kind !== 'commit') continue;
+	// 		const commit = event.commit;
+	// 		if (commit.operation === 'delete') {
+	// 			continue;
+	// 		}
+	// 		const record = commit.record as AppBskyFeedPost.Main;
+	// 		addPosts(
+	// 			event.did,
+	// 			new Map([[`at://${event.did}/${commit.collection}/${commit.rkey}` as ResourceUri, record]])
+	// 		);
+	// 	}
+	// };
+
 	onMount(async () => {
+		accounts.subscribe((newAccounts) => {
+			get(notificationStream)?.stop();
+			// jetstream.set(null);
+			if (newAccounts.length === 0) return;
+			notificationStream.set(
+				viewClient.streamNotifications(
+					newAccounts.map((account) => account.did),
+					'app.bsky.feed.post:reply.parent.uri'
+				)
+			);
+			// jetstream.set(
+			// 	viewClient.streamJetstream(
+			// 		newAccounts.map((account) => account.did),
+			// 		'app.bsky.feed.post'
+			// 	)
+			// );
+		});
+		notificationStream.subscribe((stream) => {
+			if (!stream) return;
+			stream.listen(handleNotification);
+		});
+		// jetstream.subscribe((stream) => {
+		// 	if (!stream) return;
+		// 	handleJetstream(stream);
+		// });
 		if ($accounts.length > 0) {
 			loaderState.status = 'LOADING';
 			selectedDid = $accounts[0].did;
@@ -66,39 +178,6 @@
 		loginAccount(newAccount).then(() => fetchTimeline(newAccount));
 	};
 
-	let posts = new SvelteMap<Did, SvelteMap<ResourceUri, AppBskyFeedPost.Main>>();
-	let cursors = new SvelteMap<Did, { value?: string; end: boolean }>();
-
-	const fetchTimeline = async (account: Account) => {
-		const client = clients.get(account.did);
-		if (!client) return;
-
-		const cursor = cursors.get(account.did);
-		if (cursor && cursor.end) return;
-
-		const accPosts = await fetchPostsWithBacklinks(client, account.did, cursor?.value, 6);
-		if (!accPosts.ok) {
-			throw `failed to fetch posts for account ${account.handle}: ${accPosts.error}`;
-		}
-
-		// if the cursor is undefined, we've reached the end of the timeline
-		if (!accPosts.value.cursor) {
-			cursors.set(account.did, { ...cursor, end: true });
-			return;
-		}
-
-		cursors.set(account.did, { value: accPosts.value.cursor, end: false });
-		const accTimeline = await hydratePosts(client, accPosts.value.posts);
-		if (!posts.has(account.did)) {
-			posts.set(account.did, new SvelteMap(accTimeline));
-			return;
-		}
-		const map = posts.get(account.did)!;
-		for (const [uri, record] of accTimeline) map.set(uri, record);
-	};
-
-	const fetchTimelines = (newAccounts: Account[]) => Promise.all(newAccounts.map(fetchTimeline));
-
 	let loading = $state(false);
 	let loadError = $state('');
 	const loadMore = async () => {
@@ -118,7 +197,7 @@
 	};
 
 	let reverseChronological = $state(true);
-	let viewOwnPosts = $state(false);
+	let viewOwnPosts = $state(true);
 
 	type ThreadPost = {
 		uri: ResourceUri;
@@ -158,9 +237,8 @@
 					newestTime: new Date(record.createdAt).getTime()
 				};
 
-				if (!threadMap.has(rootUri)) {
-					threadMap.set(rootUri, []);
-				}
+				if (!threadMap.has(rootUri)) threadMap.set(rootUri, []);
+
 				threadMap.get(rootUri)!.push(post);
 			}
 		}
@@ -274,6 +352,8 @@
 		// Sort threads by newest time (descending) so older branches appear first
 		threads.sort((a, b) => b.newestTime - a.newestTime);
 
+		// console.log(threads);
+
 		return threads;
 	};
 
@@ -284,9 +364,7 @@
 		posts.some((post) => !isOwnPost(post, accounts));
 	const filterThreads = (threads: Thread[], accounts: Account[]) =>
 		threads.filter((thread) => {
-			if (!viewOwnPosts) {
-				return hasNonOwnPost(thread.posts, accounts);
-			}
+			if (!viewOwnPosts) return hasNonOwnPost(thread.posts, accounts);
 			return true;
 		});
 
@@ -385,7 +463,7 @@
 {/snippet}
 
 {#snippet threadsView()}
-	{#each threads as thread (thread.rootUri)}
+	{#each threads as thread ([thread.rootUri, thread.branchParentPost, ...thread.posts.map((post) => post.uri)])}
 		<div class="flex {reverseChronological ? 'flex-col' : 'flex-col-reverse'} mb-6.5">
 			{#if thread.branchParentPost}
 				{@const post = thread.branchParentPost}

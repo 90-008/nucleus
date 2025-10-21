@@ -7,7 +7,7 @@ import {
 import { Client as AtcuteClient, CredentialManager } from '@atcute/client';
 import { safeParse, type Handle, type InferOutput } from '@atcute/lexicons';
 import {
-	isHandle,
+	isDid,
 	parseCanonicalResourceUri,
 	parseResourceUri,
 	type ActorIdentifier,
@@ -32,6 +32,9 @@ import { BacklinksQuery, type Backlinks, type BacklinksSource } from './constell
 import type { Records } from '@atcute/lexicons/ambient';
 import { PersistedLRU } from '$lib/cache';
 import { AppBskyActorProfile } from '@atcute/bluesky';
+import { WebSocket } from '@soffinal/websocket';
+import type { Notification } from './stardust';
+// import { JetstreamSubscription } from '@atcute/jetstream';
 
 const cacheTtl = 1000 * 60 * 60 * 24;
 const handleCache = new PersistedLRU<Handle, AtprotoDid>({
@@ -53,13 +56,23 @@ const recordCache = new PersistedLRU<
 	prefix: 'record'
 });
 
+export let slingshotUrl: URL = new URL(
+	localStorage.getItem('slingshotUrl') ?? 'https://slingshot.microcosm.blue'
+);
+export let spacedustUrl: URL = new URL(
+	localStorage.getItem('spacedustUrl') ?? 'https://spacedust.microcosm.blue'
+);
+export let constellationUrl: URL = new URL(
+	localStorage.getItem('constellationUrl') ?? 'https://constellation.microcosm.blue'
+);
+
+type NotificationsStreamEncoder = WebSocket.Encoder<undefined, Notification>;
+export type NotificationsStream = WebSocket<NotificationsStreamEncoder>;
+export type NotificationsStreamEvent = WebSocket.Event<NotificationsStreamEncoder>;
+
 export class AtpClient {
 	public atcute: AtcuteClient | null = null;
 	public didDoc: MiniDoc | null = null;
-
-	private slingshotUrl: URL = new URL('https://slingshot.microcosm.blue');
-	private spacedustUrl: URL = new URL('https://spacedust.microcosm.blue');
-	private constellationUrl: URL = new URL('https://constellation.microcosm.blue');
 
 	async login(handle: Handle, password: string): Promise<Result<null, string>> {
 		const didDoc = await this.resolveDidDoc(handle);
@@ -109,7 +122,7 @@ export class AtpClient {
 		const cachedSignal = recordCache.getSignal(cacheKey);
 
 		const result = await Promise.race([
-			fetchMicrocosm(this.slingshotUrl, ComAtprotoRepoGetRecord.mainSchema, {
+			fetchMicrocosm(slingshotUrl, ComAtprotoRepoGetRecord.mainSchema, {
 				repo,
 				collection,
 				rkey
@@ -158,14 +171,16 @@ export class AtpClient {
 		return ok(res.data);
 	}
 
-	async resolveHandle(handle: Handle): Promise<Result<AtprotoDid, string>> {
-		const cached = handleCache.get(handle);
+	async resolveHandle(identifier: ActorIdentifier): Promise<Result<AtprotoDid, string>> {
+		if (isDid(identifier)) return ok(identifier as AtprotoDid);
+
+		const cached = handleCache.get(identifier);
 		if (cached) return ok(cached);
-		const cachedSignal = handleCache.getSignal(handle);
+		const cachedSignal = handleCache.getSignal(identifier);
 
 		const res = await Promise.race([
-			fetchMicrocosm(this.slingshotUrl, ComAtprotoIdentityResolveHandle.mainSchema, {
-				handle
+			fetchMicrocosm(slingshotUrl, ComAtprotoIdentityResolveHandle.mainSchema, {
+				handle: identifier
 			}),
 			cachedSignal.then((d): Result<{ did: Did }, string> => ok({ did: d }))
 		]);
@@ -173,7 +188,7 @@ export class AtpClient {
 		const mapped = map(res, (data) => data.did as AtprotoDid);
 
 		if (mapped.ok) {
-			handleCache.set(handle, mapped.value);
+			handleCache.set(identifier, mapped.value);
 		}
 
 		return mapped;
@@ -185,7 +200,7 @@ export class AtpClient {
 		const cachedSignal = didDocCache.getSignal(handleOrDid);
 
 		const result = await Promise.race([
-			fetchMicrocosm(this.slingshotUrl, MiniDocQuery, {
+			fetchMicrocosm(slingshotUrl, MiniDocQuery, {
 				identifier: handleOrDid
 			}),
 			cachedSignal.then((d): Result<MiniDoc, string> => ok(d))
@@ -217,20 +232,42 @@ export class AtpClient {
 		rkey: RecordKey,
 		source: BacklinksSource
 	): Promise<Result<Backlinks, string>> {
-		let did = repo;
-		if (isHandle(did)) {
-			const resolvedDid = await this.resolveHandle(did);
-			if (!resolvedDid.ok) {
-				return err(`failed to resolve handle: ${resolvedDid.error}`);
-			}
-			did = resolvedDid.value;
+		const did = await this.resolveHandle(repo);
+		if (!did.ok) {
+			return err(`failed to resolve handle: ${did.error}`);
 		}
-		return await fetchMicrocosm(this.constellationUrl, BacklinksQuery, {
-			subject: `at://${did}/${collection}/${rkey}`,
+		return await fetchMicrocosm(constellationUrl, BacklinksQuery, {
+			subject: `at://${did.value}/${collection}/${rkey}`,
 			source,
 			limit: 100
 		});
 	}
+
+	streamNotifications(subjects: Did[], ...sources: BacklinksSource[]): NotificationsStream {
+		const url = new URL(spacedustUrl);
+		url.protocol = 'wss:';
+		url.pathname = '/subscribe';
+		const searchParams = [];
+		sources.every((source) => searchParams.push(['wantedSources', source]));
+		subjects.every((subject) => searchParams.push(['wantedSubjectDids', subject]));
+		subjects.every((subject) => searchParams.push(['wantedSubjects', `at://${subject}`]));
+		searchParams.push(['instant', 'true']);
+		url.search = `?${new URLSearchParams(searchParams)}`;
+		// console.log(`streaming notifications: ${url}`);
+		const encoder = WebSocket.getDefaultEncoder<undefined, Notification>();
+		const ws = new WebSocket<typeof encoder>(url.toString(), {
+			encoder
+		});
+		return ws;
+	}
+
+	// streamJetstream(subjects: Did[], ...collections: Nsid[]) {
+	// 	return new JetstreamSubscription({
+	// 		url: 'wss://jetstream2.fr.hose.cam',
+	// 		wantedCollections: collections,
+	// 		wantedDids: subjects
+	// 	});
+	// }
 }
 
 const fetchMicrocosm = async <
@@ -247,7 +284,7 @@ const fetchMicrocosm = async <
 	try {
 		api.pathname = `/xrpc/${schema.nsid}`;
 		api.search = params ? `?${new URLSearchParams(params)}` : '';
-		console.info(`fetching:`, api.href);
+		// console.info(`fetching:`, api.href);
 		const response = await fetch(api, init);
 		const body = await response.json();
 		if (response.status === 400) return err(`${body.error}: ${body.message}`);

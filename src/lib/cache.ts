@@ -34,7 +34,7 @@ export class PersistedLRU<K extends string, V extends {}> {
 		const state = this.storage.getState();
 		for (const [key, val] of Object.entries(state)) {
 			try {
-				console.log('restoring', key);
+				// console.log('restoring', key);
 				const k = this.unprefix(key) as unknown as K;
 				const v = val as V;
 				this.memory.set(k, v);
