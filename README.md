@@ -13,3 +13,6 @@ a WIP replies timeline only (eg. it only shows replies to your posts and your ow
 - [ ] consider showing posts that mention / quote the user..
 - [ ] notifications when replied to (and mentioned and quoted?)
 - [ ] basic filtering settings for the timeline (dont show self posts and if we implement mentioned / quoted add toggles for those as well)
+- [ ] dont use listRecords to fetch own posts. we should have an index for this (red dwarf will have this so just piggyback off of that?)
+- [ ] consider implementing feeds
+- [ ] use jetstream to listen for own posts / likes / etc. made from other clients ? (pretty lowprio though, not sure if worth it, can just refresh)
