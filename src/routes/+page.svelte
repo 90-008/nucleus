@@ -221,7 +221,7 @@
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const threadMap = new Map<ResourceUri, ThreadPost[]>();
 
-		// Single pass: create posts and group by thread
+		// group posts by root uri into "thread" chains
 		for (const [, timeline] of timelines) {
 			for (const [uri, data] of timeline) {
 				const parsedUri = expect(parseCanonicalResourceUri(uri));
@@ -250,7 +250,7 @@
 			// eslint-disable-next-line svelte/prefer-svelte-reactivity
 			const childrenMap = new Map<ResourceUri | null, ThreadPost[]>();
 
-			// Calculate depth and group by parent
+			// calculate depths
 			for (const post of posts) {
 				let depth = 0;
 				let currentUri = post.parentUri;
@@ -266,12 +266,10 @@
 				childrenMap.get(post.parentUri)!.push(post);
 			}
 
-			// Sort children by time (newest first)
 			childrenMap
 				.values()
 				.forEach((children) => children.sort((a, b) => b.newestTime - a.newestTime));
 
-			// Helper to create a thread from posts
 			const createThread = (
 				posts: ThreadPost[],
 				rootUri: ResourceUri,
@@ -285,7 +283,6 @@
 				};
 			};
 
-			// Helper to collect all posts in a subtree
 			const collectSubtree = (startPost: ThreadPost): ThreadPost[] => {
 				const result: ThreadPost[] = [];
 				const addWithChildren = (post: ThreadPost) => {
@@ -297,29 +294,27 @@
 				return result;
 			};
 
-			// Find branching points (posts with 2+ children)
+			// find posts with >2 children to split them into separate chains
 			const branchingPoints = Array.from(childrenMap.entries())
 				.filter(([, children]) => children.length > 1)
 				.map(([uri]) => uri);
 
 			if (branchingPoints.length === 0) {
-				// No branches - single thread
 				const roots = childrenMap.get(null) || [];
 				const allPosts = roots.flatMap((root) => collectSubtree(root));
 				threads.push(createThread(allPosts, rootUri));
 			} else {
-				// Has branches - split into separate threads
 				for (const branchParentUri of branchingPoints) {
 					const branches = childrenMap.get(branchParentUri) || [];
 
-					// Sort branches oldest to newest for processing
 					const sortedBranches = [...branches].sort((a, b) => a.newestTime - b.newestTime);
 
 					sortedBranches.forEach((branchRoot, index) => {
 						const isOldestBranch = index === 0;
 						const branchPosts: ThreadPost[] = [];
 
-						// If oldest branch, include parent chain
+						// the oldest branch has the full context
+						// todo: consider letting the user decide this..?
 						if (isOldestBranch && branchParentUri !== null) {
 							const parentChain: ThreadPost[] = [];
 							let currentUri: ResourceUri | null = branchParentUri;
@@ -330,10 +325,8 @@
 							branchPosts.push(...parentChain);
 						}
 
-						// Add branch posts
 						branchPosts.push(...collectSubtree(branchRoot));
 
-						// Recalculate depths for display
 						const minDepth = Math.min(...branchPosts.map((p) => p.depth));
 						branchPosts.forEach((p) => (p.depth = p.depth - minDepth));
 
@@ -349,7 +342,6 @@
 			}
 		}
 
-		// Sort threads by newest time (descending) so older branches appear first
 		threads.sort((a, b) => b.newestTime - a.newestTime);
 
 		// console.log(threads);
@@ -357,7 +349,7 @@
 		return threads;
 	};
 
-	// Filtering functions
+	// todo: add more filtering options
 	const isOwnPost = (post: ThreadPost, accounts: Account[]) =>
 		accounts.some((account) => account.did === post.did);
 	const hasNonOwnPost = (posts: ThreadPost[], accounts: Account[]) =>
