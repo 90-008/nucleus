@@ -13,6 +13,7 @@ import {
 	type ActorIdentifier,
 	type AtprotoDid,
 	type CanonicalResourceUri,
+	type Cid,
 	type Did,
 	type Nsid,
 	type RecordKey,
@@ -66,6 +67,8 @@ type NotificationsStreamEncoder = WebSocket.Encoder<undefined, Notification>;
 export type NotificationsStream = WebSocket<NotificationsStreamEncoder>;
 export type NotificationsStreamEvent = WebSocket.Event<NotificationsStreamEncoder>;
 
+export type RecordOutput<Output> = { uri: ResourceUri; cid: Cid | undefined; record: Output };
+
 export class AtpClient {
 	public atcute: AtcuteClient | null = null;
 	public didDoc: MiniDoc | null = null;
@@ -94,7 +97,7 @@ export class AtpClient {
 		TKey extends RecordKeySchema,
 		Schema extends RecordSchema<TObject, TKey>,
 		Output extends InferInput<Schema>
-	>(schema: Schema, uri: ResourceUri): Promise<Result<Output, string>> {
+	>(schema: Schema, uri: ResourceUri): Promise<Result<RecordOutput<Output>, string>> {
 		const parsedUri = expect(parseResourceUri(uri));
 		if (parsedUri.collection !== schema.object.shape.$type.expected)
 			return err(
@@ -109,12 +112,16 @@ export class AtpClient {
 		TKey extends RecordKeySchema,
 		Schema extends RecordSchema<TObject, TKey>,
 		Output extends InferInput<Schema>
-	>(schema: Schema, repo: ActorIdentifier, rkey: RecordKey): Promise<Result<Output, string>> {
+	>(
+		schema: Schema,
+		repo: ActorIdentifier,
+		rkey: RecordKey
+	): Promise<Result<RecordOutput<Output>, string>> {
 		const collection = schema.object.shape.$type.expected;
 		const cacheKey = `${repo}:${collection}:${rkey}`;
 
 		const cached = recordCache.get(cacheKey);
-		if (cached) return ok(cached.value as Output);
+		if (cached) return ok({ uri: cached.uri, cid: cached.cid, record: cached.value as Output });
 		const cachedSignal = recordCache.getSignal(cacheKey);
 
 		const result = await Promise.race([
@@ -122,7 +129,7 @@ export class AtpClient {
 				repo,
 				collection,
 				rkey
-			}).then((result): Result<Output, string> => {
+			}).then((result): Result<RecordOutput<Output>, string> => {
 				if (!result.ok) return result;
 
 				const parsed = safeParse(schema, result.value.value);
@@ -130,20 +137,27 @@ export class AtpClient {
 
 				recordCache.set(cacheKey, result.value);
 
-				return ok(parsed.value as Output);
+				return ok({
+					uri: result.value.uri,
+					cid: result.value.cid,
+					record: parsed.value as Output
+				});
 			}),
-			cachedSignal.then((d): Result<Output, string> => ok(d.value as Output))
+			cachedSignal.then(
+				(d): Result<RecordOutput<Output>, string> =>
+					ok({ uri: d.uri, cid: d.cid, record: d.value as Output })
+			)
 		]);
 
 		if (!result.ok) return result;
 
-		return ok(result.value as Output);
+		return ok(result.value);
 	}
 
 	async getProfile(repo?: ActorIdentifier): Promise<Result<AppBskyActorProfile.Main, string>> {
 		repo = repo ?? this.didDoc?.did;
 		if (!repo) return err('not authenticated');
-		return await this.getRecord(AppBskyActorProfile.mainSchema, repo, 'self');
+		return map(await this.getRecord(AppBskyActorProfile.mainSchema, repo, 'self'), (d) => d.record);
 	}
 
 	async listRecords<Collection extends keyof Records>(
@@ -232,6 +246,7 @@ export class AtpClient {
 		if (!did.ok) {
 			return err(`failed to resolve handle: ${did.error}`);
 		}
+
 		return await fetchMicrocosm(constellationUrl, BacklinksQuery, {
 			subject: `at://${did.value}/${collection}/${rkey}`,
 			source,
@@ -277,17 +292,26 @@ const fetchMicrocosm = async <
 	init?: RequestInit
 ): Promise<Result<Output, string>> => {
 	if (!schema.output || schema.output.type === 'blob') return err('schema must be blob');
+	api.pathname = `/xrpc/${schema.nsid}`;
+	api.search = params ? `?${new URLSearchParams(params)}` : '';
 	try {
-		api.pathname = `/xrpc/${schema.nsid}`;
-		api.search = params ? `?${new URLSearchParams(params)}` : '';
-		// console.info(`fetching:`, api.href);
-		const response = await fetch(api, init);
+		const body = await fetchJson(api, init);
+		if (!body.ok) return err(body.error);
+		const parsed = safeParse(schema.output.schema, body.value);
+		if (!parsed.ok) return err(parsed.message);
+		return ok(parsed.value as Output);
+	} catch (error) {
+		return err(`FetchError: ${error}`);
+	}
+};
+
+const fetchJson = async (url: URL, init?: RequestInit): Promise<Result<unknown, string>> => {
+	try {
+		const response = await fetch(url, init);
 		const body = await response.json();
 		if (response.status === 400) return err(`${body.error}: ${body.message}`);
 		if (response.status !== 200) return err(`UnexpectedStatusCode: ${response.status}`);
-		const parsed = safeParse(schema.output.schema, body);
-		if (!parsed.ok) return err(parsed.message);
-		return ok(parsed.value as Output);
+		return ok(body);
 	} catch (error) {
 		return err(`FetchError: ${error}`);
 	}

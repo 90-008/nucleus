@@ -61,8 +61,11 @@ export class PersistedLRU<K extends string, V extends {}> {
 	set(key: K, value: V): void {
 		this.memory.set(key, value);
 		this.storage.set(this.prefixed(key), value);
-		for (const signal of this.signals.get(key) ?? []) {
+		const signals = this.signals.get(key);
+		let signal = signals?.pop();
+		while (signal) {
 			signal(value);
+			signal = signals?.pop();
 		}
 		this.storage.flush(); // TODO: uh evil and fucked up (this whole file is evil honestly)
 	}

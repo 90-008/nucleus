@@ -1,27 +1,55 @@
 <script lang="ts">
 	import type { AtpClient } from '$lib/at/client';
-	import { ok, err, type Result } from '$lib/result';
+	import { ok, err, type Result, expect } from '$lib/result';
 	import type { AppBskyFeedPost } from '@atcute/bluesky';
-	import type { ResourceUri } from '@atcute/lexicons';
 	import { generateColorForDid } from '$lib/accounts';
+	import type { PostWithUri } from '$lib/at/fetch';
+	import BskyPost from './BskyPost.svelte';
+	import { parseCanonicalResourceUri, type Did } from '@atcute/lexicons';
+	import type { ComAtprotoRepoStrongRef } from '@atcute/atproto';
+	import type { Writable } from 'svelte/store';
 
 	interface Props {
 		client: AtpClient;
-		onPostSent: (uri: ResourceUri, post: AppBskyFeedPost.Main) => void;
+		selectedDid: Writable<Did | null>;
+		onPostSent: (post: PostWithUri) => void;
+		quoting?: PostWithUri;
+		replying?: PostWithUri;
 	}
 
-	const { client, onPostSent }: Props = $props();
+	let {
+		client,
+		selectedDid,
+		onPostSent,
+		quoting = $bindable(undefined),
+		replying = $bindable(undefined)
+	}: Props = $props();
 
 	let color = $derived(
 		client.didDoc?.did ? generateColorForDid(client.didDoc?.did) : 'var(--nucleus-accent)'
 	);
 
-	const post = async (
-		text: string
-	): Promise<Result<{ uri: ResourceUri; record: AppBskyFeedPost.Main }, string>> => {
+	const post = async (text: string): Promise<Result<PostWithUri, string>> => {
+		const strongRef = (p: PostWithUri): ComAtprotoRepoStrongRef.Main => ({
+			$type: 'com.atproto.repo.strongRef',
+			cid: p.cid!,
+			uri: p.uri
+		});
 		const record: AppBskyFeedPost.Main = {
 			$type: 'app.bsky.feed.post',
 			text,
+			reply: replying
+				? {
+						root: replying.record.reply?.root ?? strongRef(replying),
+						parent: strongRef(replying)
+					}
+				: undefined,
+			embed: quoting
+				? {
+						$type: 'app.bsky.embed.record',
+						record: strongRef(quoting)
+					}
+				: undefined,
 			createdAt: new Date().toISOString()
 		};
 
@@ -43,6 +71,7 @@
 
 		return ok({
 			uri: res.data.uri,
+			cid: res.data.cid,
 			record
 		});
 	};
@@ -57,11 +86,15 @@
 
 		post(postText).then((res) => {
 			if (res.ok) {
-				onPostSent(res.value.uri, res.value.record);
+				onPostSent(res.value);
 				postText = '';
 				info = 'posted!';
-				setTimeout(() => (info = ''), 1000 * 3);
+				isFocused = false;
+				quoting = undefined;
+				replying = undefined;
+				setTimeout(() => (info = ''), 1000 * 0.8);
 			} else {
+				// todo: add a way to clear error
 				info = res.error;
 			}
 		});
@@ -69,6 +102,7 @@
 
 	$effect(() => {
 		if (isFocused && textareaEl) textareaEl.focus();
+		if (quoting || replying) isFocused = true;
 	});
 </script>
 
@@ -104,11 +138,26 @@
 			{:else}
 				<div class="flex flex-col gap-2">
 					{#if isFocused}
+						{#if replying}
+							{@const parsedUri = expect(parseCanonicalResourceUri(replying.uri))}
+							<BskyPost
+								{client}
+								{selectedDid}
+								did={parsedUri.repo}
+								rkey={parsedUri.rkey}
+								data={replying}
+								isOnPostComposer={true}
+							/>
+						{/if}
 						<textarea
 							bind:this={textareaEl}
 							bind:value={postText}
 							onfocus={() => (isFocused = true)}
-							onblur={() => (isFocused = false)}
+							onblur={() => {
+								isFocused = false;
+								quoting = undefined;
+								replying = undefined;
+							}}
 							onkeydown={(event) => {
 								if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) doPost();
 							}}
@@ -117,6 +166,17 @@
 							class="[field-sizing:content] single-line-input resize-none bg-(--nucleus-bg)/40 focus:scale-100"
 							style="border-color: color-mix(in srgb, {color} 27%, transparent);"
 						></textarea>
+						{#if quoting}
+							{@const parsedUri = expect(parseCanonicalResourceUri(quoting.uri))}
+							<BskyPost
+								{client}
+								{selectedDid}
+								did={parsedUri.repo}
+								rkey={parsedUri.rkey}
+								data={quoting}
+								isOnPostComposer={true}
+							/>
+						{/if}
 						<div class="flex items-center gap-2">
 							<div class="grow"></div>
 							<span
@@ -140,9 +200,6 @@
 						<input
 							bind:value={postText}
 							onfocus={() => (isFocused = true)}
-							onkeydown={(event) => {
-								if (event.key === 'Enter') doPost();
-							}}
 							type="text"
 							placeholder="what's on your mind?"
 							class="single-line-input flex-1 bg-(--nucleus-bg)/40"

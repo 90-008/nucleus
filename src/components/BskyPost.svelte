@@ -1,10 +1,12 @@
 <script lang="ts">
-	import type { AtpClient } from '$lib/at/client';
+	import { type AtpClient } from '$lib/at/client';
 	import { AppBskyFeedPost } from '@atcute/bluesky';
 	import {
 		parseCanonicalResourceUri,
 		type ActorIdentifier,
+		type CanonicalResourceUri,
 		type Did,
+		type Nsid,
 		type RecordKey,
 		type ResourceUri
 	} from '@atcute/lexicons';
@@ -14,18 +16,41 @@
 	import { isBlob } from '@atcute/lexicons/interfaces';
 	import { blob, img } from '$lib/cdn';
 	import BskyPost from './BskyPost.svelte';
+	import Icon from '@iconify/svelte';
+	import { type Backlink, type BacklinksSource } from '$lib/at/constellation';
+	import { postActions, type PostActions } from '$lib';
+	import * as TID from '@atcute/tid';
+	import type { PostWithUri } from '$lib/at/fetch';
+	import type { Writable } from 'svelte/store';
+	import { onMount } from 'svelte';
 
 	interface Props {
 		client: AtpClient;
+		selectedDid: Writable<Did | null>;
+		// post
 		did: Did;
 		rkey: RecordKey;
 		// replyBacklinks?: Backlinks;
-		record?: AppBskyFeedPost.Main;
+		data?: PostWithUri;
 		mini?: boolean;
+		isOnPostComposer?: boolean;
+		onQuote?: (quote: PostWithUri) => void;
+		onReply?: (reply: PostWithUri) => void;
 	}
 
-	const { client, did, rkey, record, mini /* replyBacklinks */ }: Props = $props();
+	const {
+		client,
+		selectedDid,
+		did,
+		rkey,
+		data,
+		mini,
+		onQuote,
+		onReply,
+		isOnPostComposer = false /* replyBacklinks */
+	}: Props = $props();
 
+	const aturi: CanonicalResourceUri = `at://${did}/app.bsky.feed.post/${rkey}`;
 	const color = generateColorForDid(did);
 
 	let handle: ActorIdentifier = $state(did);
@@ -33,8 +58,8 @@
 		if (res.ok) handle = res.value.handle;
 		return res;
 	});
-	const post = record
-		? Promise.resolve(ok(record))
+	const post = data
+		? Promise.resolve(ok(data))
 		: client.getRecord(AppBskyFeedPost.mainSchema, did, rkey);
 	// const replies = replyBacklinks
 	// 	? Promise.resolve(ok(replyBacklinks))
@@ -78,7 +103,81 @@
 		if (hours > 0) return `${hours}h`;
 		if (minutes > 0) return `${minutes}m`;
 		if (seconds > 0) return `${seconds}s`;
-		return 'just now';
+		return 'now';
+	};
+
+	const findBacklink = async (source: BacklinksSource) => {
+		const backlinks = await client.getBacklinks(did, 'app.bsky.feed.post', rkey, source);
+		if (!backlinks.ok) return null;
+		return backlinks.value.records.find((r) => r.did === $selectedDid) ?? null;
+	};
+
+	let findAllBacklinks = async (did: Did | null) => {
+		if (!did) return;
+		if (postActions.has(`${did}:${aturi}`)) return;
+		const backlinks = await Promise.all([
+			findBacklink('app.bsky.feed.like:subject.uri'),
+			findBacklink('app.bsky.feed.repost:subject.uri')
+			// findBacklink('app.bsky.feed.post:reply.parent.uri'),
+			// findBacklink('app.bsky.feed.post:embed.record.uri')
+		]);
+		const actions: PostActions = {
+			like: backlinks[0],
+			repost: backlinks[1]
+			// reply: backlinks[2],
+			// quote: backlinks[3]
+		};
+		console.log('findAllBacklinks', did, aturi, actions);
+		postActions.set(`${did}:${aturi}`, actions);
+	};
+	onMount(() => {
+		// findAllBacklinks($selectedDid);
+		selectedDid.subscribe(findAllBacklinks);
+	});
+
+	const toggleLink = async (link: Backlink | null, collection: Nsid): Promise<Backlink | null> => {
+		// console.log('toggleLink', selectedDid, link, collection);
+		if (!$selectedDid) return null;
+		const _post = await post;
+		if (!_post.ok) return null;
+		if (!link) {
+			if (_post.value.cid) {
+				const record = {
+					$type: collection,
+					subject: {
+						cid: _post.value.cid,
+						uri: aturi
+					},
+					createdAt: new Date().toISOString()
+				};
+				const rkey = TID.now();
+				// todo: handle errors
+				client.atcute?.post('com.atproto.repo.createRecord', {
+					input: {
+						repo: $selectedDid,
+						collection,
+						record,
+						rkey
+					}
+				});
+				return {
+					collection,
+					did: $selectedDid,
+					rkey
+				};
+			}
+		} else {
+			// todo: handle errors
+			client.atcute?.post('com.atproto.repo.deleteRecord', {
+				input: {
+					repo: link.did,
+					collection: link.collection,
+					rkey: link.rkey
+				}
+			});
+			return null;
+		}
+		return link;
 	};
 </script>
 
@@ -88,7 +187,7 @@
 			class="rounded-full px-2.5 py-0.5 text-xs font-medium"
 			style="background: color-mix(in srgb, {mini
 				? 'var(--nucleus-fg)'
-				: color} 13%, transparent); color: {mini ? 'var(--nucleus-fg)' : color};"
+				: color} 10%, transparent); color: {mini ? 'var(--nucleus-fg)' : color};"
 		>
 			{getEmbedText(record.embed.$type)}
 		</span>
@@ -96,12 +195,12 @@
 {/snippet}
 
 {#if mini}
-	<div class="overflow-hidden text-sm text-nowrap overflow-ellipsis opacity-60">
+	<div class="text-sm opacity-60">
 		{#await post}
 			loading...
 		{:then post}
 			{#if post.ok}
-				{@const record = post.value}
+				{@const record = post.value.record}
 				<span style="color: {color};">@{handle}</span>: {@render embedBadge(record)}
 				<span title={record.text}>{record.text}</span>
 			{:else}
@@ -122,10 +221,12 @@
 		</div>
 	{:then post}
 		{#if post.ok}
-			{@const record = post.value}
+			{@const record = post.value.record}
 			<div
 				class="rounded-sm border-2 p-2 shadow-lg backdrop-blur-sm transition-all"
-				style="background: {color}18; border-color: {color}66;"
+				style="background: {color}{isOnPostComposer
+					? '36'
+					: '18'}; border-color: {color}{isOnPostComposer ? '99' : '66'};"
 			>
 				<div
 					class="group mb-3 flex w-fit max-w-full items-center gap-1.5 rounded-sm pr-1"
@@ -141,51 +242,39 @@
 								{@const profileValue = profile.value}
 								<span class="min-w-0 overflow-hidden text-nowrap overflow-ellipsis"
 									>{profileValue.displayName}</span
-								><span class="shrink-0 text-nowrap">(@{handle})</span>
+								><span class="shrink-0 text-nowrap opacity-70">(@{handle})</span>
 							{:else}
 								{handle}
 							{/if}
 						{/await}
 					</span>
-
-					<!-- <span>·</span>
-				{#await replies}
-					<span style="color: {theme.fg}aa;">… replies</span>
-				{:then replies}
-					{#if replies.ok}
-						{@const repliesValue = replies.value}
-						<span style="color: {theme.fg}aa;">
-							{#if repliesValue.total > 0}
-								{repliesValue.total}
-								{repliesValue.total > 1 ? 'replies' : 'reply'}
-							{:else}
-								no replies
-							{/if}
-						</span>
-					{:else}
-						<span
-							title={`${replies.error}`}
-							class="max-w-[32ch] overflow-hidden text-nowrap"
-							style="color: {theme.fg}aa;">{replies.error}</span
-						>
-					{/if}
-				{/await} -->
 					<span>·</span>
 					<span class="text-nowrap text-(--nucleus-fg)/67"
 						>{getRelativeTime(new Date(record.createdAt))}</span
 					>
 				</div>
-				<p class="leading-relaxed text-wrap">
+				<p class="leading-relaxed text-wrap break-words">
 					{record.text}
+					{#if isOnPostComposer}
+						{@render embedBadge(record)}
+					{/if}
 				</p>
-				{#if record.embed}
+				{#if !isOnPostComposer && record.embed}
 					{@const embed = record.embed}
 					<div class="mt-2">
 						{#snippet embedPost(uri: ResourceUri)}
 							{@const parsedUri = expect(parseCanonicalResourceUri(uri))}
 							<!-- reject recursive quotes -->
 							{#if !(did === parsedUri.repo && rkey === parsedUri.rkey)}
-								<BskyPost {client} did={parsedUri.repo} rkey={parsedUri.rkey} />
+								<BskyPost
+									{selectedDid}
+									{client}
+									did={parsedUri.repo}
+									rkey={parsedUri.rkey}
+									{isOnPostComposer}
+									{onQuote}
+									{onReply}
+								/>
 							{:else}
 								<span>you think you're funny with that recursive quote but i'm onto you</span>
 							{/if}
@@ -222,6 +311,10 @@
 						<!-- todo: implement external link embeds -->
 					</div>
 				{/if}
+				{#if !isOnPostComposer}
+					{@const backlinks = postActions.get(`${$selectedDid!}:${post.value.uri}`)}
+					{@render postControls(post.value, backlinks)}
+				{/if}
 			</div>
 		{:else}
 			<div class="rounded-xl border-2 p-4" style="background: #ef444422; border-color: #ef4444;">
@@ -230,3 +323,58 @@
 		{/if}
 	{/await}
 {/if}
+
+{#snippet postControls(post: PostWithUri, backlinks?: PostActions)}
+	<div
+		class="group mt-3 flex w-fit max-w-full items-center rounded-sm"
+		style="background: {color}1f;"
+	>
+		{#snippet label(
+			name: string,
+			icon: string,
+			onClick: (link: Backlink | null | undefined) => void,
+			backlink?: Backlink | null,
+			hasSolid?: boolean
+		)}
+			<button
+				class="px-2 py-1.5 text-(--nucleus-fg)/90 hover:[backdrop-filter:brightness(120%)]"
+				onclick={() => onClick(backlink)}
+				style="color: {backlink ? color : 'color-mix(in srgb, var(--nucleus-fg) 90%, transparent)'}"
+				title={name}
+			>
+				<Icon icon={hasSolid && backlink ? `${icon}-solid` : icon} width={20} />
+			</button>
+		{/snippet}
+		{@render label('reply', 'heroicons:chat-bubble-left', () => {
+			onReply?.(post);
+		})}
+		{@render label(
+			'repost',
+			'heroicons:arrow-path-rounded-square-20-solid',
+			async (link) => {
+				if (link === undefined) return;
+				postActions.set(`${$selectedDid!}:${aturi}`, {
+					...backlinks!,
+					repost: await toggleLink(link, 'app.bsky.feed.repost')
+				});
+			},
+			backlinks?.repost
+		)}
+		{@render label('quote', 'heroicons:paper-clip-20-solid', () => {
+			onQuote?.(post);
+		})}
+		{@render label(
+			'like',
+			'heroicons:star',
+			async (link) => {
+				if (link === undefined) return;
+				postActions.set(`${$selectedDid!}:${aturi}`, {
+					...backlinks!,
+					like: await toggleLink(link, 'app.bsky.feed.like')
+				});
+			},
+			backlinks?.like,
+			true
+		)}
+	</div>
+{/snippet}

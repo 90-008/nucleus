@@ -8,7 +8,7 @@
 </script>
 
 <svg
-	class="rounded-sm"
+	class="shrink-0 rounded-sm"
 	style="background: color-mix(in srgb, {color} 27%, transparent); color: {color}; width: calc(var(--spacing) * {size}); height: calc(var(--spacing) * {size});"
 	xmlns="http://www.w3.org/2000/svg"
 	width="24px"

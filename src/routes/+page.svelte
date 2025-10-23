@@ -12,29 +12,31 @@
 		type ResourceUri
 	} from '@atcute/lexicons';
 	import { onMount } from 'svelte';
-	import { fetchPostsWithBacklinks, hydratePosts } from '$lib/at/fetch';
+	import { fetchPostsWithBacklinks, hydratePosts, type PostWithUri } from '$lib/at/fetch';
 	import { expect, ok } from '$lib/result';
 	import { AppBskyFeedPost } from '@atcute/bluesky';
-	import { SvelteMap } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { InfiniteLoader, LoaderState } from 'svelte-infinite';
-	import { notificationStream } from '$lib';
+	import { notificationStream, selectedDid } from '$lib';
 	import { get } from 'svelte/store';
+	import Icon from '@iconify/svelte';
 
 	let loaderState = new LoaderState();
 	let scrollContainer = $state<HTMLDivElement>();
 
-	let selectedDid = $state<Did | null>(null);
 	let clients = new SvelteMap<Did, AtpClient>();
-	let selectedClient = $derived(selectedDid ? clients.get(selectedDid) : null);
+	let selectedClient = $derived($selectedDid ? clients.get($selectedDid) : null);
 
 	let viewClient = $state<AtpClient>(new AtpClient());
 
-	let posts = new SvelteMap<Did, SvelteMap<ResourceUri, AppBskyFeedPost.Main>>();
+	let posts = new SvelteMap<Did, SvelteMap<ResourceUri, PostWithUri>>();
 	let cursors = new SvelteMap<Did, { value?: string; end: boolean }>();
 
 	let isSettingsOpen = $state(false);
+	let reverseChronological = $state(true);
+	let viewOwnPosts = $state(true);
 
-	const addPosts = (did: Did, accTimeline: Map<ResourceUri, AppBskyFeedPost.Main>) => {
+	const addPosts = (did: Did, accTimeline: Map<ResourceUri, PostWithUri>) => {
 		if (!posts.has(did)) {
 			posts.set(did, new SvelteMap(accTimeline));
 			return;
@@ -50,7 +52,7 @@
 		const cursor = cursors.get(account.did);
 		if (cursor && cursor.end) return;
 
-		const accPosts = await fetchPostsWithBacklinks(client, account.did, cursor?.value, 12);
+		const accPosts = await fetchPostsWithBacklinks(client, account.did, cursor?.value, 6);
 		if (!accPosts.ok)
 			throw `failed to fetch posts for account ${account.handle}: ${accPosts.error}`;
 
@@ -80,8 +82,9 @@
 			const parsedSourceUri = expect(parseCanonicalResourceUri(event.data.link.source_record));
 			const hydrated = await hydratePosts(viewClient, [
 				{
-					record: subjectPost.value,
+					record: subjectPost.value.record,
 					uri: event.data.link.subject,
+					cid: subjectPost.value.cid,
 					replies: ok({
 						cursor: null,
 						total: 1,
@@ -144,7 +147,7 @@
 		// });
 		if ($accounts.length > 0) {
 			loaderState.status = 'LOADING';
-			selectedDid = $accounts[0].did;
+			$selectedDid = $accounts[0].did;
 			Promise.all($accounts.map(loginAccount)).then(() => {
 				loadMore();
 			});
@@ -158,7 +161,7 @@
 	};
 
 	const handleAccountSelected = async (did: Did) => {
-		selectedDid = did;
+		$selectedDid = did;
 		const account = $accounts.find((acc) => acc.did === did);
 		if (account && (!clients.has(account.did) || !clients.get(account.did)?.atcute))
 			await loginAccount(account);
@@ -176,7 +179,7 @@
 	const handleLoginSucceed = async (did: Did, handle: Handle, password: string) => {
 		const newAccount: Account = { did, handle, password };
 		addAccount(newAccount);
-		selectedDid = did;
+		$selectedDid = did;
 		loginAccount(newAccount).then(() => fetchTimeline(newAccount));
 	};
 
@@ -198,14 +201,10 @@
 		}
 	};
 
-	let reverseChronological = $state(true);
-	let viewOwnPosts = $state(true);
-
 	type ThreadPost = {
-		uri: ResourceUri;
+		data: PostWithUri;
 		did: Did;
 		rkey: string;
-		record: AppBskyFeedPost.Main;
 		parentUri: ResourceUri | null;
 		depth: number;
 		newestTime: number;
@@ -218,25 +217,24 @@
 		branchParentPost?: ThreadPost;
 	};
 
-	const buildThreads = (timelines: Map<Did, Map<ResourceUri, AppBskyFeedPost.Main>>): Thread[] => {
+	const buildThreads = (timelines: Map<Did, Map<ResourceUri, PostWithUri>>): Thread[] => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const threadMap = new Map<ResourceUri, ThreadPost[]>();
 
 		// Single pass: create posts and group by thread
 		for (const [, timeline] of timelines) {
-			for (const [uri, record] of timeline) {
+			for (const [uri, data] of timeline) {
 				const parsedUri = expect(parseCanonicalResourceUri(uri));
-				const rootUri = (record.reply?.root.uri as ResourceUri) || uri;
-				const parentUri = (record.reply?.parent.uri as ResourceUri) || null;
+				const rootUri = (data.record.reply?.root.uri as ResourceUri) || uri;
+				const parentUri = (data.record.reply?.parent.uri as ResourceUri) || null;
 
 				const post: ThreadPost = {
-					uri,
+					data,
 					did: parsedUri.repo,
 					rkey: parsedUri.rkey,
-					record,
 					parentUri,
 					depth: 0,
-					newestTime: new Date(record.createdAt).getTime()
+					newestTime: new Date(data.record.createdAt).getTime()
 				};
 
 				if (!threadMap.has(rootUri)) threadMap.set(rootUri, []);
@@ -248,7 +246,7 @@
 		const threads: Thread[] = [];
 
 		for (const [rootUri, posts] of threadMap) {
-			const uriToPost = new Map(posts.map((p) => [p.uri, p]));
+			const uriToPost = new Map(posts.map((p) => [p.data.uri, p]));
 			// eslint-disable-next-line svelte/prefer-svelte-reactivity
 			const childrenMap = new Map<ResourceUri | null, ThreadPost[]>();
 
@@ -292,7 +290,7 @@
 				const result: ThreadPost[] = [];
 				const addWithChildren = (post: ThreadPost) => {
 					result.push(post);
-					const children = childrenMap.get(post.uri) || [];
+					const children = childrenMap.get(post.data.uri) || [];
 					children.forEach(addWithChildren);
 				};
 				addWithChildren(startPost);
@@ -342,7 +340,7 @@
 						threads.push(
 							createThread(
 								branchPosts,
-								branchRoot.uri,
+								branchRoot.data.uri,
 								isOldestBranch ? undefined : (branchParentUri ?? undefined)
 							)
 						);
@@ -371,6 +369,11 @@
 		});
 
 	let threads = $derived(filterThreads(buildThreads(posts), $accounts));
+
+	let quoting = $state<PostWithUri | undefined>(undefined);
+	let replying = $state<PostWithUri | undefined>(undefined);
+
+	let expandedThreads = new SvelteSet<ResourceUri>();
 </script>
 
 <div class="mx-auto flex h-screen max-w-2xl flex-col p-4">
@@ -384,23 +387,11 @@
 		</div>
 		<button
 			onclick={() => (isSettingsOpen = true)}
-			class="rounded-sm bg-(--nucleus-accent)/7 p-2.5 text-(--nucleus-accent) transition-all hover:scale-110 hover:shadow-lg"
-			aria-label="Settings"
+			class="group rounded-sm bg-(--nucleus-accent)/7 p-2 text-(--nucleus-accent) transition-all hover:scale-110 hover:shadow-lg"
+			aria-label="settings"
 		>
-			<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="2"
-					d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-				/>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="2"
-					d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-				/>
-			</svg>
+			<Icon class="group-hover:hidden" icon="heroicons:cog-6-tooth" width={28} />
+			<Icon class="hidden group-hover:block" icon="heroicons:cog-6-tooth-solid" width={28} />
 		</button>
 	</div>
 
@@ -409,7 +400,7 @@
 			<AccountSelector
 				client={viewClient}
 				accounts={$accounts}
-				bind:selectedDid
+				bind:selectedDid={$selectedDid}
 				onAccountSelected={handleAccountSelected}
 				onLoginSucceed={handleLoginSucceed}
 				onLogout={handleLogout}
@@ -419,7 +410,10 @@
 				<div class="flex-1">
 					<PostComposer
 						client={selectedClient}
-						onPostSent={(uri, record) => posts.get(selectedDid!)?.set(uri, record)}
+						{selectedDid}
+						onPostSent={(post) => posts.get($selectedDid!)?.set(post.uri, post)}
+						bind:quoting
+						bind:replying
 					/>
 				</div>
 			{:else}
@@ -431,10 +425,10 @@
 			{/if}
 		</div>
 
-		<hr
+		<!-- <hr
 			class="h-[4px] w-full rounded-full border-0"
 			style="background: linear-gradient(to right, var(--nucleus-accent), var(--nucleus-accent2));"
-		/>
+		/> -->
 	</div>
 
 	<div
@@ -488,20 +482,58 @@
 	</InfiniteLoader>
 {/snippet}
 
+{#snippet replyPost(post: ThreadPost, reverse: boolean = reverseChronological)}
+	<span
+		class="mb-1.5 flex items-center gap-1.5 overflow-hidden text-nowrap break-words overflow-ellipsis"
+	>
+		<span class="text-sm text-nowrap opacity-60">{reverse ? '↱' : '↳'}</span>
+		<BskyPost mini {selectedDid} client={selectedClient ?? viewClient} {...post} />
+	</span>
+{/snippet}
+
 {#snippet threadsView()}
-	{#each threads as thread ([thread.rootUri, thread.branchParentPost, ...thread.posts.map((post) => post.uri)])}
+	{#each threads as thread (thread.rootUri)}
 		<div class="flex {reverseChronological ? 'flex-col' : 'flex-col-reverse'} mb-6.5">
 			{#if thread.branchParentPost}
-				{@const post = thread.branchParentPost}
-				<div class="mb-1.5 flex items-center gap-1.5">
-					<span class="text-sm text-nowrap opacity-60">{reverseChronological ? '↱' : '↳'}</span>
-					<BskyPost mini client={viewClient} {...post} />
-				</div>
+				{@render replyPost(thread.branchParentPost)}
 			{/if}
-			{#each thread.posts as post (post.uri)}
-				<div class="mb-1.5">
-					<BskyPost client={viewClient} {...post} />
-				</div>
+			{#each thread.posts as post, idx (post.data.uri)}
+				{@const mini =
+					!expandedThreads.has(thread.rootUri) &&
+					thread.posts.length > 4 &&
+					idx > 0 &&
+					idx < thread.posts.length - 2}
+				{#if !mini}
+					<div class="mb-1.5">
+						<BskyPost
+							{selectedDid}
+							client={selectedClient ?? viewClient}
+							onQuote={(post) => (quoting = post)}
+							onReply={(post) => (replying = post)}
+							{...post}
+						/>
+					</div>
+				{:else if mini}
+					{#if idx === 1}
+						{@render replyPost(post, !reverseChronological)}
+						<button
+							class="mx-1.5 mt-1.5 mb-2.5 flex items-center gap-1.5 text-[color-mix(in_srgb,_var(--nucleus-fg)_50%,_var(--nucleus-accent))]/70 transition-colors hover:text-(--nucleus-accent)"
+							onclick={() => expandedThreads.add(thread.rootUri)}
+						>
+							<div class="mr-1 h-px w-20 rounded border-y-2 border-dashed opacity-50"></div>
+							<Icon
+								class="shrink-0"
+								icon={reverseChronological
+									? 'heroicons:bars-arrow-up-solid'
+									: 'heroicons:bars-arrow-down-solid'}
+								width={32}
+							/><span class="shrink-0 pb-1">view full chain</span>
+							<div class="ml-1 h-px w-full rounded border-y-2 border-dashed opacity-50"></div>
+						</button>
+					{:else if idx === thread.posts.length - 3}
+						{@render replyPost(post)}
+					{/if}
+				{/if}
 			{/each}
 		</div>
 	{/each}
