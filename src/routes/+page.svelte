@@ -493,7 +493,7 @@
 
 {#snippet threadsView()}
 	{#each threads as thread (thread.rootUri)}
-		<div class="flex {reverseChronological ? 'flex-col' : 'flex-col-reverse'} mb-6.5">
+		<div class="flex w-full shrink-0 {reverseChronological ? 'flex-col' : 'flex-col-reverse'}">
 			{#if thread.branchParentPost}
 				{@render replyPost(thread.branchParentPost)}
 			{/if}
@@ -536,5 +536,8 @@
 				{/if}
 			{/each}
 		</div>
+		<div
+			class="mx-8 mt-3 mb-4 h-px bg-gradient-to-r from-(--nucleus-accent)/30 to-(--nucleus-accent2)/30"
+		></div>
 	{/each}
 {/snippet}

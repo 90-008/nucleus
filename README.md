@@ -1,38 +1,15 @@
-# sv
+## nucleus
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+a WIP replies timeline only (eg. it only shows replies to your posts and your own posts) appview-less (it does not use the bluesky appview, but rather uses [microcosm](https://www.microcosm.blue/) services) bluesky client. it is implemented in SvelteKit and uses [atcute](https://tangled.org/@mary.my.id/atcute).
 
-## Creating a project
+![screenshot](./resources/screenshot.png)
 
-If you're seeing this, you've probably already done this step. Congrats!
+### todos
 
-```sh
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+- [ ] properly implement auth (current state is just for deving) (we want oauth only)
+- [ ] implement popouts for showing full chains instead of expanding in the timeline
+- [ ] implement moderation (mutes, muted words etc., use blocks from `app.bsky.graph.block`)
+- [ ] profile view popout
+- [ ] consider showing posts that mention / quote the user..
+- [ ] notifications when replied to (and mentioned and quoted?)
+- [ ] basic filtering settings for the timeline (dont show self posts and if we implement mentioned / quoted add toggles for those as well)

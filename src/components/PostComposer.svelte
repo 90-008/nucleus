@@ -81,6 +81,12 @@
 	let isFocused = $state(false);
 	let textareaEl: HTMLTextAreaElement | undefined = $state();
 
+	const unfocus = () => {
+		isFocused = false;
+		quoting = undefined;
+		replying = undefined;
+	};
+
 	const doPost = () => {
 		if (postText.length === 0 || postText.length > 300) return;
 
@@ -89,9 +95,7 @@
 				onPostSent(res.value);
 				postText = '';
 				info = 'posted!';
-				isFocused = false;
-				quoting = undefined;
-				replying = undefined;
+				unfocus();
 				setTimeout(() => (info = ''), 1000 * 0.8);
 			} else {
 				// todo: add a way to clear error
@@ -112,7 +116,13 @@
 		<div class="min-h-16"></div>
 	{/if}
 
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
+		onmousedown={(e) => {
+			if (isFocused) {
+				e.preventDefault();
+			}
+		}}
 		class="flex max-w-full rounded-sm border-2 shadow-lg transition-all duration-300"
 		class:min-h-16={!isFocused}
 		class:items-center={!isFocused}
@@ -153,12 +163,9 @@
 							bind:this={textareaEl}
 							bind:value={postText}
 							onfocus={() => (isFocused = true)}
-							onblur={() => {
-								isFocused = false;
-								quoting = undefined;
-								replying = undefined;
-							}}
+							onblur={unfocus}
 							onkeydown={(event) => {
+								if (event.key === 'Escape') unfocus();
 								if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) doPost();
 							}}
 							placeholder="what's on your mind?"
@@ -188,7 +195,10 @@
 								{postText.length} / 300
 							</span>
 							<button
-								onclick={doPost}
+								onmousedown={(e) => {
+									e.preventDefault();
+									doPost();
+								}}
 								disabled={postText.length === 0 || postText.length > 300}
 								class="action-button border-none px-5 text-(--nucleus-fg)/94 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
 								style="background: color-mix(in srgb, {color} 87%, transparent);"
