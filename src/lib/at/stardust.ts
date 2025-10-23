@@ -8,7 +8,7 @@ export type Notification = {
 };
 
 export type LinkNotification = {
-	operation: 'create' | 'update' | 'delete';
+	operation: 'create'; // todo: delete in the future
 	source: BacklinksSource;
 	source_record: CanonicalResourceUri;
 	source_rev: RecordKey;
