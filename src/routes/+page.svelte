@@ -222,72 +222,74 @@
 	});
 </script>
 
-<div class="mx-auto flex h-screen max-w-2xl flex-col p-4">
-	<div class="mb-6 flex shrink-0 items-center justify-between">
-		<div>
-			<h1 class="text-3xl font-bold tracking-tight">nucleus</h1>
-			<div class="mt-1 flex gap-2">
-				<div class="h-1 w-11 rounded-full bg-(--nucleus-accent)"></div>
-				<div class="h-1 w-8 rounded-full bg-(--nucleus-accent2)"></div>
-			</div>
-		</div>
-		<button
-			onclick={() => (isSettingsOpen = true)}
-			class="group rounded-sm bg-(--nucleus-accent)/7 p-2 text-(--nucleus-accent) transition-all hover:scale-110 hover:shadow-lg"
-			aria-label="settings"
-		>
-			<Icon class="group-hover:hidden" icon="heroicons:cog-6-tooth" width={28} />
-			<Icon class="hidden group-hover:block" icon="heroicons:cog-6-tooth-solid" width={28} />
-		</button>
-	</div>
-
-	<div class="shrink-0 space-y-4">
-		<div class="flex min-h-16 items-stretch gap-2">
-			<AccountSelector
-				client={viewClient}
-				accounts={$accounts}
-				bind:selectedDid
-				onAccountSelected={handleAccountSelected}
-				onLogout={handleLogout}
-			/>
-
-			{#if selectedClient}
-				<div class="flex-1">
-					<PostComposer
-						client={selectedClient}
-						onPostSent={(post) => posts.get(selectedDid!)?.set(post.uri, post)}
-						bind:quoting
-						bind:replying
-					/>
+<div class="mx-auto max-w-2xl">
+	<!-- Sticky header -->
+	<div class="sticky top-0 z-10 bg-(--nucleus-bg) p-4">
+		<div class="mb-6 flex items-center justify-between">
+			<div>
+				<h1 class="text-3xl font-bold tracking-tight">nucleus</h1>
+				<div class="mt-1 flex gap-2">
+					<div class="h-1 w-11 rounded-full bg-(--nucleus-accent)"></div>
+					<div class="h-1 w-8 rounded-full bg-(--nucleus-accent2)"></div>
 				</div>
-			{:else}
-				<div
-					class="flex flex-1 items-center justify-center rounded-sm border-2 border-(--nucleus-accent)/20 bg-(--nucleus-accent)/4 px-4 py-2.5 backdrop-blur-sm"
-				>
-					<p class="text-sm opacity-80">select or add an account to post</p>
+			</div>
+			<button
+				onclick={() => (isSettingsOpen = true)}
+				class="group rounded-sm bg-(--nucleus-accent)/7 p-2 text-(--nucleus-accent) transition-all hover:scale-110 hover:shadow-lg"
+				aria-label="settings"
+			>
+				<Icon class="group-hover:hidden" icon="heroicons:cog-6-tooth" width={28} />
+				<Icon class="hidden group-hover:block" icon="heroicons:cog-6-tooth-solid" width={28} />
+			</button>
+		</div>
+
+		<!-- Composer and error disclaimer (above thread list, not scrollable) -->
+		<div class="space-y-4">
+			<div class="flex min-h-16 items-stretch gap-2">
+				<AccountSelector
+					client={viewClient}
+					accounts={$accounts}
+					bind:selectedDid
+					onAccountSelected={handleAccountSelected}
+					onLogout={handleLogout}
+				/>
+
+				{#if selectedClient}
+					<div class="flex-1">
+						<PostComposer
+							client={selectedClient}
+							onPostSent={(post) => posts.get(selectedDid!)?.set(post.uri, post)}
+							bind:quoting
+							bind:replying
+						/>
+					</div>
+				{:else}
+					<div
+						class="flex flex-1 items-center justify-center rounded-sm border-2 border-(--nucleus-accent)/20 bg-(--nucleus-accent)/4 px-4 py-2.5 backdrop-blur-sm"
+					>
+						<p class="text-sm opacity-80">select or add an account to post</p>
+					</div>
+				{/if}
+			</div>
+
+			{#if !loadData.client.ok}
+				<div class="error-disclaimer">
+					<p>
+						<Icon class="inline h-12 w-12" icon="heroicons:exclamation-triangle-16-solid" />
+						{loadData.client.error}
+					</p>
 				</div>
 			{/if}
-		</div>
 
-		{#if !loadData.client.ok}
-			<div class="error-disclaimer">
-				<p>
-					<Icon class="inline h-12 w-12" icon="heroicons:exclamation-triangle-16-solid" />
-					{loadData.client.error}
-				</p>
-			</div>
-		{/if}
-
-		<!-- <hr
+			<!-- <hr
 			class="h-[4px] w-full rounded-full border-0"
 			style="background: linear-gradient(to right, var(--nucleus-accent), var(--nucleus-accent2));"
 		/> -->
+		</div>
 	</div>
 
-	<div
-		class="mt-4 overflow-y-scroll [scrollbar-color:var(--nucleus-accent)_transparent]"
-		bind:this={scrollContainer}
-	>
+	<!-- Thread list (page scrolls as a whole) -->
+	<div class="mt-4 [scrollbar-color:var(--nucleus-accent)_transparent]" bind:this={scrollContainer}>
 		{#if $accounts.length > 0}
 			{@render renderThreads()}
 		{:else}
