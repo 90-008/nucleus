@@ -5,7 +5,7 @@
   nodejs,
   makeBinaryWrapper,
   nucleus-modules,
-  PUBLIC_BASE_URL ? "http://localhost:5173",
+  PUBLIC_DOMAIN ? "http://localhost:5173",
 }:
 stdenv.mkDerivation {
   name = "nucleus";
@@ -26,7 +26,7 @@ stdenv.mkDerivation {
   nativeBuildInputs = [makeBinaryWrapper];
   buildInputs = [deno];
 
-  inherit PUBLIC_BASE_URL;
+  inherit PUBLIC_DOMAIN;
 
   dontCheck = true;
 
