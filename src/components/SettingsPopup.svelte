@@ -56,7 +56,7 @@
 </script>
 
 {#snippet divider()}
-	<div class="h-px bg-gradient-to-r from-(--nucleus-accent) to-(--nucleus-accent2)"></div>
+	<div class="h-px bg-linear-to-r from-(--nucleus-accent) to-(--nucleus-accent2)"></div>
 {/snippet}
 
 {#snippet settingHeader(name: string, desc: string)}

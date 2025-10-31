@@ -31,7 +31,7 @@ export const hashColor = (input: string): string => {
 
 	const hue = hash % 360;
 	const saturation = 0.8 + ((hash >>> 10) % 20) * 0.01; // 80-100%
-	const lightness = 0.45 + ((hash >>> 20) % 35) * 0.01; // 50-75%
+	const lightness = 0.45 + ((hash >>> 20) % 35) * 0.01; // 45-80%
 
 	const rgb = hslToRgb(hue, saturation, lightness);
 	const hex = rgb.map((value) => value.toString(16).padStart(2, '0')).join('');

@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { defaultTheme, type Theme } from './theme.svelte';
+import { defaultTheme, type Theme } from './theme';
 
 export type ApiEndpoints = Record<string, string> & {
 	slingshot: string;

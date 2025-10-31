@@ -30,6 +30,13 @@
 	@apply rounded-sm border-2 border-(--nucleus-accent) px-3 py-2 font-semibold text-(--nucleus-accent) transition-all hover:scale-105 hover:bg-(--nucleus-accent)/20;
 }
 
+@utility error-disclaimer {
+	@apply rounded-sm border-2 border-red-500 bg-red-500/8 p-2;
+	p {
+		@apply text-base text-wrap wrap-break-word text-red-500;
+	}
+}
+
 :root {
 	scrollbar-width: thin;
 	scrollbar-color: var(--nucleus-accent) var(--nucleus-bg);

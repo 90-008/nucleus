@@ -10,13 +10,7 @@
 		"sourceMap": true,
 		"strict": true,
 		"moduleResolution": "bundler",
-		"jsx": "react-jsx",
-		"paths": {
-			"$components": ["./src/components"],
-			"$components/*": ["./src/components/*"],
-			"$lib": ["./src/lib"],
-			"$lib/*": ["./src/lib/*"]
-		}
+		"jsx": "react-jsx"
 	}
 	// Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
 	// except $lib which is handled by https://svelte.dev/docs/kit/configuration#files

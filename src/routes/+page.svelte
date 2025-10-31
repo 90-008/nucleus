@@ -4,37 +4,75 @@
 	import AccountSelector from '$components/AccountSelector.svelte';
 	import SettingsPopup from '$components/SettingsPopup.svelte';
 	import { AtpClient, type NotificationsStreamEvent } from '$lib/at/client';
-	import { accounts, addAccount, type Account } from '$lib/accounts';
-	import {
-		type Did,
-		type Handle,
-		parseCanonicalResourceUri,
-		type ResourceUri
-	} from '@atcute/lexicons';
+	import { accounts, type Account } from '$lib/accounts';
+	import { type Did, parseCanonicalResourceUri, type ResourceUri } from '@atcute/lexicons';
 	import { onMount } from 'svelte';
 	import { fetchPostsWithBacklinks, hydratePosts, type PostWithUri } from '$lib/at/fetch';
 	import { expect, ok } from '$lib/result';
 	import { AppBskyFeedPost } from '@atcute/bluesky';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { InfiniteLoader, LoaderState } from 'svelte-infinite';
-	import { notificationStream, selectedDid } from '$lib';
+	import { notificationStream } from '$lib/state.svelte';
 	import { get } from 'svelte/store';
 	import Icon from '@iconify/svelte';
+	import { sessions } from '$lib/at/oauth';
+	import type { AtprotoDid } from '@atcute/lexicons/syntax';
+	import type { PageProps } from './+page';
+	import { buildThreads, filterThreads, type ThreadPost } from '$lib/thread';
 
-	let loaderState = new LoaderState();
-	let scrollContainer = $state<HTMLDivElement>();
+	const { data: loadData }: PageProps = $props();
 
-	let clients = new SvelteMap<Did, AtpClient>();
-	let selectedClient = $derived($selectedDid ? clients.get($selectedDid) : null);
+	let selectedDid = $state((localStorage.getItem('selectedDid') ?? null) as AtprotoDid | null);
+	$effect(() => {
+		if (selectedDid) {
+			localStorage.setItem('selectedDid', selectedDid);
+		} else {
+			localStorage.removeItem('selectedDid');
+		}
+	});
 
-	let viewClient = $state<AtpClient>(new AtpClient());
+	const clients = new SvelteMap<AtprotoDid, AtpClient>();
+	const selectedClient = $derived(selectedDid ? clients.get(selectedDid) : null);
 
-	let posts = new SvelteMap<Did, SvelteMap<ResourceUri, PostWithUri>>();
-	let cursors = new SvelteMap<Did, { value?: string; end: boolean }>();
+	const loginAccount = async (account: Account) => {
+		if (clients.has(account.did)) return;
+		const client = new AtpClient();
+		const result = await client.login(account.did, await sessions.get(account.did));
+		if (result.ok) clients.set(account.did, client);
+	};
+
+	const handleAccountSelected = async (did: AtprotoDid) => {
+		selectedDid = did;
+		const account = $accounts.find((acc) => acc.did === did);
+		if (account && (!clients.has(account.did) || !clients.get(account.did)?.atcute))
+			await loginAccount(account);
+	};
+
+	const handleLogout = async (did: AtprotoDid) => {
+		await sessions.remove(did);
+		const newAccounts = $accounts.filter((acc) => acc.did !== did);
+		$accounts = newAccounts;
+		clients.delete(did);
+		posts.delete(did);
+		cursors.delete(did);
+		handleAccountSelected(newAccounts[0]?.did);
+	};
+
+	const viewClient = new AtpClient();
+
+	const posts = new SvelteMap<Did, SvelteMap<ResourceUri, PostWithUri>>();
+	const cursors = new SvelteMap<Did, { value?: string; end: boolean }>();
 
 	let isSettingsOpen = $state(false);
 	let reverseChronological = $state(true);
 	let viewOwnPosts = $state(true);
+
+	const threads = $derived(filterThreads(buildThreads(posts), $accounts, { viewOwnPosts }));
+
+	let quoting = $state<PostWithUri | undefined>(undefined);
+	let replying = $state<PostWithUri | undefined>(undefined);
+
+	const expandedThreads = new SvelteSet<ResourceUri>();
 
 	const addPosts = (did: Did, accTimeline: Map<ResourceUri, PostWithUri>) => {
 		if (!posts.has(did)) {
@@ -119,6 +157,27 @@
 	// 	}
 	// };
 
+	const loaderState = new LoaderState();
+	let scrollContainer = $state<HTMLDivElement>();
+
+	let loading = $state(false);
+	let loadError = $state('');
+	const loadMore = async () => {
+		if (loading || $accounts.length === 0) return;
+
+		loading = true;
+		try {
+			await fetchTimelines($accounts);
+			loaderState.loaded();
+		} catch (error) {
+			loadError = `${error}`;
+			loaderState.error();
+		} finally {
+			loading = false;
+			if (cursors.values().every((cursor) => cursor.end)) loaderState.complete();
+		}
+	};
+
 	onMount(async () => {
 		accounts.subscribe((newAccounts) => {
 			get(notificationStream)?.stop();
@@ -147,229 +206,24 @@
 		// });
 		if ($accounts.length > 0) {
 			loaderState.status = 'LOADING';
-			$selectedDid = $accounts[0].did;
+			if (loadData.client.ok && loadData.client.value) {
+				const loggedInDid = loadData.client.value.didDoc!.did as AtprotoDid;
+				selectedDid = loggedInDid;
+				clients.set(loggedInDid, loadData.client.value);
+			}
+			if (!$accounts.some((account) => account.did === selectedDid)) selectedDid = $accounts[0].did;
+			console.log('onMount selectedDid', selectedDid);
 			Promise.all($accounts.map(loginAccount)).then(() => {
 				loadMore();
 			});
+		} else {
+			selectedDid = null;
 		}
 	});
-
-	const loginAccount = async (account: Account) => {
-		const client = new AtpClient();
-		const result = await client.login(account.handle, account.password);
-		if (result.ok) clients.set(account.did, client);
-	};
-
-	const handleAccountSelected = async (did: Did) => {
-		$selectedDid = did;
-		const account = $accounts.find((acc) => acc.did === did);
-		if (account && (!clients.has(account.did) || !clients.get(account.did)?.atcute))
-			await loginAccount(account);
-	};
-
-	const handleLogout = async (did: Did) => {
-		const newAccounts = $accounts.filter((acc) => acc.did !== did);
-		$accounts = newAccounts;
-		clients.delete(did);
-		posts.delete(did);
-		cursors.delete(did);
-		handleAccountSelected(newAccounts[0]?.did);
-	};
-
-	const handleLoginSucceed = async (did: Did, handle: Handle, password: string) => {
-		const newAccount: Account = { did, handle, password };
-		addAccount(newAccount);
-		$selectedDid = did;
-		loginAccount(newAccount).then(() => fetchTimeline(newAccount));
-	};
-
-	let loading = $state(false);
-	let loadError = $state('');
-	const loadMore = async () => {
-		if (loading || $accounts.length === 0) return;
-
-		loading = true;
-		try {
-			await fetchTimelines($accounts);
-			loaderState.loaded();
-		} catch (error) {
-			loadError = `${error}`;
-			loaderState.error();
-		} finally {
-			loading = false;
-			if (cursors.values().every((cursor) => cursor.end)) loaderState.complete();
-		}
-	};
-
-	type ThreadPost = {
-		data: PostWithUri;
-		did: Did;
-		rkey: string;
-		parentUri: ResourceUri | null;
-		depth: number;
-		newestTime: number;
-	};
-
-	type Thread = {
-		rootUri: ResourceUri;
-		posts: ThreadPost[];
-		newestTime: number;
-		branchParentPost?: ThreadPost;
-	};
-
-	const buildThreads = (timelines: Map<Did, Map<ResourceUri, PostWithUri>>): Thread[] => {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
-		const threadMap = new Map<ResourceUri, ThreadPost[]>();
-
-		// group posts by root uri into "thread" chains
-		for (const [, timeline] of timelines) {
-			for (const [uri, data] of timeline) {
-				const parsedUri = expect(parseCanonicalResourceUri(uri));
-				const rootUri = (data.record.reply?.root.uri as ResourceUri) || uri;
-				const parentUri = (data.record.reply?.parent.uri as ResourceUri) || null;
-
-				const post: ThreadPost = {
-					data,
-					did: parsedUri.repo,
-					rkey: parsedUri.rkey,
-					parentUri,
-					depth: 0,
-					newestTime: new Date(data.record.createdAt).getTime()
-				};
-
-				if (!threadMap.has(rootUri)) threadMap.set(rootUri, []);
-
-				threadMap.get(rootUri)!.push(post);
-			}
-		}
-
-		const threads: Thread[] = [];
-
-		for (const [rootUri, posts] of threadMap) {
-			const uriToPost = new Map(posts.map((p) => [p.data.uri, p]));
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity
-			const childrenMap = new Map<ResourceUri | null, ThreadPost[]>();
-
-			// calculate depths
-			for (const post of posts) {
-				let depth = 0;
-				let currentUri = post.parentUri;
-
-				while (currentUri && uriToPost.has(currentUri)) {
-					depth++;
-					currentUri = uriToPost.get(currentUri)!.parentUri;
-				}
-
-				post.depth = depth;
-
-				if (!childrenMap.has(post.parentUri)) childrenMap.set(post.parentUri, []);
-				childrenMap.get(post.parentUri)!.push(post);
-			}
-
-			childrenMap
-				.values()
-				.forEach((children) => children.sort((a, b) => b.newestTime - a.newestTime));
-
-			const createThread = (
-				posts: ThreadPost[],
-				rootUri: ResourceUri,
-				branchParentUri?: ResourceUri
-			): Thread => {
-				return {
-					rootUri,
-					posts,
-					newestTime: Math.max(...posts.map((p) => p.newestTime)),
-					branchParentPost: branchParentUri ? uriToPost.get(branchParentUri) : undefined
-				};
-			};
-
-			const collectSubtree = (startPost: ThreadPost): ThreadPost[] => {
-				const result: ThreadPost[] = [];
-				const addWithChildren = (post: ThreadPost) => {
-					result.push(post);
-					const children = childrenMap.get(post.data.uri) || [];
-					children.forEach(addWithChildren);
-				};
-				addWithChildren(startPost);
-				return result;
-			};
-
-			// find posts with >2 children to split them into separate chains
-			const branchingPoints = Array.from(childrenMap.entries())
-				.filter(([, children]) => children.length > 1)
-				.map(([uri]) => uri);
-
-			if (branchingPoints.length === 0) {
-				const roots = childrenMap.get(null) || [];
-				const allPosts = roots.flatMap((root) => collectSubtree(root));
-				threads.push(createThread(allPosts, rootUri));
-			} else {
-				for (const branchParentUri of branchingPoints) {
-					const branches = childrenMap.get(branchParentUri) || [];
-
-					const sortedBranches = [...branches].sort((a, b) => a.newestTime - b.newestTime);
-
-					sortedBranches.forEach((branchRoot, index) => {
-						const isOldestBranch = index === 0;
-						const branchPosts: ThreadPost[] = [];
-
-						// the oldest branch has the full context
-						// todo: consider letting the user decide this..?
-						if (isOldestBranch && branchParentUri !== null) {
-							const parentChain: ThreadPost[] = [];
-							let currentUri: ResourceUri | null = branchParentUri;
-							while (currentUri && uriToPost.has(currentUri)) {
-								parentChain.unshift(uriToPost.get(currentUri)!);
-								currentUri = uriToPost.get(currentUri)!.parentUri;
-							}
-							branchPosts.push(...parentChain);
-						}
-
-						branchPosts.push(...collectSubtree(branchRoot));
-
-						const minDepth = Math.min(...branchPosts.map((p) => p.depth));
-						branchPosts.forEach((p) => (p.depth = p.depth - minDepth));
-
-						threads.push(
-							createThread(
-								branchPosts,
-								branchRoot.data.uri,
-								isOldestBranch ? undefined : (branchParentUri ?? undefined)
-							)
-						);
-					});
-				}
-			}
-		}
-
-		threads.sort((a, b) => b.newestTime - a.newestTime);
-
-		// console.log(threads);
-
-		return threads;
-	};
-
-	// todo: add more filtering options
-	const isOwnPost = (post: ThreadPost, accounts: Account[]) =>
-		accounts.some((account) => account.did === post.did);
-	const hasNonOwnPost = (posts: ThreadPost[], accounts: Account[]) =>
-		posts.some((post) => !isOwnPost(post, accounts));
-	const filterThreads = (threads: Thread[], accounts: Account[]) =>
-		threads.filter((thread) => {
-			if (!viewOwnPosts) return hasNonOwnPost(thread.posts, accounts);
-			return true;
-		});
-
-	let threads = $derived(filterThreads(buildThreads(posts), $accounts));
-
-	let quoting = $state<PostWithUri | undefined>(undefined);
-	let replying = $state<PostWithUri | undefined>(undefined);
-
-	let expandedThreads = new SvelteSet<ResourceUri>();
 </script>
 
 <div class="mx-auto flex h-screen max-w-2xl flex-col p-4">
-	<div class="mb-6 flex flex-shrink-0 items-center justify-between">
+	<div class="mb-6 flex shrink-0 items-center justify-between">
 		<div>
 			<h1 class="text-3xl font-bold tracking-tight">nucleus</h1>
 			<div class="mt-1 flex gap-2">
@@ -387,14 +241,13 @@
 		</button>
 	</div>
 
-	<div class="flex-shrink-0 space-y-4">
+	<div class="shrink-0 space-y-4">
 		<div class="flex min-h-16 items-stretch gap-2">
 			<AccountSelector
 				client={viewClient}
 				accounts={$accounts}
-				bind:selectedDid={$selectedDid}
+				bind:selectedDid
 				onAccountSelected={handleAccountSelected}
-				onLoginSucceed={handleLoginSucceed}
 				onLogout={handleLogout}
 			/>
 
@@ -402,8 +255,7 @@
 				<div class="flex-1">
 					<PostComposer
 						client={selectedClient}
-						{selectedDid}
-						onPostSent={(post) => posts.get($selectedDid!)?.set(post.uri, post)}
+						onPostSent={(post) => posts.get(selectedDid!)?.set(post.uri, post)}
 						bind:quoting
 						bind:replying
 					/>
@@ -416,6 +268,15 @@
 				</div>
 			{/if}
 		</div>
+
+		{#if !loadData.client.ok}
+			<div class="error-disclaimer">
+				<p>
+					<Icon class="inline h-12 w-12" icon="heroicons:exclamation-triangle-16-solid" />
+					{loadData.client.error}
+				</p>
+			</div>
+		{/if}
 
 		<!-- <hr
 			class="h-[4px] w-full rounded-full border-0"
@@ -440,6 +301,65 @@
 </div>
 
 <SettingsPopup bind:isOpen={isSettingsOpen} onClose={() => (isSettingsOpen = false)} />
+
+{#snippet replyPost(post: ThreadPost, reverse: boolean = reverseChronological)}
+	<span
+		class="mb-1.5 flex items-center gap-1.5 overflow-hidden text-nowrap wrap-break-word overflow-ellipsis"
+	>
+		<span class="text-sm text-nowrap opacity-60">{reverse ? '↱' : '↳'}</span>
+		<BskyPost mini client={selectedClient ?? viewClient} {...post} />
+	</span>
+{/snippet}
+
+{#snippet threadsView()}
+	{#each threads as thread (thread.rootUri)}
+		<div class="flex w-full shrink-0 {reverseChronological ? 'flex-col' : 'flex-col-reverse'}">
+			{#if thread.branchParentPost}
+				{@render replyPost(thread.branchParentPost)}
+			{/if}
+			{#each thread.posts as post, idx (post.data.uri)}
+				{@const mini =
+					!expandedThreads.has(thread.rootUri) &&
+					thread.posts.length > 4 &&
+					idx > 0 &&
+					idx < thread.posts.length - 2}
+				{#if !mini}
+					<div class="mb-1.5">
+						<BskyPost
+							client={selectedClient ?? viewClient}
+							onQuote={(post) => (quoting = post)}
+							onReply={(post) => (replying = post)}
+							{...post}
+						/>
+					</div>
+				{:else if mini}
+					{#if idx === 1}
+						{@render replyPost(post, !reverseChronological)}
+						<button
+							class="mx-1.5 mt-1.5 mb-2.5 flex items-center gap-1.5 text-[color-mix(in_srgb,var(--nucleus-fg)_50%,var(--nucleus-accent))]/70 transition-colors hover:text-(--nucleus-accent)"
+							onclick={() => expandedThreads.add(thread.rootUri)}
+						>
+							<div class="mr-1 h-px w-20 rounded border-y-2 border-dashed opacity-50"></div>
+							<Icon
+								class="shrink-0"
+								icon={reverseChronological
+									? 'heroicons:bars-arrow-up-solid'
+									: 'heroicons:bars-arrow-down-solid'}
+								width={32}
+							/><span class="shrink-0 pb-1">view full chain</span>
+							<div class="ml-1 h-px w-full rounded border-y-2 border-dashed opacity-50"></div>
+						</button>
+					{:else if idx === thread.posts.length - 3}
+						{@render replyPost(post)}
+					{/if}
+				{/if}
+			{/each}
+		</div>
+		<div
+			class="mx-8 mt-3 mb-4 h-px bg-linear-to-r from-(--nucleus-accent)/30 to-(--nucleus-accent2)/30"
+		></div>
+	{/each}
+{/snippet}
 
 {#snippet renderThreads()}
 	<InfiniteLoader
@@ -472,64 +392,4 @@
 			</div>
 		{/snippet}
 	</InfiniteLoader>
-{/snippet}
-
-{#snippet replyPost(post: ThreadPost, reverse: boolean = reverseChronological)}
-	<span
-		class="mb-1.5 flex items-center gap-1.5 overflow-hidden text-nowrap break-words overflow-ellipsis"
-	>
-		<span class="text-sm text-nowrap opacity-60">{reverse ? '↱' : '↳'}</span>
-		<BskyPost mini {selectedDid} client={selectedClient ?? viewClient} {...post} />
-	</span>
-{/snippet}
-
-{#snippet threadsView()}
-	{#each threads as thread (thread.rootUri)}
-		<div class="flex w-full shrink-0 {reverseChronological ? 'flex-col' : 'flex-col-reverse'}">
-			{#if thread.branchParentPost}
-				{@render replyPost(thread.branchParentPost)}
-			{/if}
-			{#each thread.posts as post, idx (post.data.uri)}
-				{@const mini =
-					!expandedThreads.has(thread.rootUri) &&
-					thread.posts.length > 4 &&
-					idx > 0 &&
-					idx < thread.posts.length - 2}
-				{#if !mini}
-					<div class="mb-1.5">
-						<BskyPost
-							{selectedDid}
-							client={selectedClient ?? viewClient}
-							onQuote={(post) => (quoting = post)}
-							onReply={(post) => (replying = post)}
-							{...post}
-						/>
-					</div>
-				{:else if mini}
-					{#if idx === 1}
-						{@render replyPost(post, !reverseChronological)}
-						<button
-							class="mx-1.5 mt-1.5 mb-2.5 flex items-center gap-1.5 text-[color-mix(in_srgb,_var(--nucleus-fg)_50%,_var(--nucleus-accent))]/70 transition-colors hover:text-(--nucleus-accent)"
-							onclick={() => expandedThreads.add(thread.rootUri)}
-						>
-							<div class="mr-1 h-px w-20 rounded border-y-2 border-dashed opacity-50"></div>
-							<Icon
-								class="shrink-0"
-								icon={reverseChronological
-									? 'heroicons:bars-arrow-up-solid'
-									: 'heroicons:bars-arrow-down-solid'}
-								width={32}
-							/><span class="shrink-0 pb-1">view full chain</span>
-							<div class="ml-1 h-px w-full rounded border-y-2 border-dashed opacity-50"></div>
-						</button>
-					{:else if idx === thread.posts.length - 3}
-						{@render replyPost(post)}
-					{/if}
-				{/if}
-			{/each}
-		</div>
-		<div
-			class="mx-8 mt-3 mb-4 h-px bg-gradient-to-r from-(--nucleus-accent)/30 to-(--nucleus-accent2)/30"
-		></div>
-	{/each}
 {/snippet}

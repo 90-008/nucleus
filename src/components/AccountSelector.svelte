@@ -1,17 +1,19 @@
 <script lang="ts">
-	import { generateColorForDid, type Account } from '$lib/accounts';
+	import { generateColorForDid, loggingIn, type Account } from '$lib/accounts';
 	import { AtpClient } from '$lib/at/client';
-	import type { Did, Handle } from '@atcute/lexicons';
+	import type { Handle } from '@atcute/lexicons';
 	import ProfilePicture from './ProfilePicture.svelte';
 	import PfpPlaceholder from './PfpPlaceholder.svelte';
+	import { flow } from '$lib/at/oauth';
+	import { isHandle, type AtprotoDid } from '@atcute/lexicons/syntax';
+	import Icon from '@iconify/svelte';
 
 	interface Props {
 		client: AtpClient;
 		accounts: Array<Account>;
-		selectedDid?: Did | null;
-		onAccountSelected: (did: Did) => void;
-		onLoginSucceed: (did: Did, handle: Handle, password: string) => void;
-		onLogout: (did: Did) => void;
+		selectedDid?: AtprotoDid | null;
+		onAccountSelected: (did: AtprotoDid) => void;
+		onLogout: (did: AtprotoDid) => void;
 	}
 
 	let {
@@ -19,14 +21,12 @@
 		accounts = [],
 		selectedDid = $bindable(null),
 		onAccountSelected,
-		onLoginSucceed,
 		onLogout
 	}: Props = $props();
 
 	let isDropdownOpen = $state(false);
 	let isLoginModalOpen = $state(false);
 	let loginHandle = $state('');
-	let loginPassword = $state('');
 	let loginError = $state('');
 	let isLoggingIn = $state(false);
 
@@ -35,7 +35,7 @@
 		isDropdownOpen = !isDropdownOpen;
 	};
 
-	const selectAccount = (did: Did) => {
+	const selectAccount = (did: AtprotoDid) => {
 		onAccountSelected(did);
 		isDropdownOpen = false;
 	};
@@ -44,46 +44,35 @@
 		isLoginModalOpen = true;
 		isDropdownOpen = false;
 		loginHandle = '';
-		loginPassword = '';
 		loginError = '';
 	};
 
 	const closeLoginModal = () => {
 		isLoginModalOpen = false;
 		loginHandle = '';
-		loginPassword = '';
 		loginError = '';
 	};
 
 	const handleLogin = async () => {
-		if (!loginHandle || !loginPassword) {
-			loginError = 'please enter both handle and password';
-			return;
-		}
-
-		isLoggingIn = true;
-		loginError = '';
-
 		try {
-			const client = new AtpClient();
-			const result = await client.login(loginHandle as Handle, loginPassword);
+			if (!loginHandle) throw 'please enter handle';
 
-			if (!result.ok) {
-				loginError = result.error;
-				isLoggingIn = false;
-				return;
-			}
+			isLoggingIn = true;
+			loginError = '';
 
-			if (!client.didDoc) {
-				loginError = 'failed to get did document';
-				isLoggingIn = false;
-				return;
-			}
+			let handle: Handle;
+			if (isHandle(loginHandle)) handle = loginHandle;
+			else throw 'handle is invalid';
 
-			onLoginSucceed(client.didDoc.did, loginHandle as Handle, loginPassword);
-			closeLoginModal();
+			let did = await client.resolveHandle(handle);
+			if (!did.ok) throw did.error;
+
+			loggingIn.set({ did: did.value, handle });
+			const result = await flow.start(handle);
+			if (!result.ok) throw result.error;
 		} catch (error) {
 			loginError = `login failed: ${error}`;
+			loggingIn.set(null);
 		} finally {
 			isLoggingIn = false;
 		}
@@ -141,7 +130,7 @@
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
 								onclick={() => onLogout(account.did)}
-								class="ml-auto hidden h-5 w-5 text-(--nucleus-accent) transition-all group-hover:[display:block] hover:scale-[1.2] hover:shadow-md"
+								class="ml-auto hidden h-5 w-5 text-(--nucleus-accent) transition-all group-hover:block hover:scale-[1.2] hover:shadow-md"
 								width="24"
 								height="24"
 								viewBox="0 0 20 20"
@@ -173,9 +162,7 @@
 						</button>
 					{/each}
 				</div>
-				<div
-					class="mx-2 h-px bg-gradient-to-r from-(--nucleus-accent) to-(--nucleus-accent2)"
-				></div>
+				<div class="mx-2 h-px bg-linear-to-r from-(--nucleus-accent) to-(--nucleus-accent2)"></div>
 			{/if}
 			<button
 				onclick={openLoginModal}
@@ -249,26 +236,12 @@
 					/>
 				</div>
 
-				<div>
-					<label for="password" class="mb-2 block text-sm font-semibold text-(--nucleus-fg)/80">
-						app password
-					</label>
-					<input
-						id="password"
-						type="password"
-						bind:value={loginPassword}
-						placeholder="xxxx-xxxx-xxxx-xxxx"
-						class="single-line-input border-(--nucleus-accent)/40 bg-(--nucleus-accent)/3"
-						disabled={isLoggingIn}
-					/>
-				</div>
-
 				{#if loginError}
-					<div
-						class="rounded-sm border-2 p-4"
-						style="background: #ef444422; border-color: #ef4444;"
-					>
-						<p class="text-sm font-medium" style="color: #fca5a5;">{loginError}</p>
+					<div class="error-disclaimer">
+						<p>
+							<Icon class="inline h-10 w-10" icon="heroicons:exclamation-triangle-16-solid" />
+							{loginError}
+						</p>
 					</div>
 				{/if}
 

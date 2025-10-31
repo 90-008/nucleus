@@ -4,7 +4,7 @@ import {
 	ComAtprotoRepoGetRecord,
 	ComAtprotoRepoListRecords
 } from '@atcute/atproto';
-import { Client as AtcuteClient, CredentialManager } from '@atcute/client';
+import { Client as AtcuteClient } from '@atcute/client';
 import { safeParse, type Handle, type InferOutput } from '@atcute/lexicons';
 import {
 	isDid,
@@ -37,6 +37,7 @@ import { WebSocket } from '@soffinal/websocket';
 import type { Notification } from './stardust';
 import { get } from 'svelte/store';
 import { settings } from '$lib/settings';
+import type { OAuthUserAgent } from '@atcute/oauth-browser-client';
 // import { JetstreamSubscription } from '@atcute/jetstream';
 
 const cacheTtl = 1000 * 60 * 60 * 24;
@@ -73,16 +74,13 @@ export class AtpClient {
 	public atcute: AtcuteClient | null = null;
 	public didDoc: MiniDoc | null = null;
 
-	async login(handle: Handle, password: string): Promise<Result<null, string>> {
-		const didDoc = await this.resolveDidDoc(handle);
+	async login(identifier: ActorIdentifier, agent: OAuthUserAgent): Promise<Result<null, string>> {
+		const didDoc = await this.resolveDidDoc(identifier);
 		if (!didDoc.ok) return err(didDoc.error);
 		this.didDoc = didDoc.value;
 
 		try {
-			const handler = new CredentialManager({ service: didDoc.value.pds });
-			const rpc = new AtcuteClient({ handler });
-			await handler.login({ identifier: didDoc.value.did, password });
-
+			const rpc = new AtcuteClient({ handler: agent });
 			this.atcute = rpc;
 		} catch (error) {
 			return err(`failed to login: ${error}`);

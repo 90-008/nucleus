@@ -1,11 +1,11 @@
-import type { Did, Handle } from '@atcute/lexicons';
+import type { Handle } from '@atcute/lexicons';
 import { writable } from 'svelte/store';
-import { hashColor } from './theme.svelte';
+import { hashColor } from './theme';
+import type { AtprotoDid } from '@atcute/lexicons/syntax';
 
 export type Account = {
-	did: Did;
-	handle: Handle;
-	password: string;
+	did: AtprotoDid;
+	handle: Handle | null;
 };
 
 let _accounts: Account[] = [];
@@ -22,6 +22,20 @@ export const accounts = (() => {
 
 export const addAccount = (account: Account): void => {
 	accounts.update((accounts) => [...accounts, account]);
+};
+
+export const loggingIn = {
+	set: (account: Account | null) => {
+		if (!account) {
+			localStorage.removeItem('loggingIn');
+		} else {
+			localStorage.setItem('loggingIn', JSON.stringify(account));
+		}
+	},
+	get: (): Account | null => {
+		const raw = localStorage.getItem('loggingIn');
+		return raw ? JSON.parse(raw) : null;
+	}
 };
 
 export const generateColorForDid = (did: string) => hashColor(did);

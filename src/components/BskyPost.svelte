@@ -11,22 +11,21 @@
 		type ResourceUri
 	} from '@atcute/lexicons';
 	import { expect, ok } from '$lib/result';
-	import { generateColorForDid } from '$lib/accounts';
+	import { accounts, generateColorForDid } from '$lib/accounts';
 	import ProfilePicture from './ProfilePicture.svelte';
 	import { isBlob } from '@atcute/lexicons/interfaces';
 	import { blob, img } from '$lib/cdn';
 	import BskyPost from './BskyPost.svelte';
 	import Icon from '@iconify/svelte';
 	import { type Backlink, type BacklinksSource } from '$lib/at/constellation';
-	import { postActions, type PostActions } from '$lib';
+	import { postActions, type PostActions } from '$lib/state.svelte';
 	import * as TID from '@atcute/tid';
 	import type { PostWithUri } from '$lib/at/fetch';
-	import type { Writable } from 'svelte/store';
 	import { onMount } from 'svelte';
+	import type { AtprotoDid } from '@atcute/lexicons/syntax';
 
 	interface Props {
 		client: AtpClient;
-		selectedDid: Writable<Did | null>;
 		// post
 		did: Did;
 		rkey: RecordKey;
@@ -40,7 +39,6 @@
 
 	const {
 		client,
-		selectedDid,
 		did,
 		rkey,
 		data,
@@ -49,6 +47,8 @@
 		onReply,
 		isOnPostComposer = false /* replyBacklinks */
 	}: Props = $props();
+
+	const selectedDid = $derived(client.didDoc?.did ?? null);
 
 	const aturi: CanonicalResourceUri = `at://${did}/app.bsky.feed.post/${rkey}`;
 	const color = generateColorForDid(did);
@@ -106,18 +106,18 @@
 		return 'now';
 	};
 
-	const findBacklink = async (source: BacklinksSource) => {
+	const findBacklink = $derived(async (toDid: AtprotoDid, source: BacklinksSource) => {
 		const backlinks = await client.getBacklinks(did, 'app.bsky.feed.post', rkey, source);
 		if (!backlinks.ok) return null;
-		return backlinks.value.records.find((r) => r.did === $selectedDid) ?? null;
-	};
+		return backlinks.value.records.find((r) => r.did === toDid) ?? null;
+	});
 
-	let findAllBacklinks = async (did: Did | null) => {
+	let findAllBacklinks = async (did: AtprotoDid | null) => {
 		if (!did) return;
 		if (postActions.has(`${did}:${aturi}`)) return;
 		const backlinks = await Promise.all([
-			findBacklink('app.bsky.feed.like:subject.uri'),
-			findBacklink('app.bsky.feed.repost:subject.uri')
+			findBacklink(did, 'app.bsky.feed.like:subject.uri'),
+			findBacklink(did, 'app.bsky.feed.repost:subject.uri')
 			// findBacklink('app.bsky.feed.post:reply.parent.uri'),
 			// findBacklink('app.bsky.feed.post:embed.record.uri')
 		]);
@@ -132,12 +132,14 @@
 	};
 	onMount(() => {
 		// findAllBacklinks($selectedDid);
-		selectedDid.subscribe(findAllBacklinks);
+		accounts.subscribe((accs) => {
+			accs.map((acc) => acc.did).forEach((did) => findAllBacklinks(did));
+		});
 	});
 
 	const toggleLink = async (link: Backlink | null, collection: Nsid): Promise<Backlink | null> => {
 		// console.log('toggleLink', selectedDid, link, collection);
-		if (!$selectedDid) return null;
+		if (!selectedDid) return null;
 		const _post = await post;
 		if (!_post.ok) return null;
 		if (!link) {
@@ -154,7 +156,7 @@
 				// todo: handle errors
 				client.atcute?.post('com.atproto.repo.createRecord', {
 					input: {
-						repo: $selectedDid,
+						repo: selectedDid,
 						collection,
 						record,
 						rkey
@@ -162,7 +164,7 @@
 				});
 				return {
 					collection,
-					did: $selectedDid,
+					did: selectedDid,
 					rkey
 				};
 			}
@@ -215,7 +217,7 @@
 			style="background: {color}18; border-color: {color}66;"
 		>
 			<div
-				class="inline-block h-6 w-6 animate-spin rounded-full border-3 border-(--nucleus-accent) [border-left-color:transparent]"
+				class="inline-block h-6 w-6 animate-spin rounded-full border-3 border-(--nucleus-accent) border-l-transparent"
 			></div>
 			<p class="mt-3 text-sm font-medium opacity-60">loading post...</p>
 		</div>
@@ -253,7 +255,7 @@
 						>{getRelativeTime(new Date(record.createdAt))}</span
 					>
 				</div>
-				<p class="leading-relaxed text-wrap break-words">
+				<p class="leading-relaxed text-wrap wrap-break-word">
 					{record.text}
 					{#if isOnPostComposer}
 						{@render embedBadge(record)}
@@ -267,7 +269,6 @@
 							<!-- reject recursive quotes -->
 							{#if !(did === parsedUri.repo && rkey === parsedUri.rkey)}
 								<BskyPost
-									{selectedDid}
 									{client}
 									did={parsedUri.repo}
 									rkey={parsedUri.rkey}
@@ -312,7 +313,7 @@
 					</div>
 				{/if}
 				{#if !isOnPostComposer}
-					{@const backlinks = postActions.get(`${$selectedDid!}:${post.value.uri}`)}
+					{@const backlinks = postActions.get(`${selectedDid!}:${post.value.uri}`)}
 					{@render postControls(post.value, backlinks)}
 				{/if}
 			</div>
@@ -353,7 +354,7 @@
 			'heroicons:arrow-path-rounded-square-20-solid',
 			async (link) => {
 				if (link === undefined) return;
-				postActions.set(`${$selectedDid!}:${aturi}`, {
+				postActions.set(`${selectedDid!}:${aturi}`, {
 					...backlinks!,
 					repost: await toggleLink(link, 'app.bsky.feed.repost')
 				});
@@ -368,7 +369,7 @@
 			'heroicons:star',
 			async (link) => {
 				if (link === undefined) return;
-				postActions.set(`${$selectedDid!}:${aturi}`, {
+				postActions.set(`${selectedDid!}:${aturi}`, {
 					...backlinks!,
 					like: await toggleLink(link, 'app.bsky.feed.like')
 				});

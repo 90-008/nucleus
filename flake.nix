@@ -1,6 +1,6 @@
 {
   inputs.parts.url = "github:hercules-ci/flake-parts";
-  inputs.nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+  inputs.nixpkgs.url = "github:nixos/nixpkgs";
   inputs.naked-shell.url = "github:90-008/mk-naked-shell";
 
   outputs = inp:
@@ -17,7 +17,7 @@
         devShells.default = config.mk-naked-shell.lib.mkNakedShell {
           name = "nucleus-devshell";
           packages = with pkgs; [
-            nodejs-slim_latest deno
+            nodejs-slim_latest deno biome
           ];
           shellHook = ''
             export PATH="$PATH:$PWD/node_modules/.bin"

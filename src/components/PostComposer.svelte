@@ -5,13 +5,11 @@
 	import { generateColorForDid } from '$lib/accounts';
 	import type { PostWithUri } from '$lib/at/fetch';
 	import BskyPost from './BskyPost.svelte';
-	import { parseCanonicalResourceUri, type Did } from '@atcute/lexicons';
+	import { parseCanonicalResourceUri } from '@atcute/lexicons';
 	import type { ComAtprotoRepoStrongRef } from '@atcute/atproto';
-	import type { Writable } from 'svelte/store';
 
 	interface Props {
 		client: AtpClient;
-		selectedDid: Writable<Did | null>;
 		onPostSent: (post: PostWithUri) => void;
 		quoting?: PostWithUri;
 		replying?: PostWithUri;
@@ -19,7 +17,6 @@
 
 	let {
 		client,
-		selectedDid,
 		onPostSent,
 		quoting = $bindable(undefined),
 		replying = $bindable(undefined)
@@ -147,17 +144,19 @@
 				</div>
 			{:else}
 				<div class="flex flex-col gap-2">
+					{#snippet renderPost(post: PostWithUri)}
+						{@const parsedUri = expect(parseCanonicalResourceUri(post.uri))}
+						<BskyPost
+							{client}
+							did={parsedUri.repo}
+							rkey={parsedUri.rkey}
+							data={post}
+							isOnPostComposer={true}
+						/>
+					{/snippet}
 					{#if isFocused}
 						{#if replying}
-							{@const parsedUri = expect(parseCanonicalResourceUri(replying.uri))}
-							<BskyPost
-								{client}
-								{selectedDid}
-								did={parsedUri.repo}
-								rkey={parsedUri.rkey}
-								data={replying}
-								isOnPostComposer={true}
-							/>
+							{@render renderPost(replying)}
 						{/if}
 						<textarea
 							bind:this={textareaEl}
@@ -170,19 +169,11 @@
 							}}
 							placeholder="what's on your mind?"
 							rows="4"
-							class="[field-sizing:content] single-line-input resize-none bg-(--nucleus-bg)/40 focus:scale-100"
+							class="field-sizing-content single-line-input resize-none bg-(--nucleus-bg)/40 focus:scale-100"
 							style="border-color: color-mix(in srgb, {color} 27%, transparent);"
 						></textarea>
 						{#if quoting}
-							{@const parsedUri = expect(parseCanonicalResourceUri(quoting.uri))}
-							<BskyPost
-								{client}
-								{selectedDid}
-								did={parsedUri.repo}
-								rkey={parsedUri.rkey}
-								data={quoting}
-								isOnPostComposer={true}
-							/>
+							{@render renderPost(quoting)}
 						{/if}
 						<div class="flex items-center gap-2">
 							<div class="grow"></div>
