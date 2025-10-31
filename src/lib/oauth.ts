@@ -15,7 +15,7 @@ export const oauthMetadata = {
 	dpop_bound_access_tokens: true
 };
 
-export const redirectUri = domain;
+export const redirectUri = `${domain}/`;
 export const clientId = dev
 	? `http://localhost` +
 		`?redirect_uri=${encodeURIComponent(redirectUri)}` +

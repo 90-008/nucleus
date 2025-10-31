@@ -17,7 +17,7 @@
         devShells.default = config.mk-naked-shell.lib.mkNakedShell {
           name = "nucleus-devshell";
           packages = with pkgs; [
-            nodejs-slim_latest deno biome
+            nodejs-slim_latest deno
           ];
           shellHook = ''
             export PATH="$PATH:$PWD/node_modules/.bin"
