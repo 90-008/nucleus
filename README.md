@@ -2,6 +2,8 @@
 
 a WIP replies timeline only (eg. it only shows replies to your posts and your own posts) appview-less (it does not use the bluesky appview, but rather uses [microcosm](https://www.microcosm.blue/) services) bluesky client. it is implemented in SvelteKit and uses [atcute](https://tangled.org/@mary.my.id/atcute).
 
+see it at [nucleus.ptr.pet](https://nucleus.ptr.pet).
+
 ![screenshot](./resources/screenshot.png)
 
 ### todos
