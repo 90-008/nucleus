@@ -6,7 +6,7 @@ a WIP replies timeline only (eg. it only shows replies to your posts and your ow
 
 ### todos
 
-- [ ] properly implement auth (current state is just for deving) (we want oauth only)
+- [x] properly implement auth (oauth)
 - [ ] implement popouts for showing full chains instead of expanding in the timeline
 - [ ] implement moderation (mutes, muted words etc., use blocks from `app.bsky.graph.block`)
 - [ ] profile view popout
