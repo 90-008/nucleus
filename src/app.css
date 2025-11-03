@@ -71,3 +71,17 @@ button {
 	--picker-height: 8rem;
 	--picker-width: 8rem;
 }
+
+.animate-pulse-highlight {
+	animation: pulse-highlight 0.6s ease-in-out 3;
+}
+
+@keyframes pulse-highlight {
+	0%,
+	100% {
+		box-shadow: 0 0 0 0 var(--nucleus-selected-post);
+	}
+	50% {
+		box-shadow: 0 0 20px 5px var(--nucleus-selected-post);
+	}
+}

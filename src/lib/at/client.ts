@@ -12,7 +12,6 @@ import {
 	parseResourceUri,
 	type ActorIdentifier,
 	type AtprotoDid,
-	type CanonicalResourceUri,
 	type Cid,
 	type Did,
 	type Nsid,
@@ -199,9 +198,7 @@ export class AtpClient {
 
 		const mapped = map(res, (data) => data.did as AtprotoDid);
 
-		if (mapped.ok) {
-			handleCache.set(identifier, mapped.value);
-		}
+		if (mapped.ok) handleCache.set(identifier, mapped.value);
 
 		return mapped;
 	}
@@ -218,15 +215,13 @@ export class AtpClient {
 			cachedSignal.then((d): Result<MiniDoc, string> => ok(d))
 		]);
 
-		if (result.ok) {
-			didDocCache.set(handleOrDid, result.value);
-		}
+		if (result.ok) didDocCache.set(handleOrDid, result.value);
 
 		return result;
 	}
 
 	async getBacklinksUri(
-		uri: CanonicalResourceUri,
+		uri: ResourceUri,
 		source: BacklinksSource
 	): Promise<Result<Backlinks, string>> {
 		const parsedResourceUri = expect(parseCanonicalResourceUri(uri));
@@ -245,15 +240,19 @@ export class AtpClient {
 		source: BacklinksSource
 	): Promise<Result<Backlinks, string>> {
 		const did = await this.resolveHandle(repo);
-		if (!did.ok) {
-			return err(`failed to resolve handle: ${did.error}`);
-		}
+		if (!did.ok) return err(`cant resolve handle: ${did.error}`);
 
-		return await fetchMicrocosm(constellationUrl, BacklinksQuery, {
+		const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
+		const query = fetchMicrocosm(constellationUrl, BacklinksQuery, {
 			subject: `at://${did.value}/${collection}/${rkey}`,
 			source,
 			limit: 100
 		});
+
+		const results = await Promise.race([query, timeout]);
+		if (!results) return err('cant fetch backlinks: timeout');
+
+		return results;
 	}
 
 	streamNotifications(subjects: Did[], ...sources: BacklinksSource[]): NotificationsStream {

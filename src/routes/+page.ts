@@ -1,7 +1,7 @@
 import { replaceState } from '$app/navigation';
 import { addAccount, loggingIn } from '$lib/accounts';
 import { AtpClient } from '$lib/at/client';
-import { flow } from '$lib/at/oauth';
+import { flow, sessions } from '$lib/at/oauth';
 import { err, ok, type Result } from '$lib/result';
 import type { PageLoad } from './$types';
 
@@ -29,19 +29,16 @@ const handleLogin = async (): Promise<Result<AtpClient | null, string>> => {
 	}
 
 	loggingIn.set(null);
+	await sessions.remove(account.did);
 	const agent = await flow.finalize(currentUrl);
 	if (!agent.ok || !agent.value) {
-		if (!agent.ok) {
-			return err(agent.error);
-		}
+		if (!agent.ok) return err(agent.error);
 		return err('no session was logged into?!');
 	}
 
 	const client = new AtpClient();
 	const result = await client.login(account.did, agent.value);
-	if (!result.ok) {
-		return err(result.error);
-	}
+	if (!result.ok) return err(result.error);
 
 	addAccount(account);
 	return ok(client);

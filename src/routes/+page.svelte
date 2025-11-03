@@ -8,7 +8,7 @@
 	import { type Did, parseCanonicalResourceUri, type ResourceUri } from '@atcute/lexicons';
 	import { onMount } from 'svelte';
 	import { fetchPostsWithBacklinks, hydratePosts, type PostWithUri } from '$lib/at/fetch';
-	import { expect, ok } from '$lib/result';
+	import { expect } from '$lib/result';
 	import { AppBskyFeedPost } from '@atcute/bluesky';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { InfiniteLoader, LoaderState } from 'svelte-infinite';
@@ -98,8 +98,7 @@
 		if (cursor && cursor.end) return;
 
 		const accPosts = await fetchPostsWithBacklinks(client, account.did, cursor?.value, 6);
-		if (!accPosts.ok)
-			throw `failed to fetch posts for account ${account.handle}: ${accPosts.error}`;
+		if (!accPosts.ok) throw `cant fetch posts @${account.handle}: ${accPosts.error}`;
 
 		// if the cursor is undefined, we've reached the end of the timeline
 		if (!accPosts.value.cursor) {
@@ -108,7 +107,10 @@
 		}
 
 		cursors.set(account.did, { value: accPosts.value.cursor, end: false });
-		addPosts(account.did, await hydratePosts(client, accPosts.value.posts));
+		const hydrated = await hydratePosts(client, account.did, accPosts.value.posts);
+		if (!hydrated.ok) throw `cant hydrate posts @${account.handle}: ${hydrated.error}`;
+
+		addPosts(account.did, hydrated.value);
 	};
 
 	const fetchTimelines = (newAccounts: Account[]) => Promise.all(newAccounts.map(fetchTimeline));
@@ -125,12 +127,12 @@
 			if (!subjectPost.ok) return;
 
 			const parsedSourceUri = expect(parseCanonicalResourceUri(event.data.link.source_record));
-			const hydrated = await hydratePosts(viewClient, [
+			const hydrated = await hydratePosts(viewClient, parsedSubjectUri.repo as AtprotoDid, [
 				{
 					record: subjectPost.value.record,
 					uri: event.data.link.subject,
 					cid: subjectPost.value.cid,
-					replies: ok({
+					replies: {
 						cursor: null,
 						total: 1,
 						records: [
@@ -140,12 +142,17 @@
 								rkey: parsedSourceUri.rkey
 							}
 						]
-					})
+					}
 				}
 			]);
 
+			if (!hydrated.ok) {
+				errors.push(`cant hydrate posts @${parsedSubjectUri.repo}: ${hydrated.error}`);
+				return;
+			}
+
 			// console.log(hydrated);
-			addPosts(parsedSubjectUri.repo, hydrated);
+			addPosts(parsedSubjectUri.repo, hydrated.value);
 		}
 	};
 
@@ -181,7 +188,7 @@
 			loaderState.error();
 		} finally {
 			loading = false;
-			if (cursors.values().every((cursor) => cursor.end)) loaderState.complete();
+			// if (cursors.values().every((cursor) => cursor.end)) loaderState.complete();
 		}
 	};
 
@@ -230,7 +237,7 @@
 </script>
 
 <div class="mx-auto max-w-2xl">
-	<!-- Sticky header -->
+	<!-- header -->
 	<div class="sticky top-0 z-10 bg-(--nucleus-bg) pb-2">
 		<div class="mb-6 flex items-center justify-between">
 			<div>
@@ -250,7 +257,7 @@
 			</button>
 		</div>
 
-		<!-- Composer and error disclaimer (above thread list, not scrollable) -->
+		<!-- composer and error disclaimer (above thread list, not scrollable) -->
 		<div class="space-y-4">
 			<div class="flex min-h-16 items-stretch gap-2">
 				<AccountSelector
@@ -308,7 +315,7 @@
 		</div>
 	</div>
 
-	<!-- Thread list (page scrolls as a whole) -->
+	<!-- thread list (page scrolls as a whole) -->
 	<div class="mt-4 [scrollbar-color:var(--nucleus-accent)_transparent]" bind:this={scrollContainer}>
 		{#if $accounts.length > 0}
 			{@render renderThreads()}
@@ -407,10 +414,16 @@
 			</div>
 		{/snippet}
 		{#snippet error()}
-			<div class="flex justify-center py-4">
+			<div class="flex flex-col gap-4 py-4">
 				<p class="text-xl opacity-80">
-					<span class="text-4xl">:(</span> <br /> an error occurred while loading posts: {loadError}
+					<span class="text-4xl">x_x</span> <br />
+					{loadError}
 				</p>
+				<div>
+					<button class="flex action-button items-center gap-2" onclick={loadMore}>
+						<Icon class="h-6 w-6" icon="heroicons:arrow-path-16-solid" /> try again
+					</button>
+				</div>
 			</div>
 		{/snippet}
 	</InfiniteLoader>

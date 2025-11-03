@@ -18,11 +18,12 @@
 	import BskyPost from './BskyPost.svelte';
 	import Icon from '@iconify/svelte';
 	import { type Backlink, type BacklinksSource } from '$lib/at/constellation';
-	import { postActions, type PostActions } from '$lib/state.svelte';
+	import { postActions, pulsingPostId, type PostActions } from '$lib/state.svelte';
 	import * as TID from '@atcute/tid';
 	import type { PostWithUri } from '$lib/at/fetch';
 	import { onMount } from 'svelte';
 	import type { AtprotoDid } from '@atcute/lexicons/syntax';
+	import { derived } from 'svelte/store';
 
 	interface Props {
 		client: AtpClient;
@@ -30,7 +31,7 @@
 		did: Did;
 		rkey: RecordKey;
 		// replyBacklinks?: Backlinks;
-		depth?: number;
+		quoteDepth?: number;
 		data?: PostWithUri;
 		mini?: boolean;
 		isOnPostComposer?: boolean;
@@ -42,7 +43,7 @@
 		client,
 		did,
 		rkey,
-		depth = 0,
+		quoteDepth = 0,
 		data,
 		mini,
 		onQuote,
@@ -71,6 +72,30 @@
 	// 			rkey,
 	// 			'app.bsky.feed.post:reply.parent.uri'
 	// 		);
+
+	const postId = `timeline-post-${aturi}-${quoteDepth}`;
+	const isPulsing = derived(pulsingPostId, (pulsingPostId) => pulsingPostId === postId);
+
+	const scrollToAndPulse = (targetUri: ResourceUri) => {
+		const targetId = `timeline-post-${targetUri}-0`;
+		console.log(`Scrolling to ${targetId}`);
+		const element = document.getElementById(targetId);
+		if (!element) return;
+
+		// Smooth scroll to the target
+		element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+		// Trigger pulse after scroll completes
+		setTimeout(() => {
+			document.documentElement.style.setProperty(
+				'--nucleus-selected-post',
+				generateColorForDid(expect(parseCanonicalResourceUri(targetUri)).repo)
+			);
+			pulsingPostId.set(targetId);
+			// Clear pulse after animation
+			setTimeout(() => pulsingPostId.set(null), 2000);
+		}, 500);
+	};
 
 	const getEmbedText = (embedType: string) => {
 		switch (embedType) {
@@ -205,8 +230,15 @@
 		{:then post}
 			{#if post.ok}
 				{@const record = post.value.record}
-				<span style="color: {color};">@{handle}</span>: {@render embedBadge(record)}
-				<span title={record.text}>{record.text}</span>
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					onclick={() => scrollToAndPulse(post.value.uri)}
+					class="select-none hover:cursor-pointer hover:underline"
+				>
+					<span style="color: {color};">@{handle}</span>: {@render embedBadge(record)}
+					<span title={record.text}>{record.text}</span>
+				</div>
 			{:else}
 				{post.error}
 			{/if}
@@ -227,7 +259,10 @@
 		{#if post.ok}
 			{@const record = post.value.record}
 			<div
-				class="rounded-sm border-2 p-2 shadow-lg backdrop-blur-sm transition-all"
+				id="timeline-post-{post.value.uri}-{quoteDepth}"
+				class="rounded-sm border-2 p-2 shadow-lg backdrop-blur-sm transition-all {$isPulsing
+					? 'animate-pulse-highlight'
+					: ''}"
 				style="background: {color}{isOnPostComposer
 					? '36'
 					: '18'}; border-color: {color}{isOnPostComposer ? '99' : '66'};"
@@ -267,13 +302,13 @@
 					{@const embed = record.embed}
 					<div class="mt-2">
 						{#snippet embedPost(uri: ResourceUri)}
-							{#if depth < 2}
+							{#if quoteDepth < 2}
 								{@const parsedUri = expect(parseCanonicalResourceUri(uri))}
 								<!-- reject recursive quotes -->
 								{#if !(did === parsedUri.repo && rkey === parsedUri.rkey)}
 									<BskyPost
 										{client}
-										depth={depth + 1}
+										quoteDepth={quoteDepth + 1}
 										did={parsedUri.repo}
 										rkey={parsedUri.rkey}
 										{isOnPostComposer}
@@ -325,8 +360,8 @@
 				{/if}
 			</div>
 		{:else}
-			<div class="rounded-xl border-2 p-4" style="background: #ef444422; border-color: #ef4444;">
-				<p class="text-sm font-medium" style="color: #fca5a5;">error: {post.error}</p>
+			<div class="error-disclaimer">
+				<p class="text-sm font-medium">error: {post.error}</p>
 			</div>
 		{/if}
 	{/await}

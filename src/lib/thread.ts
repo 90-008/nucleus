@@ -5,6 +5,7 @@ import type { PostWithUri } from './at/fetch';
 
 export type ThreadPost = {
 	data: PostWithUri;
+	account: Did;
 	did: Did;
 	rkey: string;
 	parentUri: ResourceUri | null;
@@ -23,7 +24,7 @@ export const buildThreads = (timelines: Map<Did, Map<ResourceUri, PostWithUri>>)
 	const threadMap = new Map<ResourceUri, ThreadPost[]>();
 
 	// group posts by root uri into "thread" chains
-	for (const [, timeline] of timelines) {
+	for (const [account, timeline] of timelines) {
 		for (const [uri, data] of timeline) {
 			const parsedUri = expect(parseCanonicalResourceUri(uri));
 			const rootUri = (data.record.reply?.root.uri as ResourceUri) || uri;
@@ -31,6 +32,7 @@ export const buildThreads = (timelines: Map<Did, Map<ResourceUri, PostWithUri>>)
 
 			const post: ThreadPost = {
 				data,
+				account,
 				did: parsedUri.repo,
 				rkey: parsedUri.rkey,
 				parentUri,

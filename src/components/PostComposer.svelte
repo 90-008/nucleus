@@ -107,6 +107,62 @@
 	});
 </script>
 
+{#snippet renderPost(post: PostWithUri)}
+	{@const parsedUri = expect(parseCanonicalResourceUri(post.uri))}
+	<BskyPost
+		{client}
+		did={parsedUri.repo}
+		rkey={parsedUri.rkey}
+		data={post}
+		isOnPostComposer={true}
+	/>
+{/snippet}
+
+{#snippet composer()}
+	{#if replying}
+		{@render renderPost(replying)}
+	{/if}
+	<textarea
+		bind:this={textareaEl}
+		bind:value={postText}
+		onfocus={() => (isFocused = true)}
+		onblur={unfocus}
+		onkeydown={(event) => {
+			if (event.key === 'Escape') unfocus();
+			if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) doPost();
+		}}
+		placeholder="what's on your mind?"
+		rows="4"
+		class="field-sizing-content single-line-input resize-none bg-(--nucleus-bg)/40 focus:scale-100"
+		style="border-color: color-mix(in srgb, {color} 27%, transparent);"
+	></textarea>
+	{#if quoting}
+		{@render renderPost(quoting)}
+	{/if}
+	<div class="flex items-center gap-2">
+		<div class="grow"></div>
+		<span
+			class="text-sm font-medium"
+			style="color: color-mix(in srgb, {postText.length > 300
+				? '#ef4444'
+				: 'var(--nucleus-fg)'} 53%, transparent);"
+		>
+			{postText.length} / 300
+		</span>
+		<button
+			onmousedown={(e) => {
+				e.preventDefault();
+				doPost();
+			}}
+			disabled={postText.length === 0 || postText.length > 300}
+			class="action-button border-none px-5 text-(--nucleus-fg)/94 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+			style="background: color-mix(in srgb, {color} 87%, transparent);"
+		>
+			post
+		</button>
+	</div>
+{/snippet}
+
 <div class="relative min-h-16">
 	<!-- Spacer to maintain layout when focused -->
 	{#if isFocused}
@@ -120,15 +176,9 @@
 				e.preventDefault();
 			}
 		}}
-		class="flex max-w-full rounded-sm border-2 shadow-lg transition-all duration-300"
-		class:min-h-16={!isFocused}
-		class:items-center={!isFocused}
-		class:shadow-2xl={isFocused}
-		class:absolute={isFocused}
-		class:top-0={isFocused}
-		class:left-0={isFocused}
-		class:right-0={isFocused}
-		class:z-50={isFocused}
+		class="flex max-w-full rounded-sm border-2 shadow-lg transition-all duration-300
+			{!isFocused ? 'min-h-16 items-center' : ''}
+			{isFocused ? 'absolute top-0 right-0 left-0 z-50 shadow-2xl' : ''}"
 		style="background: {isFocused
 			? `color-mix(in srgb, var(--nucleus-bg) 80%, ${color} 20%)`
 			: `color-mix(in srgb, ${color} 9%, transparent)`};
@@ -144,59 +194,8 @@
 				</div>
 			{:else}
 				<div class="flex flex-col gap-2">
-					{#snippet renderPost(post: PostWithUri)}
-						{@const parsedUri = expect(parseCanonicalResourceUri(post.uri))}
-						<BskyPost
-							{client}
-							did={parsedUri.repo}
-							rkey={parsedUri.rkey}
-							data={post}
-							isOnPostComposer={true}
-						/>
-					{/snippet}
 					{#if isFocused}
-						{#if replying}
-							{@render renderPost(replying)}
-						{/if}
-						<textarea
-							bind:this={textareaEl}
-							bind:value={postText}
-							onfocus={() => (isFocused = true)}
-							onblur={unfocus}
-							onkeydown={(event) => {
-								if (event.key === 'Escape') unfocus();
-								if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) doPost();
-							}}
-							placeholder="what's on your mind?"
-							rows="4"
-							class="field-sizing-content single-line-input resize-none bg-(--nucleus-bg)/40 focus:scale-100"
-							style="border-color: color-mix(in srgb, {color} 27%, transparent);"
-						></textarea>
-						{#if quoting}
-							{@render renderPost(quoting)}
-						{/if}
-						<div class="flex items-center gap-2">
-							<div class="grow"></div>
-							<span
-								class="text-sm font-medium"
-								style="color: color-mix(in srgb, {postText.length > 300
-									? '#ef4444'
-									: 'var(--nucleus-fg)'} 53%, transparent);"
-							>
-								{postText.length} / 300
-							</span>
-							<button
-								onmousedown={(e) => {
-									e.preventDefault();
-									doPost();
-								}}
-								disabled={postText.length === 0 || postText.length > 300}
-								class="action-button border-none px-5 text-(--nucleus-fg)/94 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
-								style="background: color-mix(in srgb, {color} 87%, transparent);"
-							>
-								post
-							</button>
-						</div>
+						{@render composer()}
 					{:else}
 						<input
 							bind:value={postText}

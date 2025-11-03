@@ -15,3 +15,5 @@ export type PostActions = {
 	// quote: Backlink | null;
 };
 export const postActions = new SvelteMap<`${Did}:${ResourceUri}`, PostActions>();
+
+export const pulsingPostId = writable<string | null>(null);
