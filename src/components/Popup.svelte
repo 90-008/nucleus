@@ -30,6 +30,25 @@
 	const handleKeydown = (event: KeyboardEvent) => {
 		if (event.key === 'Escape') onClose();
 	};
+
+	let popupElement: HTMLDivElement | undefined = $state();
+
+	$effect(() => {
+		if (!isOpen) return;
+
+		const preventDefault = (e: Event) => {
+			if (popupElement && popupElement.contains(e.target as Node)) return;
+			e.preventDefault();
+		};
+
+		document.addEventListener('wheel', preventDefault, { passive: false });
+		document.addEventListener('touchmove', preventDefault, { passive: false });
+
+		return () => {
+			document.removeEventListener('wheel', preventDefault);
+			document.removeEventListener('touchmove', preventDefault);
+		};
+	});
 </script>
 
 {#if isOpen}
@@ -43,6 +62,7 @@
 		<!-- svelte-ignore a11y_interactive_supports_focus -->
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div
+			bind:this={popupElement}
 			class="flex {height === 'auto'
 				? ''
 				: 'h-[' +
