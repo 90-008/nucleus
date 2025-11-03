@@ -22,6 +22,9 @@
 
 	const { data: loadData }: PageProps = $props();
 
+	let errors = $state(loadData.client.ok ? [] : [loadData.client.error]);
+	let errorsOpen = $state(false);
+
 	let selectedDid = $state((localStorage.getItem('selectedDid') ?? null) as AtprotoDid | null);
 	$effect(() => {
 		if (selectedDid) {
@@ -38,7 +41,11 @@
 		if (clients.has(account.did)) return;
 		const client = new AtpClient();
 		const result = await client.login(account.did, await sessions.get(account.did));
-		if (result.ok) clients.set(account.did, client);
+		if (!result.ok) {
+			errors.push(`failed to login into @${account.handle ?? account.did}: ${result.error}`);
+			return;
+		}
+		clients.set(account.did, client);
 	};
 
 	const handleAccountSelected = async (did: AtprotoDid) => {
@@ -272,12 +279,25 @@
 				{/if}
 			</div>
 
-			{#if !loadData.client.ok}
-				<div class="error-disclaimer">
-					<p>
-						<Icon class="inline h-12 w-12" icon="heroicons:exclamation-triangle-16-solid" />
-						{loadData.client.error}
-					</p>
+			{#if errors.length > 0}
+				<div class="relative error-disclaimer">
+					<div class="flex items-center gap-2 text-red-500">
+						<Icon class="inline h-10 w-10" icon="heroicons:exclamation-triangle-16-solid" />
+						there are ({errors.length}) errors
+						<div class="grow"></div>
+						<button onclick={() => (errorsOpen = !errorsOpen)} class="action-button p-1 px-1.5"
+							>{errorsOpen ? 'hide details' : 'see details'}</button
+						>
+					</div>
+					{#if errorsOpen}
+						<div
+							class="absolute top-full right-0 left-0 z-50 mt-2 flex animate-fade-in-scale-fast flex-col gap-1 error-disclaimer shadow-lg transition-all"
+						>
+							{#each errors as error, idx (idx)}
+								<p>• {error}</p>
+							{/each}
+						</div>
+					{/if}
 				</div>
 			{/if}
 

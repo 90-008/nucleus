@@ -75,6 +75,10 @@ export class AtpClient {
 	public didDoc: MiniDoc | null = null;
 
 	async login(identifier: ActorIdentifier, agent: OAuthUserAgent): Promise<Result<null, string>> {
+		if ((agent.session.token.expires_at ?? 0) < Date.now()) {
+			return err('token expired, relogin');
+		}
+
 		const didDoc = await this.resolveDidDoc(identifier);
 		if (!didDoc.ok) return err(didDoc.error);
 		this.didDoc = didDoc.value;

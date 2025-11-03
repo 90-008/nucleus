@@ -31,7 +31,8 @@
 }
 
 @utility error-disclaimer {
-	@apply rounded-sm border-2 border-red-500 bg-red-500/8 p-2;
+	@apply rounded-sm border-2 border-red-500 p-2;
+	background-color: color-mix(in srgb, var(--color-red-500) 15%, var(--nucleus-bg));
 	p {
 		@apply text-base text-wrap wrap-break-word text-red-500;
 	}
