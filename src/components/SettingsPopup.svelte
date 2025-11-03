@@ -145,7 +145,7 @@
 
 {#if isOpen}
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-(--nucleus-bg)/80 p-8 backdrop-blur-sm"
+		class="fixed inset-0 z-50 flex items-center justify-center bg-(--nucleus-bg)/80 p-12 backdrop-blur-sm"
 		onclick={handleClose}
 		onkeydown={handleKeydown}
 		role="button"
@@ -154,7 +154,7 @@
 		<!-- svelte-ignore a11y_interactive_supports_focus -->
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div
-			class="flex h-[600px] w-full max-w-2xl animate-fade-in-scale flex-col rounded-sm border-2 border-(--nucleus-accent) bg-(--nucleus-bg) shadow-2xl transition-all"
+			class="flex h-[60vh] w-[42vmax] max-w-2xl shrink animate-fade-in-scale flex-col rounded-sm border-2 border-(--nucleus-accent) bg-(--nucleus-bg) shadow-2xl transition-all"
 			onclick={(e) => e.stopPropagation()}
 			role="dialog"
 		>
