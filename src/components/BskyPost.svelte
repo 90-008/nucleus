@@ -30,6 +30,7 @@
 		did: Did;
 		rkey: RecordKey;
 		// replyBacklinks?: Backlinks;
+		depth?: number;
 		data?: PostWithUri;
 		mini?: boolean;
 		isOnPostComposer?: boolean;
@@ -41,6 +42,7 @@
 		client,
 		did,
 		rkey,
+		depth = 0,
 		data,
 		mini,
 		onQuote,
@@ -265,19 +267,24 @@
 					{@const embed = record.embed}
 					<div class="mt-2">
 						{#snippet embedPost(uri: ResourceUri)}
-							{@const parsedUri = expect(parseCanonicalResourceUri(uri))}
-							<!-- reject recursive quotes -->
-							{#if !(did === parsedUri.repo && rkey === parsedUri.rkey)}
-								<BskyPost
-									{client}
-									did={parsedUri.repo}
-									rkey={parsedUri.rkey}
-									{isOnPostComposer}
-									{onQuote}
-									{onReply}
-								/>
+							{#if depth < 2}
+								{@const parsedUri = expect(parseCanonicalResourceUri(uri))}
+								<!-- reject recursive quotes -->
+								{#if !(did === parsedUri.repo && rkey === parsedUri.rkey)}
+									<BskyPost
+										{client}
+										depth={depth + 1}
+										did={parsedUri.repo}
+										rkey={parsedUri.rkey}
+										{isOnPostComposer}
+										{onQuote}
+										{onReply}
+									/>
+								{:else}
+									<span>you think you're funny with that recursive quote but i'm onto you</span>
+								{/if}
 							{:else}
-								<span>you think you're funny with that recursive quote but i'm onto you</span>
+								{@render embedBadge(record)}
 							{/if}
 						{/snippet}
 						{#if embed.$type === 'app.bsky.embed.images'}
