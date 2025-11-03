@@ -180,16 +180,20 @@
 		if (loading || $accounts.length === 0) return;
 
 		loading = true;
+		loaderState.status = 'LOADING';
+
 		try {
 			await fetchTimelines($accounts);
 			loaderState.loaded();
 		} catch (error) {
 			loadError = `${error}`;
 			loaderState.error();
-		} finally {
 			loading = false;
-			// if (cursors.values().every((cursor) => cursor.end)) loaderState.complete();
+			return;
 		}
+
+		loading = false;
+		if (cursors.values().every((cursor) => cursor.end)) loaderState.complete();
 	};
 
 	onMount(async () => {
