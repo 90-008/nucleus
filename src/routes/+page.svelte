@@ -231,7 +231,7 @@
 
 <div class="mx-auto max-w-2xl">
 	<!-- Sticky header -->
-	<div class="sticky top-0 z-10 bg-(--nucleus-bg) p-4">
+	<div class="sticky top-0 z-10 bg-(--nucleus-bg) pb-2">
 		<div class="mb-6 flex items-center justify-between">
 			<div>
 				<h1 class="text-3xl font-bold tracking-tight">nucleus</h1>
@@ -291,7 +291,7 @@
 					</div>
 					{#if errorsOpen}
 						<div
-							class="absolute top-full right-0 left-0 z-50 mt-2 flex animate-fade-in-scale-fast flex-col gap-1 error-disclaimer shadow-lg transition-all"
+							class="absolute top-full right-0 left-0 z-10 mt-2 flex animate-fade-in-scale-fast flex-col gap-1 error-disclaimer shadow-lg transition-all"
 						>
 							{#each errors as error, idx (idx)}
 								<p>• {error}</p>

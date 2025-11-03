@@ -33,6 +33,7 @@
 
 	let popupElement: HTMLDivElement | undefined = $state();
 
+	// this sucks probably idk
 	$effect(() => {
 		if (!isOpen) return;
 

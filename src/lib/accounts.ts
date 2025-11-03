@@ -21,7 +21,7 @@ export const accounts = (() => {
 })();
 
 export const addAccount = (account: Account): void => {
-	accounts.update((accounts) => [...accounts, account]);
+	accounts.update((accounts) => [...accounts.filter((a) => a.did !== account.did), account]);
 };
 
 export const loggingIn = {

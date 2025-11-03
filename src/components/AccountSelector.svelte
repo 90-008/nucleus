@@ -109,7 +109,7 @@
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			class="absolute left-0 z-10 mt-3 min-w-52 animate-fade-in-scale-fast overflow-hidden rounded-sm border-2 border-(--nucleus-accent) bg-(--nucleus-bg)/94 shadow-2xl backdrop-blur-lg transition-all"
+			class="absolute left-0 z-20 mt-3 min-w-52 animate-fade-in-scale-fast overflow-hidden rounded-sm border-2 border-(--nucleus-accent) bg-(--nucleus-bg)/94 shadow-2xl backdrop-blur-lg transition-all"
 			onclick={(e) => e.stopPropagation()}
 		>
 			{#if accounts.length > 0}
