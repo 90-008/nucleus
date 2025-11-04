@@ -23,7 +23,7 @@
 	}: Props = $props();
 
 	let color = $derived(
-		client.didDoc?.did ? generateColorForDid(client.didDoc?.did) : 'var(--nucleus-accent)'
+		client.didDoc?.did ? generateColorForDid(client.didDoc?.did) : 'var(--nucleus-accent2)'
 	);
 
 	const post = async (text: string): Promise<Result<PostWithUri, string>> => {
@@ -119,26 +119,6 @@
 {/snippet}
 
 {#snippet composer()}
-	{#if replying}
-		{@render renderPost(replying)}
-	{/if}
-	<textarea
-		bind:this={textareaEl}
-		bind:value={postText}
-		onfocus={() => (isFocused = true)}
-		onblur={unfocus}
-		onkeydown={(event) => {
-			if (event.key === 'Escape') unfocus();
-			if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) doPost();
-		}}
-		placeholder="what's on your mind?"
-		rows="4"
-		class="field-sizing-content single-line-input resize-none bg-(--nucleus-bg)/40 focus:scale-100"
-		style="border-color: color-mix(in srgb, {color} 27%, transparent);"
-	></textarea>
-	{#if quoting}
-		{@render renderPost(quoting)}
-	{/if}
 	<div class="flex items-center gap-2">
 		<div class="grow"></div>
 		<span
@@ -161,12 +141,32 @@
 			post
 		</button>
 	</div>
+	{#if replying}
+		{@render renderPost(replying)}
+	{/if}
+	<textarea
+		bind:this={textareaEl}
+		bind:value={postText}
+		onfocus={() => (isFocused = true)}
+		onblur={unfocus}
+		onkeydown={(event) => {
+			if (event.key === 'Escape') unfocus();
+			if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) doPost();
+		}}
+		placeholder="what's on your mind?"
+		rows="4"
+		class="field-sizing-content single-line-input resize-none bg-(--nucleus-bg)/40 focus:scale-100"
+		style="border-color: color-mix(in srgb, {color} 27%, transparent);"
+	></textarea>
+	{#if quoting}
+		{@render renderPost(quoting)}
+	{/if}
 {/snippet}
 
-<div class="relative min-h-16">
+<div class="relative min-h-13">
 	<!-- Spacer to maintain layout when focused -->
 	{#if isFocused}
-		<div class="min-h-16"></div>
+		<div class="min-h-13"></div>
 	{/if}
 
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -177,14 +177,14 @@
 			}
 		}}
 		class="flex max-w-full rounded-sm border-2 shadow-lg transition-all duration-300
-			{!isFocused ? 'min-h-16 items-center' : ''}
-			{isFocused ? 'absolute top-0 right-0 left-0 z-50 shadow-2xl' : ''}"
+			{!isFocused ? 'min-h-13 items-center' : ''}
+			{isFocused ? 'absolute right-0 bottom-0 left-0 z-50 shadow-2xl' : ''}"
 		style="background: {isFocused
-			? `color-mix(in srgb, var(--nucleus-bg) 80%, ${color} 20%)`
-			: `color-mix(in srgb, ${color} 9%, transparent)`};
+			? `color-mix(in srgb, var(--nucleus-bg) 75%, ${color})`
+			: `color-mix(in srgb, color-mix(in srgb, var(--nucleus-bg) 85%, ${color}) 70%, transparent)`};
 			border-color: color-mix(in srgb, {color} {isFocused ? '100' : '40'}%, transparent);"
 	>
-		<div class="w-full p-2" class:py-3={isFocused}>
+		<div class="w-full p-1.5 px-2">
 			{#if info.length > 0}
 				<div
 					class="rounded-sm px-3 py-1.5 text-center font-medium text-nowrap overflow-ellipsis"
@@ -202,7 +202,7 @@
 							onfocus={() => (isFocused = true)}
 							type="text"
 							placeholder="what's on your mind?"
-							class="single-line-input flex-1 bg-(--nucleus-bg)/40"
+							class="single-line-input flex-1 bg-(--nucleus-bg)/40 p-1 px-2"
 							style="border-color: color-mix(in srgb, {color} 27%, transparent);"
 						/>
 					{/if}

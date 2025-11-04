@@ -241,86 +241,11 @@
 </script>
 
 <div class="mx-auto max-w-2xl">
-	<!-- header -->
-	<div class="sticky top-0 z-10 bg-(--nucleus-bg) pb-2">
-		<div class="mb-6 flex items-center justify-between">
-			<div>
-				<h1 class="text-3xl font-bold tracking-tight">nucleus</h1>
-				<div class="mt-1 flex gap-2">
-					<div class="h-1 w-11 rounded-full bg-(--nucleus-accent)"></div>
-					<div class="h-1 w-8 rounded-full bg-(--nucleus-accent2)"></div>
-				</div>
-			</div>
-			<button
-				onclick={() => (isSettingsOpen = true)}
-				class="group rounded-sm bg-(--nucleus-accent)/7 p-2 text-(--nucleus-accent) transition-all hover:scale-110 hover:shadow-lg"
-				aria-label="settings"
-			>
-				<Icon class="group-hover:hidden" icon="heroicons:cog-6-tooth" width={28} />
-				<Icon class="hidden group-hover:block" icon="heroicons:cog-6-tooth-solid" width={28} />
-			</button>
-		</div>
-
-		<!-- composer and error disclaimer (above thread list, not scrollable) -->
-		<div class="space-y-4">
-			<div class="flex min-h-16 items-stretch gap-2">
-				<AccountSelector
-					client={viewClient}
-					accounts={$accounts}
-					bind:selectedDid
-					onAccountSelected={handleAccountSelected}
-					onLogout={handleLogout}
-				/>
-
-				{#if selectedClient}
-					<div class="flex-1">
-						<PostComposer
-							client={selectedClient}
-							onPostSent={(post) => posts.get(selectedDid!)?.set(post.uri, post)}
-							bind:quoting
-							bind:replying
-						/>
-					</div>
-				{:else}
-					<div
-						class="flex flex-1 items-center justify-center rounded-sm border-2 border-(--nucleus-accent)/20 bg-(--nucleus-accent)/4 px-4 py-2.5 backdrop-blur-sm"
-					>
-						<p class="text-sm opacity-80">select or add an account to post</p>
-					</div>
-				{/if}
-			</div>
-
-			{#if errors.length > 0}
-				<div class="relative error-disclaimer">
-					<div class="flex items-center gap-2 text-red-500">
-						<Icon class="inline h-10 w-10" icon="heroicons:exclamation-triangle-16-solid" />
-						there are ({errors.length}) errors
-						<div class="grow"></div>
-						<button onclick={() => (errorsOpen = !errorsOpen)} class="action-button p-1 px-1.5"
-							>{errorsOpen ? 'hide details' : 'see details'}</button
-						>
-					</div>
-					{#if errorsOpen}
-						<div
-							class="absolute top-full right-0 left-0 z-10 mt-2 flex animate-fade-in-scale-fast flex-col gap-1 error-disclaimer shadow-lg transition-all"
-						>
-							{#each errors as error, idx (idx)}
-								<p>• {error}</p>
-							{/each}
-						</div>
-					{/if}
-				</div>
-			{/if}
-
-			<!-- <hr
-			class="h-[4px] w-full rounded-full border-0"
-			style="background: linear-gradient(to right, var(--nucleus-accent), var(--nucleus-accent2));"
-		/> -->
-		</div>
-	</div>
-
 	<!-- thread list (page scrolls as a whole) -->
-	<div class="mt-4 [scrollbar-color:var(--nucleus-accent)_transparent]" bind:this={scrollContainer}>
+	<div
+		class="mb-4 min-h-screen p-2 [scrollbar-color:var(--nucleus-accent)_transparent]"
+		bind:this={scrollContainer}
+	>
 		{#if $accounts.length > 0}
 			{@render renderThreads()}
 		{:else}
@@ -330,6 +255,98 @@
 				</p>
 			</div>
 		{/if}
+	</div>
+	<!-- header -->
+	<div class="sticky bottom-0 z-10">
+		{#if errors.length > 0}
+			<div class="relative m-3 mb-1 error-disclaimer">
+				<div class="flex items-center gap-2 text-red-500">
+					<Icon class="inline h-10 w-10" icon="heroicons:exclamation-triangle-16-solid" />
+					there are ({errors.length}) errors
+					<div class="grow"></div>
+					<button onclick={() => (errorsOpen = !errorsOpen)} class="action-button p-1 px-1.5"
+						>{errorsOpen ? 'hide details' : 'see details'}</button
+					>
+				</div>
+				{#if errorsOpen}
+					<div
+						class="absolute right-0 bottom-full left-0 z-10 mb-2 flex animate-fade-in-scale-fast flex-col gap-1 error-disclaimer shadow-lg transition-all"
+					>
+						{#each errors as error, idx (idx)}
+							<p>• {error}</p>
+						{/each}
+					</div>
+				{/if}
+			</div>
+		{/if}
+
+		<div
+			class="rounded-t-sm px-0.5 pt-0.5"
+			style="background: linear-gradient(to right, var(--nucleus-accent), var(--nucleus-accent2));"
+		>
+			<div
+				class="rounded-t-sm"
+				style="
+    			    background: linear-gradient(to right, color-mix(in srgb, var(--nucleus-accent) 16%, var(--nucleus-bg)), color-mix(in srgb, var(--nucleus-accent2) 10%, var(--nucleus-bg)));
+    			"
+			>
+				<!-- composer and error disclaimer (above thread list, not scrollable) -->
+				<div class="flex gap-2 px-2 pt-2 pb-1">
+					<AccountSelector
+						client={viewClient}
+						accounts={$accounts}
+						bind:selectedDid
+						onAccountSelected={handleAccountSelected}
+						onLogout={handleLogout}
+					/>
+
+					{#if selectedClient}
+						<div class="flex-1">
+							<PostComposer
+								client={selectedClient}
+								onPostSent={(post) => posts.get(selectedDid!)?.set(post.uri, post)}
+								bind:quoting
+								bind:replying
+							/>
+						</div>
+					{:else}
+						<div
+							class="flex flex-1 items-center justify-center rounded-sm border-2 border-(--nucleus-accent)/20 bg-(--nucleus-accent)/4 px-4 py-2.5 backdrop-blur-sm"
+						>
+							<p class="text-sm opacity-80">select or add an account to post</p>
+						</div>
+					{/if}
+				</div>
+
+				<div
+					class="opacity- mt-1 h-px w-full rounded-full border-0 opacity-70"
+					style="background: linear-gradient(to right, var(--nucleus-accent), var(--nucleus-accent2));"
+				></div>
+
+				<div class="flex items-center justify-between px-2 py-1">
+					<div class="mb-2">
+						<h1 class="text-3xl font-bold tracking-tight">nucleus</h1>
+						<div class="mt-1 flex gap-2">
+							<div class="h-1 w-11 rounded-full bg-(--nucleus-accent)"></div>
+							<div class="h-1 w-8 rounded-full bg-(--nucleus-accent2)"></div>
+						</div>
+					</div>
+					<button
+						onclick={() => (isSettingsOpen = true)}
+						class="group rounded-sm bg-(--nucleus-accent)/15 p-2 text-(--nucleus-accent) transition-all hover:scale-110 hover:shadow-lg"
+						aria-label="settings"
+					>
+						<Icon class="group-hover:hidden" icon="heroicons:cog-6-tooth" width={28} />
+						<Icon class="hidden group-hover:block" icon="heroicons:cog-6-tooth-solid" width={28} />
+					</button>
+				</div>
+
+				<!-- <hr
+    			class="h-[4px] w-full rounded-full border-0"
+    			style="background: linear-gradient(to right, var(--nucleus-accent), var(--nucleus-accent2));"
+    		/> -->
+			</div>
+		</div>
 	</div>
 </div>
 

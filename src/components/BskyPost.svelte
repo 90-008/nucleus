@@ -82,10 +82,8 @@
 		const element = document.getElementById(targetId);
 		if (!element) return;
 
-		// Smooth scroll to the target
 		element.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-		// Trigger pulse after scroll completes
 		setTimeout(() => {
 			document.documentElement.style.setProperty(
 				'--nucleus-selected-post',
@@ -93,8 +91,8 @@
 			);
 			pulsingPostId.set(targetId);
 			// Clear pulse after animation
-			setTimeout(() => pulsingPostId.set(null), 2000);
-		}, 500);
+			setTimeout(() => pulsingPostId.set(null), 1200);
+		}, 400);
 	};
 
 	const getEmbedText = (embedType: string) => {

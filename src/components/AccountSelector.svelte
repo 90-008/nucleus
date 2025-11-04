@@ -96,12 +96,12 @@
 <div class="relative">
 	<button
 		onclick={toggleDropdown}
-		class="flex h-16 w-16 items-center justify-center rounded-sm shadow-lg transition-all hover:scale-105 hover:shadow-xl"
+		class="flex h-13 w-13 items-center justify-center rounded-sm shadow-md transition-all hover:shadow-xl hover:brightness-125 hover:saturate-150"
 	>
 		{#if selectedDid}
-			<ProfilePicture {client} did={selectedDid} size={15} />
+			<ProfilePicture {client} did={selectedDid} size={13} />
 		{:else}
-			<PfpPlaceholder color="var(--nucleus-accent)" size={15} />
+			<PfpPlaceholder color="var(--nucleus-accent)" size={13} />
 		{/if}
 	</button>
 
@@ -109,7 +109,7 @@
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			class="absolute left-0 z-20 mt-3 min-w-52 animate-fade-in-scale-fast overflow-hidden rounded-sm border-2 border-(--nucleus-accent) bg-(--nucleus-bg)/94 shadow-2xl backdrop-blur-lg transition-all"
+			class="absolute bottom-full z-20 mb-1 min-w-52 animate-fade-in-scale-fast overflow-hidden rounded-sm border-2 border-(--nucleus-accent) bg-(--nucleus-bg)/94 shadow-2xl backdrop-blur-lg transition-all"
 			onclick={(e) => e.stopPropagation()}
 		>
 			{#if accounts.length > 0}
