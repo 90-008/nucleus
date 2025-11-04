@@ -256,6 +256,17 @@
 	});
 </script>
 
+{#snippet appButton(onClick: () => void, icon: string, ariaLabel: string, iconHover?: string)}
+	<button
+		onclick={onClick}
+		class="group rounded-sm bg-(--nucleus-accent)/15 p-2 text-(--nucleus-accent) transition-all hover:scale-110 hover:shadow-lg"
+		aria-label={ariaLabel}
+	>
+		<Icon class="group-hover:hidden" {icon} width={28} />
+		<Icon class="hidden group-hover:block" icon={iconHover ?? icon} width={28} />
+	</button>
+{/snippet}
+
 <div class="mx-auto max-w-2xl">
 	<!-- thread list (page scrolls as a whole) -->
 	<div
@@ -334,18 +345,7 @@
 					{/if}
 
 					{#if showScrollToTop}
-						<button
-							onclick={scrollToTop}
-							class="group shrink-0 rounded-sm bg-(--nucleus-accent)/15 p-2 text-(--nucleus-accent) transition-all hover:scale-110 hover:shadow-lg"
-							aria-label="scroll to top"
-							title="scroll to top"
-						>
-							<Icon
-								class="transition-transform group-hover:-translate-y-0.5"
-								icon="heroicons:arrow-up-16-solid"
-								width={28}
-							/>
-						</button>
+						{@render appButton(scrollToTop, 'heroicons:arrow-up-16-solid', 'scroll to top')}
 					{/if}
 				</div>
 
@@ -354,7 +354,7 @@
 					style="background: linear-gradient(to right, var(--nucleus-accent), var(--nucleus-accent2));"
 				></div>
 
-				<div class="flex items-center justify-between px-2 py-1">
+				<div class="flex items-center gap-1.5 px-2 py-1">
 					<div class="mb-2">
 						<h1 class="text-3xl font-bold tracking-tight">nucleus</h1>
 						<div class="mt-1 flex gap-2">
@@ -362,14 +362,19 @@
 							<div class="h-1 w-8 rounded-full bg-(--nucleus-accent2)"></div>
 						</div>
 					</div>
-					<button
-						onclick={() => (isSettingsOpen = true)}
-						class="group rounded-sm bg-(--nucleus-accent)/15 p-2 text-(--nucleus-accent) transition-all hover:scale-110 hover:shadow-lg"
-						aria-label="settings"
-					>
-						<Icon class="group-hover:hidden" icon="heroicons:cog-6-tooth" width={28} />
-						<Icon class="hidden group-hover:block" icon="heroicons:cog-6-tooth-solid" width={28} />
-					</button>
+					<div class="grow"></div>
+					{@render appButton(
+						() => (isSettingsOpen = true),
+						'heroicons:bell',
+						'notifications',
+						'heroicons:bell-solid'
+					)}
+					{@render appButton(
+						() => (isSettingsOpen = true),
+						'heroicons:cog-6-tooth',
+						'settings',
+						'heroicons:cog-6-tooth-solid'
+					)}
 				</div>
 
 				<!-- <hr

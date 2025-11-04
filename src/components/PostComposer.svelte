@@ -102,6 +102,7 @@
 	};
 
 	$effect(() => {
+		document.documentElement.style.setProperty('--acc-color', color);
 		if (isFocused && textareaEl) textareaEl.focus();
 		if (quoting || replying) isFocused = true;
 	});
@@ -155,8 +156,7 @@
 		}}
 		placeholder="what's on your mind?"
 		rows="4"
-		class="field-sizing-content single-line-input resize-none bg-(--nucleus-bg)/40 focus:scale-100"
-		style="border-color: color-mix(in srgb, {color} 27%, transparent);"
+		class="field-sizing-content resize-none"
 	></textarea>
 	{#if quoting}
 		{@render renderPost(quoting)}
@@ -202,8 +202,7 @@
 							onfocus={() => (isFocused = true)}
 							type="text"
 							placeholder="what's on your mind?"
-							class="single-line-input flex-1 bg-(--nucleus-bg)/40 p-1 px-2"
-							style="border-color: color-mix(in srgb, {color} 27%, transparent);"
+							class="flex-1"
 						/>
 					{/if}
 				</div>
@@ -211,3 +210,26 @@
 		</div>
 	</div>
 </div>
+
+<style>
+	@reference "../app.css";
+
+	input,
+	textarea {
+		@apply single-line-input bg-(--nucleus-bg)/35;
+		border-color: color-mix(in srgb, var(--acc-color) 30%, transparent);
+	}
+
+	input {
+		@apply p-1 px-2;
+	}
+
+	textarea {
+		@apply focus:scale-100;
+	}
+
+	input::placeholder,
+	textarea::placeholder {
+		color: color-mix(in srgb, var(--acc-color) 45%, var(--nucleus-bg));
+	}
+</style>
