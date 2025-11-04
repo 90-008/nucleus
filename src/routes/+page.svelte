@@ -239,7 +239,7 @@
 		if ($accounts.length > 0) {
 			loaderState.status = 'LOADING';
 			if (loadData.client.ok && loadData.client.value) {
-				const loggedInDid = loadData.client.value.didDoc!.did as AtprotoDid;
+				const loggedInDid = loadData.client.value.user!.did as AtprotoDid;
 				selectedDid = loggedInDid;
 				clients.set(loggedInDid, loadData.client.value);
 			}

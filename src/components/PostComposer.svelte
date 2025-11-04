@@ -23,7 +23,7 @@
 	}: Props = $props();
 
 	let color = $derived(
-		client.didDoc?.did ? generateColorForDid(client.didDoc?.did) : 'var(--nucleus-accent2)'
+		client.user?.did ? generateColorForDid(client.user?.did) : 'var(--nucleus-accent2)'
 	);
 
 	const post = async (text: string): Promise<Result<PostWithUri, string>> => {
@@ -53,7 +53,7 @@
 		const res = await client.atcute?.post('com.atproto.repo.createRecord', {
 			input: {
 				collection: 'app.bsky.feed.post',
-				repo: client.didDoc!.did,
+				repo: client.user!.did,
 				record
 			}
 		});

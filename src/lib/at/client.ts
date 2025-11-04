@@ -71,19 +71,17 @@ export type RecordOutput<Output> = { uri: ResourceUri; cid: Cid | undefined; rec
 
 export class AtpClient {
 	public atcute: AtcuteClient | null = null;
-	public didDoc: MiniDoc | null = null;
+	public user: { did: Did; handle: Handle } | null = null;
 
 	async login(identifier: ActorIdentifier, agent: OAuthUserAgent): Promise<Result<null, string>> {
-		if ((agent.session.token.expires_at ?? 0) < Date.now()) {
-			return err('token expired, relogin');
-		}
-
-		const didDoc = await this.resolveDidDoc(identifier);
-		if (!didDoc.ok) return err(didDoc.error);
-		this.didDoc = didDoc.value;
-
 		try {
 			const rpc = new AtcuteClient({ handler: agent });
+			const res = await rpc.get('com.atproto.server.getSession');
+			if (!res.ok) throw res.data.error;
+			this.user = {
+				did: res.data.did,
+				handle: res.data.handle
+			};
 			this.atcute = rpc;
 		} catch (error) {
 			return err(`failed to login: ${error}`);
@@ -156,7 +154,7 @@ export class AtpClient {
 	}
 
 	async getProfile(repo?: ActorIdentifier): Promise<Result<AppBskyActorProfile.Main, string>> {
-		repo = repo ?? this.didDoc?.did;
+		repo = repo ?? this.user?.did;
 		if (!repo) return err('not authenticated');
 		return map(await this.getRecord(AppBskyActorProfile.mainSchema, repo, 'self'), (d) => d.record);
 	}

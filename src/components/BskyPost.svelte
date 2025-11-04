@@ -51,7 +51,7 @@
 		isOnPostComposer = false /* replyBacklinks */
 	}: Props = $props();
 
-	const selectedDid = $derived(client.didDoc?.did ?? null);
+	const selectedDid = $derived(client.user?.did ?? null);
 
 	const aturi: CanonicalResourceUri = `at://${did}/app.bsky.feed.post/${rkey}`;
 	const color = generateColorForDid(did);
