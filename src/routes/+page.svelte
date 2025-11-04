@@ -176,6 +176,16 @@
 
 	let loading = $state(false);
 	let loadError = $state('');
+	let showScrollToTop = $state(false);
+
+	const handleScroll = () => {
+		showScrollToTop = window.scrollY > 300;
+	};
+
+	const scrollToTop = () => {
+		window.scrollTo({ top: 0, behavior: 'smooth' });
+	};
+
 	const loadMore = async () => {
 		if (loading || $accounts.length === 0) return;
 
@@ -196,7 +206,9 @@
 		if (cursors.values().every((cursor) => cursor.end)) loaderState.complete();
 	};
 
-	onMount(async () => {
+	onMount(() => {
+		window.addEventListener('scroll', handleScroll);
+
 		accounts.subscribe((newAccounts) => {
 			get(notificationStream)?.stop();
 			// jetstream.set(null);
@@ -237,6 +249,10 @@
 		} else {
 			selectedDid = null;
 		}
+
+		return () => {
+			window.removeEventListener('scroll', handleScroll);
+		};
 	});
 </script>
 
@@ -315,6 +331,21 @@
 						>
 							<p class="text-sm opacity-80">select or add an account to post</p>
 						</div>
+					{/if}
+
+					{#if showScrollToTop}
+						<button
+							onclick={scrollToTop}
+							class="group shrink-0 rounded-sm bg-(--nucleus-accent)/15 p-2 text-(--nucleus-accent) transition-all hover:scale-110 hover:shadow-lg"
+							aria-label="scroll to top"
+							title="scroll to top"
+						>
+							<Icon
+								class="transition-transform group-hover:-translate-y-0.5"
+								icon="heroicons:arrow-up-16-solid"
+								width={28}
+							/>
+						</button>
 					{/if}
 				</div>
 

@@ -96,7 +96,7 @@
 <div class="relative">
 	<button
 		onclick={toggleDropdown}
-		class="flex h-13 w-13 items-center justify-center rounded-sm shadow-md transition-all hover:shadow-xl hover:brightness-125 hover:saturate-150"
+		class="flex h-13 w-13 items-center justify-center rounded-sm shadow-md transition-all hover:scale-110 hover:shadow-xl hover:saturate-150"
 	>
 		{#if selectedDid}
 			<ProfilePicture {client} did={selectedDid} size={13} />
