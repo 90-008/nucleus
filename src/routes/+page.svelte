@@ -19,6 +19,7 @@
 	import type { AtprotoDid } from '@atcute/lexicons/syntax';
 	import type { PageProps } from './+page';
 	import { buildThreads, filterThreads, type ThreadPost } from '$lib/thread';
+	import NotificationsPopup from '$components/NotificationsPopup.svelte';
 
 	const { data: loadData }: PageProps = $props();
 
@@ -71,6 +72,7 @@
 	const cursors = new SvelteMap<Did, { value?: string; end: boolean }>();
 
 	let isSettingsOpen = $state(false);
+	let isNotificationsOpen = $state(false);
 	let reverseChronological = $state(true);
 	let viewOwnPosts = $state(true);
 
@@ -314,7 +316,7 @@
 			<div
 				class="rounded-t-sm"
 				style="
-    			    background: linear-gradient(to right, color-mix(in srgb, var(--nucleus-accent) 16%, var(--nucleus-bg)), color-mix(in srgb, var(--nucleus-accent2) 10%, var(--nucleus-bg)));
+    			    background: linear-gradient(to right, color-mix(in srgb, var(--nucleus-accent) 18%, var(--nucleus-bg)), color-mix(in srgb, var(--nucleus-accent2) 13%, var(--nucleus-bg)));
     			"
 			>
 				<!-- composer and error disclaimer (above thread list, not scrollable) -->
@@ -350,7 +352,7 @@
 				</div>
 
 				<div
-					class="opacity- mt-1 h-px w-full rounded-full border-0 opacity-70"
+					class="mt-1 h-px w-full opacity-50"
 					style="background: linear-gradient(to right, var(--nucleus-accent), var(--nucleus-accent2));"
 				></div>
 
@@ -364,7 +366,7 @@
 					</div>
 					<div class="grow"></div>
 					{@render appButton(
-						() => (isSettingsOpen = true),
+						() => (isNotificationsOpen = true),
 						'heroicons:bell',
 						'notifications',
 						'heroicons:bell-solid'
@@ -387,6 +389,10 @@
 </div>
 
 <SettingsPopup bind:isOpen={isSettingsOpen} onClose={() => (isSettingsOpen = false)} />
+<NotificationsPopup
+	bind:isOpen={isNotificationsOpen}
+	onClose={() => (isNotificationsOpen = false)}
+/>
 
 {#snippet replyPost(post: ThreadPost, reverse: boolean = reverseChronological)}
 	<span
