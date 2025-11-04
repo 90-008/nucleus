@@ -71,15 +71,19 @@
 			let did = await client.resolveHandle(handle);
 			if (!did.ok) throw did.error;
 
-			loggingIn.set({ did: did.value, handle });
-			const result = await flow.start(handle);
-			if (!result.ok) throw result.error;
+			await initiateLogin(did.value, handle);
 		} catch (error) {
 			loginError = `login failed: ${error}`;
 			loggingIn.set(null);
 		} finally {
 			isLoggingIn = false;
 		}
+	};
+
+	const initiateLogin = async (did: AtprotoDid, handle: Handle | null) => {
+		loggingIn.set({ did, handle });
+		const result = await flow.start(handle ?? did);
+		if (!result.ok) throw result.error;
 	};
 
 	const handleKeydown = (event: KeyboardEvent) => {
@@ -116,6 +120,15 @@
 				<div class="p-2">
 					{#each accounts as account (account.did)}
 						{@const color = generateColorForDid(account.did)}
+						{#snippet action(name: string, icon: string, onClick: () => void)}
+							<div
+								title={name}
+								onclick={onClick}
+								class="hidden text-(--nucleus-accent) transition-all group-hover:block hover:scale-[1.2] hover:shadow-md"
+							>
+								<Icon class="h-5 w-5" {icon} />
+							</div>
+						{/snippet}
 						<button
 							onclick={() => selectAccount(account.did)}
 							class="
@@ -127,37 +140,19 @@
 								: 'transparent'};"
 						>
 							<span>@{account.handle}</span>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								onclick={() => onLogout(account.did)}
-								class="ml-auto hidden h-5 w-5 text-(--nucleus-accent) transition-all group-hover:block hover:scale-[1.2] hover:shadow-md"
-								width="24"
-								height="24"
-								viewBox="0 0 20 20"
-								><path
-									fill="currentColor"
-									fill-rule="evenodd"
-									d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443q-1.193.115-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022l.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52l.149.023a.75.75 0 0 0 .23-1.482A41 41 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1zM10 4q1.26 0 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325Q8.74 4 10 4M8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06z"
-									clip-rule="evenodd"
-								/></svg
-							>
+
+							<div class="grow"></div>
+
+							{@render action('relogin', 'heroicons:arrow-path-rounded-square-solid', () =>
+								initiateLogin(account.did, account.handle)
+							)}
+							{@render action('logout', 'heroicons:trash-solid', () => onLogout(account.did))}
 
 							{#if account.did === selectedDid}
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									class="ml-auto h-5 w-5 text-(--nucleus-accent) group-hover:hidden"
-									width="24"
-									height="24"
-									viewBox="0 0 24 24"
-									><path
-										fill="currentColor"
-										fill-rule="evenodd"
-										d="M19.916 4.626a.75.75 0 0 1 .208 1.04l-9 13.5a.75.75 0 0 1-1.154.114l-6-6a.75.75 0 0 1 1.06-1.06l5.353 5.353l8.493-12.74a.75.75 0 0 1 1.04-.207"
-										clip-rule="evenodd"
-										stroke-width="1.5"
-										stroke="currentColor"
-									/></svg
-								>
+								<Icon
+									icon="heroicons:check-16-solid"
+									class="h-5 w-5 scale-125 text-(--nucleus-accent) group-hover:hidden"
+								/>
 							{/if}
 						</button>
 					{/each}
@@ -168,14 +163,7 @@
 				onclick={openLoginModal}
 				class="group flex w-full origin-left items-center gap-3 p-3 text-left text-sm font-semibold text-(--nucleus-accent) transition-all hover:scale-[1.1]"
 			>
-				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2.5"
-						d="M12 4v16m8-8H4"
-					/>
-				</svg>
+				<Icon class="h-5 w-5 scale-[130%]" icon="heroicons:plus-16-solid" />
 				<span>add account</span>
 			</button>
 		</div>
