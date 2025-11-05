@@ -73,7 +73,7 @@ export class AtpClient {
 	public atcute: AtcuteClient | null = null;
 	public user: { did: Did; handle: Handle } | null = null;
 
-	async login(identifier: ActorIdentifier, agent: OAuthUserAgent): Promise<Result<null, string>> {
+	async login(agent: OAuthUserAgent): Promise<Result<null, string>> {
 		try {
 			const rpc = new AtcuteClient({ handler: agent });
 			const res = await rpc.get('com.atproto.server.getSession');

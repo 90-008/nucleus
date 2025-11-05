@@ -41,7 +41,7 @@
 	const loginAccount = async (account: Account) => {
 		if (clients.has(account.did)) return;
 		const client = new AtpClient();
-		const result = await client.login(account.did, await sessions.get(account.did));
+		const result = await client.login(await sessions.get(account.did));
 		if (!result.ok) {
 			errors.push(`failed to login into @${account.handle ?? account.did}: ${result.error}`);
 			return;

@@ -37,7 +37,7 @@ const handleLogin = async (): Promise<Result<AtpClient | null, string>> => {
 	}
 
 	const client = new AtpClient();
-	const result = await client.login(account.did, agent.value);
+	const result = await client.login(agent.value);
 	if (!result.ok) return err(result.error);
 
 	addAccount(account);
