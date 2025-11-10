@@ -29,6 +29,8 @@
 	import { onMount } from 'svelte';
 	import type { AtprotoDid } from '@atcute/lexicons/syntax';
 	import { derived } from 'svelte/store';
+	import Device from 'svelte-device-info';
+	import Dropdown from './Dropdown.svelte';
 
 	interface Props {
 		client: AtpClient;
@@ -211,15 +213,18 @@
 		}
 		return link;
 	};
+
+	let actionsOpen = $state(false);
 </script>
 
 {#snippet embedBadge(record: AppBskyFeedPost.Main)}
 	{#if record.embed}
 		<span
 			class="rounded-full px-2.5 py-0.5 text-xs font-medium"
-			style="background: color-mix(in srgb, {mini
-				? 'var(--nucleus-fg)'
-				: color} 10%, transparent); color: {mini ? 'var(--nucleus-fg)' : color};"
+			style="
+			background: color-mix(in srgb, {mini ? 'var(--nucleus-fg)' : color} 10%, transparent);
+			color: {mini ? 'var(--nucleus-fg)' : color};
+			"
 		>
 			{getEmbedText(record.embed.$type)}
 		</span>
@@ -254,7 +259,10 @@
 			style="background: {color}18; border-color: {color}66;"
 		>
 			<div
-				class="inline-block h-6 w-6 animate-spin rounded-full border-3 border-(--nucleus-accent) border-l-transparent"
+				class="
+				inline-block h-6 w-6 animate-spin rounded-full
+				border-3 border-(--nucleus-accent) border-l-transparent
+				"
 			></div>
 			<p class="mt-3 text-sm font-medium opacity-60">loading post...</p>
 		</div>
@@ -263,15 +271,17 @@
 			{@const record = post.value.record}
 			<div
 				id="timeline-post-{post.value.uri}-{quoteDepth}"
-				class="rounded-sm border-2 p-2 shadow-lg backdrop-blur-sm transition-all {$isPulsing
-					? 'animate-pulse-highlight'
-					: ''}"
-				style="background: {color}{isOnPostComposer
-					? '36'
-					: '18'}; border-color: {color}{isOnPostComposer ? '99' : '66'};"
+				class="
+				group rounded-sm border-2 p-2 shadow-lg backdrop-blur-sm transition-all
+				{$isPulsing ? 'animate-pulse-highlight' : ''}
+				"
+				style="
+				background: {color}{isOnPostComposer ? '36' : '18'};
+				border-color: {color}{isOnPostComposer ? '99' : '66'};
+				"
 			>
 				<div
-					class="group mb-3 flex w-fit max-w-full items-center gap-1.5 rounded-sm pr-1"
+					class="mb-3 flex w-fit max-w-full items-center gap-1.5 rounded-sm pr-1"
 					style="background: {color}33;"
 				>
 					<ProfilePicture {client} {did} size={8} />
@@ -381,56 +391,86 @@
 {/if}
 
 {#snippet postControls(post: PostWithUri, backlinks?: PostActions)}
-	<div
-		class="group mt-3 flex w-fit max-w-full items-center rounded-sm"
-		style="background: {color}1f;"
-	>
-		{#snippet label(
-			name: string,
-			icon: string,
-			onClick: (link: Backlink | null | undefined) => void,
-			backlink?: Backlink | null,
-			hasSolid?: boolean
-		)}
-			<button
-				class="px-2 py-1.5 text-(--nucleus-fg)/90 hover:[backdrop-filter:brightness(120%)]"
-				onclick={() => onClick(backlink)}
-				style="color: {backlink ? color : 'color-mix(in srgb, var(--nucleus-fg) 90%, transparent)'}"
-				title={name}
-			>
-				<Icon icon={hasSolid && backlink ? `${icon}-solid` : icon} width={20} />
-			</button>
-		{/snippet}
-		{@render label('reply', 'heroicons:chat-bubble-left', () => {
-			onReply?.(post);
-		})}
-		{@render label(
-			'repost',
-			'heroicons:arrow-path-rounded-square-20-solid',
-			async (link) => {
-				if (link === undefined) return;
-				postActions.set(`${selectedDid!}:${aturi}`, {
-					...backlinks!,
-					repost: await toggleLink(link, 'app.bsky.feed.repost')
-				});
-			},
-			backlinks?.repost
-		)}
-		{@render label('quote', 'heroicons:paper-clip-20-solid', () => {
-			onQuote?.(post);
-		})}
-		{@render label(
-			'like',
-			'heroicons:star',
-			async (link) => {
-				if (link === undefined) return;
-				postActions.set(`${selectedDid!}:${aturi}`, {
-					...backlinks!,
-					like: await toggleLink(link, 'app.bsky.feed.like')
-				});
-			},
-			backlinks?.like,
-			true
-		)}
+	{#snippet control(
+		name: string,
+		icon: string,
+		onClick: (e: MouseEvent) => void,
+		isFull?: boolean,
+		hasSolid?: boolean
+	)}
+		<button
+			class="
+			px-2 py-1.5 text-(--nucleus-fg)/90 transition-all
+			duration-100 hover:[backdrop-filter:brightness(120%)]
+			"
+			onclick={(e) => onClick(e)}
+			style="color: {isFull ? color : 'color-mix(in srgb, var(--nucleus-fg) 90%, transparent)'}"
+			title={name}
+		>
+			<Icon icon={hasSolid && isFull ? `${icon}-solid` : icon} width={20} />
+		</button>
+	{/snippet}
+	<div class="mt-3 flex w-full items-center justify-between">
+		<div class="flex w-fit items-center rounded-sm" style="background: {color}1f;">
+			{#snippet label(
+				name: string,
+				icon: string,
+				onClick: (link: Backlink | null | undefined) => void,
+				backlink?: Backlink | null,
+				hasSolid?: boolean
+			)}
+				{@render control(name, icon, () => onClick(backlink), backlink ? true : false, hasSolid)}
+			{/snippet}
+			{@render label('reply', 'heroicons:chat-bubble-left', () => {
+				onReply?.(post);
+			})}
+			{@render label(
+				'repost',
+				'heroicons:arrow-path-rounded-square-20-solid',
+				async (link) => {
+					if (link === undefined) return;
+					postActions.set(`${selectedDid!}:${aturi}`, {
+						...backlinks!,
+						repost: await toggleLink(link, 'app.bsky.feed.repost')
+					});
+				},
+				backlinks?.repost
+			)}
+			{@render label('quote', 'heroicons:paper-clip-20-solid', () => {
+				onQuote?.(post);
+			})}
+			{@render label(
+				'like',
+				'heroicons:star',
+				async (link) => {
+					if (link === undefined) return;
+					postActions.set(`${selectedDid!}:${aturi}`, {
+						...backlinks!,
+						like: await toggleLink(link, 'app.bsky.feed.like')
+					});
+				},
+				backlinks?.like,
+				true
+			)}
+		</div>
+		<div
+			class="
+		    w-fit items-center rounded-sm transition-opacity
+			duration-100 ease-in-out group-hover:opacity-100
+			{!actionsOpen && !Device.isMobile ? 'opacity-0' : ''}
+			"
+			style="background: {color}1f;"
+		>
+			<Dropdown bind:isOpen={actionsOpen}>
+				{#snippet trigger()}
+					{@render control('actions', 'heroicons:ellipsis-horizontal-16-solid', (e) => {
+						e.stopPropagation();
+						actionsOpen = !actionsOpen;
+					})}
+				{/snippet}
+
+				woof
+			</Dropdown>
+		</div>
 	</div>
 {/snippet}

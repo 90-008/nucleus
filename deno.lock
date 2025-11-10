@@ -11,6 +11,7 @@
     "npm:@atcute/tid@^1.0.3": "1.0.3",
     "npm:@eslint/compat@^1.4.1": "1.4.1_eslint@9.39.0",
     "npm:@eslint/js@^9.39.0": "9.39.0",
+    "npm:@floating-ui/dom@^1.7.4": "1.7.4",
     "npm:@iconify/svelte@^5.1.0": "5.1.0_svelte@5.43.2__acorn@8.15.0",
     "npm:@soffinal/websocket@~0.2.1": "0.2.1_typescript@5.9.3",
     "npm:@sveltejs/adapter-static@^3.0.10": "3.0.10_@sveltejs+kit@2.48.4__@sveltejs+vite-plugin-svelte@6.2.1___svelte@5.43.2____acorn@8.15.0___vite@7.1.12____@types+node@24.10.0____picomatch@4.0.3___@types+node@24.10.0__svelte@5.43.2___acorn@8.15.0__vite@7.1.12___@types+node@24.10.0___picomatch@4.0.3__acorn@8.15.0__@types+node@24.10.0_@sveltejs+vite-plugin-svelte@6.2.1__svelte@5.43.2___acorn@8.15.0__vite@7.1.12___@types+node@24.10.0___picomatch@4.0.3__@types+node@24.10.0_svelte@5.43.2__acorn@8.15.0_vite@7.1.12__@types+node@24.10.0__picomatch@4.0.3_@types+node@24.10.0",
@@ -31,6 +32,8 @@
     "npm:prettier@^3.6.2": "3.6.2",
     "npm:svelte-awesome-color-picker@^4.1.0": "4.1.0_svelte@5.43.2__acorn@8.15.0",
     "npm:svelte-check@^4.3.3": "4.3.3_svelte@5.43.2__acorn@8.15.0_typescript@5.9.3",
+    "npm:svelte-device-info@^1.0.6": "1.0.6",
+    "npm:svelte-floating-ui@^1.6.2": "1.6.2",
     "npm:svelte-infinite@~0.5.1": "0.5.1_svelte@5.43.2__acorn@8.15.0",
     "npm:svelte@^5.43.2": "5.43.2_acorn@8.15.0",
     "npm:tailwindcss@^4.1.16": "4.1.16",
@@ -311,6 +314,22 @@
         "@eslint/core",
         "levn"
       ]
+    },
+    "@floating-ui/core@1.7.3": {
+      "integrity": "sha512-sGnvb5dmrJaKEZ+LDIpguvdX3bDlEllmv4/ClQ9awcmCZrlx5jQyyMWFM5kBI+EyNOCDDiKk8il0zeuX3Zlg/w==",
+      "dependencies": [
+        "@floating-ui/utils"
+      ]
+    },
+    "@floating-ui/dom@1.7.4": {
+      "integrity": "sha512-OOchDgh4F2CchOX94cRVqhvy7b3AFb+/rQXyswmzmGakRfkMgoWVjfnLWkRirfLEfuD4ysVW16eXzwt3jHIzKA==",
+      "dependencies": [
+        "@floating-ui/core",
+        "@floating-ui/utils"
+      ]
+    },
+    "@floating-ui/utils@0.2.10": {
+      "integrity": "sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ=="
     },
     "@humanfs/core@0.19.1": {
       "integrity": "sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA=="
@@ -1621,6 +1640,12 @@
       ],
       "bin": true
     },
+    "svelte-device-info@1.0.6": {
+      "integrity": "sha512-G13YYkxnlz5AryOps8KFHFt8+5Ne7JiZgTxtYEXLVBF4UAwu9I1F+Xcd9rfhTZqUUtF9fm4qJpSi3I6p1JUt6Q==",
+      "dependencies": [
+        "tslib"
+      ]
+    },
     "svelte-eslint-parser@1.4.0_svelte@5.43.2__acorn@8.15.0_postcss@8.5.6": {
       "integrity": "sha512-fjPzOfipR5S7gQ/JvI9r2H8y9gMGXO3JtmrylHLLyahEMquXI0lrebcjT+9/hNgDej0H7abTyox5HpHmW1PSWA==",
       "dependencies": [
@@ -1634,6 +1659,12 @@
       ],
       "optionalPeers": [
         "svelte"
+      ]
+    },
+    "svelte-floating-ui@1.6.2": {
+      "integrity": "sha512-EC+DZtBey50P6l3NSzNQWon3cip8a1bzwdpmCdc45kymqEWL4BKhPemAq7SQ9QLebDPaMECW6YodxFbs2d+O/w==",
+      "dependencies": [
+        "@floating-ui/dom"
       ]
     },
     "svelte-infinite@0.5.1_svelte@5.43.2__acorn@8.15.0": {
@@ -1688,6 +1719,9 @@
       "dependencies": [
         "typescript"
       ]
+    },
+    "tslib@2.8.1": {
+      "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="
     },
     "type-check@0.4.0": {
       "integrity": "sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==",
@@ -1783,6 +1817,7 @@
         "npm:@atcute/tid@^1.0.3",
         "npm:@eslint/compat@^1.4.1",
         "npm:@eslint/js@^9.39.0",
+        "npm:@floating-ui/dom@^1.7.4",
         "npm:@iconify/svelte@^5.1.0",
         "npm:@soffinal/websocket@~0.2.1",
         "npm:@sveltejs/adapter-static@^3.0.10",
@@ -1803,6 +1838,8 @@
         "npm:prettier@^3.6.2",
         "npm:svelte-awesome-color-picker@^4.1.0",
         "npm:svelte-check@^4.3.3",
+        "npm:svelte-device-info@^1.0.6",
+        "npm:svelte-floating-ui@^1.6.2",
         "npm:svelte-infinite@~0.5.1",
         "npm:svelte@^5.43.2",
         "npm:tailwindcss@^4.1.16",

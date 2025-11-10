@@ -5,6 +5,7 @@
 	import ProfilePicture from './ProfilePicture.svelte';
 	import PfpPlaceholder from './PfpPlaceholder.svelte';
 	import Popup from './Popup.svelte';
+	import Dropdown from './Dropdown.svelte';
 	import { flow } from '$lib/at/oauth';
 	import { isHandle, type AtprotoDid } from '@atcute/lexicons/syntax';
 	import Icon from '@iconify/svelte';
@@ -31,19 +32,17 @@
 	let loginError = $state('');
 	let isLoggingIn = $state(false);
 
-	const toggleDropdown = (e: MouseEvent) => {
-		e.stopPropagation();
-		isDropdownOpen = !isDropdownOpen;
-	};
+	const toggleDropdown = () => (isDropdownOpen = !isDropdownOpen);
+	const closeDropdown = () => (isDropdownOpen = false);
 
 	const selectAccount = (did: AtprotoDid) => {
 		onAccountSelected(did);
-		isDropdownOpen = false;
+		closeDropdown();
 	};
 
 	const openLoginModal = () => {
 		isLoginModalOpen = true;
-		isDropdownOpen = false;
+		closeDropdown();
 		loginHandle = '';
 		loginError = '';
 		// HACK: i hate this but it works so it doesnt really matter
@@ -89,86 +88,79 @@
 	const handleKeydown = (event: KeyboardEvent) => {
 		if (event.key === 'Enter' && !isLoggingIn) handleLogin();
 	};
-
-	const closeDropdown = () => {
-		isDropdownOpen = false;
-	};
 </script>
 
-<svelte:window onclick={closeDropdown} />
-
-<div class="relative">
-	<button
-		onclick={toggleDropdown}
-		class="flex h-13 w-13 items-center justify-center rounded-sm shadow-md transition-all hover:scale-110 hover:shadow-xl hover:saturate-150"
-	>
-		{#if selectedDid}
-			<ProfilePicture {client} did={selectedDid} size={13} />
-		{:else}
-			<PfpPlaceholder color="var(--nucleus-accent)" size={13} />
-		{/if}
-	</button>
-
-	{#if isDropdownOpen}
-		<!-- svelte-ignore a11y_click_events_have_key_events -->
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="absolute bottom-full z-20 mb-1 min-w-52 animate-fade-in-scale-fast overflow-hidden rounded-sm border-2 border-(--nucleus-accent) bg-(--nucleus-bg)/94 shadow-2xl backdrop-blur-lg transition-all"
-			onclick={(e) => e.stopPropagation()}
+<Dropdown bind:isOpen={isDropdownOpen}>
+	{#snippet trigger()}
+		<button
+			onclick={toggleDropdown}
+			class="flex h-13 w-13 items-center justify-center rounded-sm shadow-md transition-all hover:scale-110 hover:shadow-xl hover:saturate-150"
 		>
-			{#if accounts.length > 0}
-				<div class="p-2">
-					{#each accounts as account (account.did)}
-						{@const color = generateColorForDid(account.did)}
-						{#snippet action(name: string, icon: string, onClick: () => void)}
-							<div
-								title={name}
-								onclick={onClick}
-								class="hidden text-(--nucleus-accent) transition-all group-hover:block hover:scale-[1.2] hover:shadow-md"
-							>
-								<Icon class="h-5 w-5" {icon} />
-							</div>
-						{/snippet}
-						<button
-							onclick={() => selectAccount(account.did)}
-							class="
-    							group flex w-full items-center gap-3 rounded-sm p-2 text-left text-sm font-medium transition-all
-    							{account.did === selectedDid ? 'shadow-lg' : ''}
-							"
-							style="color: {color}; background: {account.did === selectedDid
-								? `linear-gradient(135deg, color-mix(in srgb, var(--nucleus-accent) 20%, transparent), color-mix(in srgb, var(--nucleus-accent2) 20%, transparent))`
-								: 'transparent'};"
-						>
-							<span>@{account.handle}</span>
-
-							<div class="grow"></div>
-
-							{@render action('relogin', 'heroicons:arrow-path-rounded-square-solid', () =>
-								initiateLogin(account.did, account.handle)
-							)}
-							{@render action('logout', 'heroicons:trash-solid', () => onLogout(account.did))}
-
-							{#if account.did === selectedDid}
-								<Icon
-									icon="heroicons:check-16-solid"
-									class="h-5 w-5 scale-125 text-(--nucleus-accent) group-hover:hidden"
-								/>
-							{/if}
-						</button>
-					{/each}
-				</div>
-				<div class="mx-2 h-px bg-linear-to-r from-(--nucleus-accent) to-(--nucleus-accent2)"></div>
+			{#if selectedDid}
+				<ProfilePicture {client} did={selectedDid} size={13} />
+			{:else}
+				<PfpPlaceholder color="var(--nucleus-accent)" size={13} />
 			{/if}
-			<button
-				onclick={openLoginModal}
-				class="group flex w-full origin-left items-center gap-3 p-3 text-left text-sm font-semibold text-(--nucleus-accent) transition-all hover:scale-[1.1]"
-			>
-				<Icon class="h-5 w-5 scale-[130%]" icon="heroicons:plus-16-solid" />
-				<span>add account</span>
-			</button>
-		</div>
-	{/if}
-</div>
+		</button>
+	{/snippet}
+
+	<div
+		class="min-w-52 animate-fade-in-scale-fast overflow-hidden rounded-sm border-2 border-(--nucleus-accent) bg-(--nucleus-bg)/94 shadow-2xl backdrop-blur-lg transition-all"
+	>
+		{#if accounts.length > 0}
+			<div class="p-2">
+				{#each accounts as account (account.did)}
+					{@const color = generateColorForDid(account.did)}
+					{#snippet action(name: string, icon: string, onClick: () => void)}
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							title={name}
+							onclick={onClick}
+							class="hidden text-(--nucleus-accent) transition-all group-hover:block hover:scale-[1.2] hover:shadow-md"
+						>
+							<Icon class="h-5 w-5" {icon} />
+						</div>
+					{/snippet}
+					<button
+						onclick={() => selectAccount(account.did)}
+						class="
+						group flex w-full items-center gap-3 rounded-sm p-2 text-left text-sm font-medium transition-all
+						{account.did === selectedDid ? 'shadow-lg' : ''}
+					"
+						style="color: {color}; background: {account.did === selectedDid
+							? `linear-gradient(135deg, color-mix(in srgb, var(--nucleus-accent) 20%, transparent), color-mix(in srgb, var(--nucleus-accent2) 20%, transparent))`
+							: 'transparent'};"
+					>
+						<span>@{account.handle}</span>
+
+						<div class="grow"></div>
+
+						{@render action('relogin', 'heroicons:arrow-path-rounded-square-solid', () =>
+							initiateLogin(account.did, account.handle)
+						)}
+						{@render action('logout', 'heroicons:trash-solid', () => onLogout(account.did))}
+
+						{#if account.did === selectedDid}
+							<Icon
+								icon="heroicons:check-16-solid"
+								class="h-5 w-5 scale-125 text-(--nucleus-accent) group-hover:hidden"
+							/>
+						{/if}
+					</button>
+				{/each}
+			</div>
+			<div class="mx-2 h-px bg-linear-to-r from-(--nucleus-accent) to-(--nucleus-accent2)"></div>
+		{/if}
+		<button
+			onclick={openLoginModal}
+			class="group flex w-full origin-left items-center gap-3 p-3 text-left text-sm font-semibold text-(--nucleus-accent) transition-all hover:scale-[1.1]"
+		>
+			<Icon class="h-5 w-5 scale-[130%]" icon="heroicons:plus-16-solid" />
+			<span>add account</span>
+		</button>
+	</div>
+</Dropdown>
 
 <Popup bind:isOpen={isLoginModalOpen} onClose={closeLoginModal} title="add account">
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
