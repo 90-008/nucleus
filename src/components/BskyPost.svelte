@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { type AtpClient } from '$lib/at/client';
-	import { AppBskyFeedPost } from '@atcute/bluesky';
+	import {
+		AppBskyEmbedExternal,
+		AppBskyEmbedImages,
+		AppBskyEmbedVideo,
+		AppBskyFeedPost
+	} from '@atcute/bluesky';
 	import {
 		parseCanonicalResourceUri,
 		type ActorIdentifier,
@@ -299,6 +304,35 @@
 				{#if !isOnPostComposer && record.embed}
 					{@const embed = record.embed}
 					<div class="mt-2">
+						{#snippet embedMedia(
+							embed: AppBskyEmbedImages.Main | AppBskyEmbedVideo.Main | AppBskyEmbedExternal.Main
+						)}
+							{#if embed.$type === 'app.bsky.embed.images'}
+								<!-- todo: improve how images are displayed, and pop out on click -->
+								{#each embed.images as image (image.image)}
+									{#if isBlob(image.image)}
+										<img
+											class="rounded-sm"
+											src={img('feed_thumbnail', did, image.image.ref.$link)}
+											alt={image.alt}
+										/>
+									{/if}
+								{/each}
+							{:else if embed.$type === 'app.bsky.embed.video'}
+								{#if isBlob(embed.video)}
+									{#await didDoc then didDoc}
+										{#if didDoc.ok}
+											<!-- svelte-ignore a11y_media_has_caption -->
+											<video
+												class="rounded-sm"
+												src={blob(didDoc.value.pds, did, embed.video.ref.$link)}
+												controls
+											></video>
+										{/if}
+									{/await}
+								{/if}
+							{/if}
+						{/snippet}
 						{#snippet embedPost(uri: ResourceUri)}
 							{#if quoteDepth < 2}
 								{@const parsedUri = expect(parseCanonicalResourceUri(uri))}
@@ -320,34 +354,15 @@
 								{@render embedBadge(record)}
 							{/if}
 						{/snippet}
-						{#if embed.$type === 'app.bsky.embed.images'}
-							<!-- todo: improve how images are displayed, and pop out on click -->
-							{#each embed.images as image (image.image)}
-								{#if isBlob(image.image)}
-									<img
-										class="rounded-sm"
-										src={img('feed_thumbnail', did, image.image.ref.$link)}
-										alt={image.alt}
-									/>
-								{/if}
-							{/each}
-						{:else if embed.$type === 'app.bsky.embed.video'}
-							{#if isBlob(embed.video)}
-								{#await didDoc then didDoc}
-									{#if didDoc.ok}
-										<!-- svelte-ignore a11y_media_has_caption -->
-										<video
-											class="rounded-sm"
-											src={blob(didDoc.value.pds, did, embed.video.ref.$link)}
-											controls
-										></video>
-									{/if}
-								{/await}
-							{/if}
+						{#if embed.$type === 'app.bsky.embed.images' || embed.$type === 'app.bsky.embed.video'}
+							{@render embedMedia(embed)}
 						{:else if embed.$type === 'app.bsky.embed.record'}
 							{@render embedPost(embed.record.uri)}
 						{:else if embed.$type === 'app.bsky.embed.recordWithMedia'}
-							{@render embedPost(embed.record.record.uri)}
+							<div class="space-y-1.5">
+								{@render embedPost(embed.record.record.uri)}
+								{@render embedMedia(embed.media)}
+							</div>
 						{/if}
 						<!-- todo: implement external link embeds -->
 					</div>
