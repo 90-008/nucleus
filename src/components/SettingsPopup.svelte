@@ -76,7 +76,7 @@
 							type="url"
 							bind:value={localSettings.endpoints[name]}
 							placeholder={defaultSettings.endpoints[name]}
-							class="single-line-input border-(--nucleus-accent)/40 bg-(--nucleus-accent)/3"
+							class="single-line-input"
 						/>
 					</div>
 				{/snippet}
@@ -97,7 +97,7 @@
 				type="url"
 				bind:value={localSettings.socialAppUrl}
 				placeholder={defaultSettings.socialAppUrl}
-				class="single-line-input border-(--nucleus-accent)/40 bg-(--nucleus-accent)/3"
+				class="single-line-input"
 			/>
 		</div>
 

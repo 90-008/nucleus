@@ -145,22 +145,24 @@
 	{#if replying}
 		{@render renderPost(replying)}
 	{/if}
-	<textarea
-		bind:this={textareaEl}
-		bind:value={postText}
-		onfocus={() => (isFocused = true)}
-		onblur={unfocus}
-		onkeydown={(event) => {
-			if (event.key === 'Escape') unfocus();
-			if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) doPost();
-		}}
-		placeholder="what's on your mind?"
-		rows="4"
-		class="field-sizing-content resize-none"
-	></textarea>
-	{#if quoting}
-		{@render renderPost(quoting)}
-	{/if}
+	<div class="composer space-y-2">
+		<textarea
+			bind:this={textareaEl}
+			bind:value={postText}
+			onfocus={() => (isFocused = true)}
+			onblur={unfocus}
+			onkeydown={(event) => {
+				if (event.key === 'Escape') unfocus();
+				if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) doPost();
+			}}
+			placeholder="what's on your mind?"
+			rows="4"
+			class="field-sizing-content resize-none"
+		></textarea>
+		{#if quoting}
+			{@render renderPost(quoting)}
+		{/if}
+	</div>
 {/snippet}
 
 <div class="relative min-h-13">
@@ -211,25 +213,38 @@
 	</div>
 </div>
 
+<!-- TODO: this fucking blows -->
 <style>
 	@reference "../app.css";
 
 	input,
-	textarea {
+	.composer {
 		@apply single-line-input bg-(--nucleus-bg)/35;
 		border-color: color-mix(in srgb, var(--acc-color) 30%, transparent);
+	}
+
+	.composer {
+		@apply p-2;
+	}
+
+	textarea {
+		@apply w-full bg-transparent p-0;
 	}
 
 	input {
 		@apply p-1 px-2;
 	}
 
-	textarea {
+	.composer {
 		@apply focus:scale-100;
 	}
 
 	input::placeholder,
 	textarea::placeholder {
 		color: color-mix(in srgb, var(--acc-color) 45%, var(--nucleus-bg));
+	}
+
+	textarea:focus {
+		@apply border-none! [box-shadow:none]! outline-none!;
 	}
 </style>

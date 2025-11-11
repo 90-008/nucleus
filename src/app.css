@@ -24,7 +24,10 @@
 }
 
 @utility single-line-input {
-	@apply w-full rounded-sm border-2 px-3 py-2 font-medium transition-all focus:scale-[1.02] focus:shadow-lg focus:outline-none;
+	@apply w-full rounded-sm border-2 border-(--nucleus-accent)/40 bg-(--nucleus-accent)/3 px-3 py-2 font-medium transition-all;
+	&:focus {
+		@apply scale-[1.02] border-(--nucleus-accent)/80 bg-(--nucleus-accent)/10 [box-shadow:none] outline-none;
+	}
 }
 
 @utility action-button {

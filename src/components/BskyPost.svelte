@@ -521,7 +521,7 @@
 			{@render dropdownItem('heroicons:link-20-solid', 'copy at uri', () =>
 				navigator.clipboard.writeText(post.uri)
 			)}
-			{@render dropdownItem('heroicons:clipboard', 'copy post text', () =>
+			{@render dropdownItem('heroicons:clipboard-20-solid', 'copy post text', () =>
 				navigator.clipboard.writeText(post.record.text)
 			)}
 			{#if actionClient}
