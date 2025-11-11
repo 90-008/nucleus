@@ -8,13 +8,18 @@
 		type Placement
 	} from '@floating-ui/dom';
 	import { onMount } from 'svelte';
+	import { portal } from 'svelte-portal';
+	import type { ClassValue } from 'svelte/elements';
 
 	interface Props {
+		class?: ClassValue;
+		style?: string;
 		isOpen?: boolean;
 		trigger?: import('svelte').Snippet;
 		children?: import('svelte').Snippet;
 		placement?: Placement;
 		offsetDistance?: number;
+		position?: { x: number; y: number };
 	}
 
 	let {
@@ -22,7 +27,9 @@
 		trigger,
 		children,
 		placement = 'bottom-start',
-		offsetDistance = 8
+		offsetDistance = 2,
+		position = $bindable(),
+		...restProps
 	}: Props = $props();
 
 	let triggerRef: HTMLElement | undefined = $state();
@@ -86,7 +93,14 @@
 </div>
 
 {#if isOpen}
-	<div bind:this={contentRef} class="fixed! z-9999!" role="menu" tabindex="-1">
+	<div
+		use:portal={'#app-root'}
+		bind:this={contentRef}
+		class="fixed z-9999 animate-fade-in-scale-fast overflow-hidden {restProps.class ?? ''}"
+		style={restProps.style}
+		role="menu"
+		tabindex="-1"
+	>
 		{@render children?.()}
 	</div>
 {/if}

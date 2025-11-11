@@ -33,8 +33,8 @@
     "npm:svelte-awesome-color-picker@^4.1.0": "4.1.0_svelte@5.43.2__acorn@8.15.0",
     "npm:svelte-check@^4.3.3": "4.3.3_svelte@5.43.2__acorn@8.15.0_typescript@5.9.3",
     "npm:svelte-device-info@^1.0.6": "1.0.6",
-    "npm:svelte-floating-ui@^1.6.2": "1.6.2",
     "npm:svelte-infinite@~0.5.1": "0.5.1_svelte@5.43.2__acorn@8.15.0",
+    "npm:svelte-portal@^2.2.1": "2.2.1",
     "npm:svelte@^5.43.2": "5.43.2_acorn@8.15.0",
     "npm:tailwindcss@^4.1.16": "4.1.16",
     "npm:typescript-eslint@^8.46.3": "8.46.3_eslint@9.39.0_typescript@5.9.3_@typescript-eslint+parser@8.46.3__eslint@9.39.0__typescript@5.9.3",
@@ -1661,17 +1661,14 @@
         "svelte"
       ]
     },
-    "svelte-floating-ui@1.6.2": {
-      "integrity": "sha512-EC+DZtBey50P6l3NSzNQWon3cip8a1bzwdpmCdc45kymqEWL4BKhPemAq7SQ9QLebDPaMECW6YodxFbs2d+O/w==",
-      "dependencies": [
-        "@floating-ui/dom"
-      ]
-    },
     "svelte-infinite@0.5.1_svelte@5.43.2__acorn@8.15.0": {
       "integrity": "sha512-NvpYWrHPcLHZQMnqUXgKGpOSMq9kMQ6sa8+WO80jLrgBFX+LWoKvAsrc1d1g+eiaagNAE9HalWWJ4KDtYi/+sw==",
       "dependencies": [
         "svelte"
       ]
+    },
+    "svelte-portal@2.2.1": {
+      "integrity": "sha512-uF7is5sM4aq5iN7QF/67XLnTUvQCf2iiG/B1BHTqLwYVY1dsVmTeXZ/LeEyU6dLjApOQdbEG9lkqHzxiQtOLEQ=="
     },
     "svelte@5.43.2_acorn@8.15.0": {
       "integrity": "sha512-ro1umEzX8rT5JpCmlf0PPv7ncD8MdVob9e18bhwqTKNoLjS8kDvhVpaoYVPc+qMwDAOfcwJtyY7ZFSDbOaNPgA==",
@@ -1839,8 +1836,8 @@
         "npm:svelte-awesome-color-picker@^4.1.0",
         "npm:svelte-check@^4.3.3",
         "npm:svelte-device-info@^1.0.6",
-        "npm:svelte-floating-ui@^1.6.2",
         "npm:svelte-infinite@~0.5.1",
+        "npm:svelte-portal@^2.2.1",
         "npm:svelte@^5.43.2",
         "npm:tailwindcss@^4.1.16",
         "npm:typescript-eslint@^8.46.3",

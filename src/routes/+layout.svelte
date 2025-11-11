@@ -9,6 +9,9 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<div class="min-h-screen bg-(--nucleus-bg) text-(--nucleus-fg) transition-colors duration-300">
+<div
+	id="app-root"
+	class="min-h-screen bg-(--nucleus-bg) text-(--nucleus-fg) transition-colors duration-300"
+>
 	{@render children?.()}
 </div>

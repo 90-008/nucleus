@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { portal } from 'svelte-portal';
 
 	interface Props {
 		isOpen: boolean;
@@ -31,29 +32,14 @@
 		if (event.key === 'Escape') onClose();
 	};
 
-	let popupElement: HTMLDivElement | undefined = $state();
-
-	// this sucks probably idk
 	$effect(() => {
-		if (!isOpen) return;
-
-		const preventDefault = (e: Event) => {
-			if (popupElement && popupElement.contains(e.target as Node)) return;
-			e.preventDefault();
-		};
-
-		document.addEventListener('wheel', preventDefault, { passive: false });
-		document.addEventListener('touchmove', preventDefault, { passive: false });
-
-		return () => {
-			document.removeEventListener('wheel', preventDefault);
-			document.removeEventListener('touchmove', preventDefault);
-		};
+		document.body.style.overflow = isOpen ? 'hidden' : 'auto';
 	});
 </script>
 
 {#if isOpen}
 	<div
+		use:portal={'#app-root'}
 		class="fixed inset-0 z-50 flex items-center justify-center bg-(--nucleus-bg)/80 backdrop-blur-sm"
 		onclick={onClose}
 		onkeydown={handleKeydown}
@@ -63,12 +49,10 @@
 		<!-- svelte-ignore a11y_interactive_supports_focus -->
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<div
-			bind:this={popupElement}
-			class="flex {height === 'auto'
-				? ''
-				: 'h-[' +
-					height +
-					']'} {width} shrink animate-fade-in-scale flex-col rounded-sm border-2 border-(--nucleus-accent) bg-(--nucleus-bg) shadow-2xl transition-all"
+			class="
+			flex {height === 'auto' ? '' : `h-[${height}]`} {width} shrink animate-fade-in-scale flex-col
+			rounded-sm border-2 border-(--nucleus-accent) bg-(--nucleus-bg) shadow-2xl transition-all
+			"
 			style={height !== 'auto' ? `height: ${height}` : ''}
 			onclick={(e) => e.stopPropagation()}
 			role="dialog"

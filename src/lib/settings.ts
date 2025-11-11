@@ -9,6 +9,7 @@ export type ApiEndpoints = Record<string, string> & {
 export type Settings = {
 	endpoints: ApiEndpoints;
 	theme: Theme;
+	socialAppUrl: string;
 };
 
 export const defaultSettings: Settings = {
@@ -17,7 +18,8 @@ export const defaultSettings: Settings = {
 		spacedust: 'https://spacedust.microcosm.blue',
 		constellation: 'https://constellation.microcosm.blue'
 	},
-	theme: defaultTheme
+	theme: defaultTheme,
+	socialAppUrl: 'https://bsky.app'
 };
 
 const createSettingsStore = () => {
@@ -26,6 +28,7 @@ const createSettingsStore = () => {
 	const initial: Partial<Settings> = stored ? JSON.parse(stored) : defaultSettings;
 	initial.endpoints = initial.endpoints ?? defaultSettings.endpoints;
 	initial.theme = initial.theme ?? defaultSettings.theme;
+	initial.socialAppUrl = initial.socialAppUrl ?? defaultSettings.socialAppUrl;
 
 	const { subscribe, set, update } = writable<Settings>(initial as Settings);
 

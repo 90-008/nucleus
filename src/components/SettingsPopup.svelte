@@ -89,6 +89,21 @@
 		{@render divider()}
 
 		<div>
+			<label for="social-app-url" class="mb-2 block text-sm font-semibold text-(--nucleus-fg)/80">
+				social-app url (for when copying links to posts / profiles)
+			</label>
+			<input
+				id="social-app-url"
+				type="url"
+				bind:value={localSettings.socialAppUrl}
+				placeholder={defaultSettings.socialAppUrl}
+				class="single-line-input border-(--nucleus-accent)/40 bg-(--nucleus-accent)/3"
+			/>
+		</div>
+
+		{@render divider()}
+
+		<div>
 			{@render settingHeader(
 				'cache management',
 				'clears cached data (records, DID documents, handles, etc.)'

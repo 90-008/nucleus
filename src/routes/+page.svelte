@@ -272,6 +272,7 @@
 <div class="mx-auto max-w-2xl">
 	<!-- thread list (page scrolls as a whole) -->
 	<div
+		id="app-thread-list"
 		class="mb-4 min-h-screen p-2 [scrollbar-color:var(--nucleus-accent)_transparent]"
 		bind:this={scrollContainer}
 	>
@@ -285,6 +286,7 @@
 			</div>
 		{/if}
 	</div>
+
 	<!-- header -->
 	<div class="sticky bottom-0 z-10">
 		{#if errors.length > 0}

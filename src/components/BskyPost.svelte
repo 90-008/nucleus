@@ -31,6 +31,8 @@
 	import { derived } from 'svelte/store';
 	import Device from 'svelte-device-info';
 	import Dropdown from './Dropdown.svelte';
+	import { type AppBskyEmbeds } from '$lib/at/types';
+	import { settings } from '$lib/settings';
 
 	interface Props {
 		client: AtpClient;
@@ -215,20 +217,25 @@
 	};
 
 	let actionsOpen = $state(false);
+	let actionsPos = $state({ x: 0, y: 0 });
+
+	const handleRightClick = (event: MouseEvent) => {
+		actionsOpen = true;
+		actionsPos = { x: event.clientX, y: event.clientY };
+		event.preventDefault();
+	};
 </script>
 
-{#snippet embedBadge(record: AppBskyFeedPost.Main)}
-	{#if record.embed}
-		<span
-			class="rounded-full px-2.5 py-0.5 text-xs font-medium"
-			style="
-			background: color-mix(in srgb, {mini ? 'var(--nucleus-fg)' : color} 10%, transparent);
-			color: {mini ? 'var(--nucleus-fg)' : color};
-			"
-		>
-			{getEmbedText(record.embed.$type)}
-		</span>
-	{/if}
+{#snippet embedBadge(embed: AppBskyEmbeds)}
+	<span
+		class="rounded-full px-2.5 py-0.5 text-xs font-medium"
+		style="
+		background: color-mix(in srgb, {mini ? 'var(--nucleus-fg)' : color} 10%, transparent);
+		color: {mini ? 'var(--nucleus-fg)' : color};
+		"
+	>
+		{getEmbedText(embed.$type!)}
+	</span>
 {/snippet}
 
 {#if mini}
@@ -244,7 +251,10 @@
 					onclick={() => scrollToAndPulse(post.value.uri)}
 					class="select-none hover:cursor-pointer hover:underline"
 				>
-					<span style="color: {color};">@{handle}</span>: {@render embedBadge(record)}
+					<span style="color: {color};">@{handle}</span>:
+					{#if record.embed}
+						{@render embedBadge(record.embed)}
+					{/if}
 					<span title={record.text}>{record.text}</span>
 				</div>
 			{:else}
@@ -269,32 +279,45 @@
 	{:then post}
 		{#if post.ok}
 			{@const record = post.value.record}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				id="timeline-post-{post.value.uri}-{quoteDepth}"
+				oncontextmenu={handleRightClick}
 				class="
 				group rounded-sm border-2 p-2 shadow-lg backdrop-blur-sm transition-all
 				{$isPulsing ? 'animate-pulse-highlight' : ''}
+				{isOnPostComposer ? 'backdrop-brightness-20' : ''}
 				"
 				style="
-				background: {color}{isOnPostComposer ? '36' : '18'};
+				background: {color}{isOnPostComposer
+					? '36'
+					: Math.floor(24.0 * (quoteDepth * 0.5 + 1.0)).toString(16)};
 				border-color: {color}{isOnPostComposer ? '99' : '66'};
 				"
 			>
 				<div
-					class="mb-3 flex w-fit max-w-full items-center gap-1.5 rounded-sm pr-1"
+					class="
+					mb-3 flex w-fit max-w-full items-center gap-1.5 rounded-sm pr-1
+					"
 					style="background: {color}33;"
 				>
 					<ProfilePicture {client} {did} size={8} />
 
-					<span class="flex min-w-0 items-center gap-2 font-bold" style="color: {color};">
+					<span
+						class="
+						flex min-w-0 items-center gap-2 font-bold
+						{isOnPostComposer ? 'contrast-200' : ''}
+						"
+						style="color: {color};"
+					>
 						{#await client.getProfile(did)}
 							{handle}
 						{:then profile}
 							{#if profile.ok}
 								{@const profileValue = profile.value}
-								<span class="min-w-0 overflow-hidden text-nowrap overflow-ellipsis"
+								<span class="w-min min-w-0 overflow-hidden text-nowrap overflow-ellipsis"
 									>{profileValue.displayName}</span
-								><span class="shrink-0 text-nowrap opacity-70">(@{handle})</span>
+								><span class="text-nowrap opacity-70">(@{handle})</span>
 							{:else}
 								{handle}
 							{/if}
@@ -305,76 +328,16 @@
 						>{getRelativeTime(new Date(record.createdAt))}</span
 					>
 				</div>
-				<p class="leading-relaxed text-wrap wrap-break-word">
+				<p class="leading-normal text-wrap wrap-break-word">
 					{record.text}
-					{#if isOnPostComposer}
-						{@render embedBadge(record)}
+					{#if isOnPostComposer && record.embed}
+						{@render embedBadge(record.embed)}
 					{/if}
 				</p>
 				{#if !isOnPostComposer && record.embed}
 					{@const embed = record.embed}
 					<div class="mt-2">
-						{#snippet embedMedia(
-							embed: AppBskyEmbedImages.Main | AppBskyEmbedVideo.Main | AppBskyEmbedExternal.Main
-						)}
-							{#if embed.$type === 'app.bsky.embed.images'}
-								<!-- todo: improve how images are displayed, and pop out on click -->
-								{#each embed.images as image (image.image)}
-									{#if isBlob(image.image)}
-										<img
-											class="rounded-sm"
-											src={img('feed_thumbnail', did, image.image.ref.$link)}
-											alt={image.alt}
-										/>
-									{/if}
-								{/each}
-							{:else if embed.$type === 'app.bsky.embed.video'}
-								{#if isBlob(embed.video)}
-									{#await didDoc then didDoc}
-										{#if didDoc.ok}
-											<!-- svelte-ignore a11y_media_has_caption -->
-											<video
-												class="rounded-sm"
-												src={blob(didDoc.value.pds, did, embed.video.ref.$link)}
-												controls
-											></video>
-										{/if}
-									{/await}
-								{/if}
-							{/if}
-						{/snippet}
-						{#snippet embedPost(uri: ResourceUri)}
-							{#if quoteDepth < 2}
-								{@const parsedUri = expect(parseCanonicalResourceUri(uri))}
-								<!-- reject recursive quotes -->
-								{#if !(did === parsedUri.repo && rkey === parsedUri.rkey)}
-									<BskyPost
-										{client}
-										quoteDepth={quoteDepth + 1}
-										did={parsedUri.repo}
-										rkey={parsedUri.rkey}
-										{isOnPostComposer}
-										{onQuote}
-										{onReply}
-									/>
-								{:else}
-									<span>you think you're funny with that recursive quote but i'm onto you</span>
-								{/if}
-							{:else}
-								{@render embedBadge(record)}
-							{/if}
-						{/snippet}
-						{#if embed.$type === 'app.bsky.embed.images' || embed.$type === 'app.bsky.embed.video'}
-							{@render embedMedia(embed)}
-						{:else if embed.$type === 'app.bsky.embed.record'}
-							{@render embedPost(embed.record.uri)}
-						{:else if embed.$type === 'app.bsky.embed.recordWithMedia'}
-							<div class="space-y-1.5">
-								{@render embedPost(embed.record.record.uri)}
-								{@render embedMedia(embed.media)}
-							</div>
-						{/if}
-						<!-- todo: implement external link embeds -->
+						{@render postEmbed(embed)}
 					</div>
 				{/if}
 				{#if !isOnPostComposer}
@@ -389,6 +352,70 @@
 		{/if}
 	{/await}
 {/if}
+
+{#snippet postEmbed(embed: AppBskyEmbeds)}
+	{#snippet embedMedia(
+		embed: AppBskyEmbedImages.Main | AppBskyEmbedVideo.Main | AppBskyEmbedExternal.Main
+	)}
+		{#if embed.$type === 'app.bsky.embed.images'}
+			<!-- todo: improve how images are displayed, and pop out on click -->
+			{#each embed.images as image (image.image)}
+				{#if isBlob(image.image)}
+					<img
+						class="rounded-sm"
+						src={img('feed_thumbnail', did, image.image.ref.$link)}
+						alt={image.alt}
+					/>
+				{/if}
+			{/each}
+		{:else if embed.$type === 'app.bsky.embed.video'}
+			{#if isBlob(embed.video)}
+				{#await didDoc then didDoc}
+					{#if didDoc.ok}
+						<!-- svelte-ignore a11y_media_has_caption -->
+						<video
+							class="rounded-sm"
+							src={blob(didDoc.value.pds, did, embed.video.ref.$link)}
+							controls
+						></video>
+					{/if}
+				{/await}
+			{/if}
+		{/if}
+	{/snippet}
+	{#snippet embedPost(uri: ResourceUri)}
+		{#if quoteDepth < 2}
+			{@const parsedUri = expect(parseCanonicalResourceUri(uri))}
+			<!-- reject recursive quotes -->
+			{#if !(did === parsedUri.repo && rkey === parsedUri.rkey)}
+				<BskyPost
+					{client}
+					quoteDepth={quoteDepth + 1}
+					did={parsedUri.repo}
+					rkey={parsedUri.rkey}
+					{isOnPostComposer}
+					{onQuote}
+					{onReply}
+				/>
+			{:else}
+				<span>you think you're funny with that recursive quote but i'm onto you</span>
+			{/if}
+		{:else}
+			{@render embedBadge(embed)}
+		{/if}
+	{/snippet}
+	{#if embed.$type === 'app.bsky.embed.images' || embed.$type === 'app.bsky.embed.video'}
+		{@render embedMedia(embed)}
+	{:else if embed.$type === 'app.bsky.embed.record'}
+		{@render embedPost(embed.record.uri)}
+	{:else if embed.$type === 'app.bsky.embed.recordWithMedia'}
+		<div class="space-y-1.5">
+			{@render embedPost(embed.record.record.uri)}
+			{@render embedMedia(embed.media)}
+		</div>
+	{/if}
+	<!-- todo: implement external link embeds -->
+{/snippet}
 
 {#snippet postControls(post: PostWithUri, backlinks?: PostActions)}
 	{#snippet control(
@@ -453,24 +480,55 @@
 				true
 			)}
 		</div>
-		<div
-			class="
-		    w-fit items-center rounded-sm transition-opacity
-			duration-100 ease-in-out group-hover:opacity-100
-			{!actionsOpen && !Device.isMobile ? 'opacity-0' : ''}
-			"
-			style="background: {color}1f;"
+		<Dropdown
+			class="flex min-w-54 flex-col gap-1 rounded-sm border-2 p-1 shadow-2xl backdrop-blur-xl backdrop-brightness-60"
+			style="background: {color}36; border-color: {color}99;"
+			bind:isOpen={actionsOpen}
+			bind:position={actionsPos}
 		>
-			<Dropdown bind:isOpen={actionsOpen}>
-				{#snippet trigger()}
+			{@render dropdownItem('heroicons:link-20-solid', 'copy link to post', () =>
+				navigator.clipboard.writeText(`${$settings.socialAppUrl}/profile/${did}/post/${rkey}`)
+			)}
+			{@render dropdownItem('heroicons:link-20-solid', 'copy at uri', () =>
+				navigator.clipboard.writeText(post.uri)
+			)}
+			<div class="my-0.75 h-px w-full opacity-60" style="background: {color};"></div>
+			{@render dropdownItem('heroicons:clipboard', 'copy post text', () =>
+				navigator.clipboard.writeText(post.record.text)
+			)}
+
+			{#snippet trigger()}
+				<div
+					class="
+          		    w-fit items-center rounded-sm transition-opacity
+         			duration-100 ease-in-out group-hover:opacity-100
+         			{!actionsOpen && !Device.isMobile ? 'opacity-0' : ''}
+         			"
+					style="background: {color}1f;"
+				>
 					{@render control('actions', 'heroicons:ellipsis-horizontal-16-solid', (e) => {
 						e.stopPropagation();
 						actionsOpen = !actionsOpen;
+						actionsPos = { x: 0, y: 0 };
 					})}
-				{/snippet}
-
-				woof
-			</Dropdown>
-		</div>
+				</div>
+			{/snippet}
+		</Dropdown>
 	</div>
+{/snippet}
+
+{#snippet dropdownItem(icon: string, label: string, onClick: () => void)}
+	<button
+		class="
+		flex items-center justify-between rounded-sm px-2 py-1.5
+		transition-all duration-100 hover:[backdrop-filter:brightness(120%)]
+		"
+		onclick={() => {
+			onClick();
+			actionsOpen = false;
+		}}
+	>
+		<span class="font-bold">{label}</span>
+		<Icon class="h-6 w-6" {icon} />
+	</button>
 {/snippet}
