@@ -14,7 +14,7 @@ stdenv.mkDerivation {
     ];
   };
 
-  outputHash = "sha256-glfh3vNy9U0w7CjgFADAwb0qg/tzC0H97EY7zSjTgaQ=";
+  outputHash = "sha256-s5rq8htDjR0I8MxPtLq1NYIywXGEdYbZZvE7I5+TCIU=";
   outputHashAlgo = "sha256";
   outputHashMode = "recursive";
 
