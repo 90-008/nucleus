@@ -23,7 +23,7 @@
 	import BskyPost from './BskyPost.svelte';
 	import Icon from '@iconify/svelte';
 	import { type Backlink, type BacklinksSource } from '$lib/at/constellation';
-	import { postActions, pulsingPostId, type PostActions } from '$lib/state.svelte';
+	import { clients, postActions, posts, pulsingPostId, type PostActions } from '$lib/state.svelte';
 	import * as TID from '@atcute/tid';
 	import type { PostWithUri } from '$lib/at/fetch';
 	import { onMount } from 'svelte';
@@ -61,6 +61,7 @@
 	}: Props = $props();
 
 	const selectedDid = $derived(client.user?.did ?? null);
+	const actionClient = $derived(clients.get(did as AtprotoDid));
 
 	const aturi: CanonicalResourceUri = `at://${did}/app.bsky.feed.post/${rkey}`;
 	const color = generateColorForDid(did);
@@ -223,6 +224,34 @@
 		actionsOpen = true;
 		actionsPos = { x: event.clientX, y: event.clientY };
 		event.preventDefault();
+	};
+
+	let deleteState: 'waiting' | 'confirm' | 'deleted' = $state('waiting');
+	$effect(() => {
+		if (deleteState === 'confirm' && !actionsOpen) deleteState = 'waiting';
+	});
+
+	const deletePost = () => {
+		if (deleteState === 'deleted') return;
+		if (deleteState === 'waiting') {
+			deleteState = 'confirm';
+			return;
+		}
+
+		actionClient?.atcute
+			?.post('com.atproto.repo.deleteRecord', {
+				input: {
+					collection: 'app.bsky.feed.post',
+					repo: did,
+					rkey
+				}
+			})
+			.then((result) => {
+				if (!result.ok) return;
+				posts.get(did)?.delete(aturi);
+				deleteState = 'deleted';
+			});
+		actionsOpen = false;
 	};
 </script>
 
@@ -492,10 +521,19 @@
 			{@render dropdownItem('heroicons:link-20-solid', 'copy at uri', () =>
 				navigator.clipboard.writeText(post.uri)
 			)}
-			<div class="my-0.75 h-px w-full opacity-60" style="background: {color};"></div>
 			{@render dropdownItem('heroicons:clipboard', 'copy post text', () =>
 				navigator.clipboard.writeText(post.record.text)
 			)}
+			{#if actionClient}
+				<div class="my-0.75 h-px w-full opacity-60" style="background: {color};"></div>
+				{@render dropdownItem(
+					deleteState === 'confirm' ? 'heroicons:check-20-solid' : 'heroicons:trash-20-solid',
+					deleteState === 'confirm' ? 'are you sure?' : 'delete post',
+					deletePost,
+					false,
+					deleteState === 'confirm' ? 'text-red-500' : ''
+				)}
+			{/if}
 
 			{#snippet trigger()}
 				<div
@@ -517,15 +555,22 @@
 	</div>
 {/snippet}
 
-{#snippet dropdownItem(icon: string, label: string, onClick: () => void)}
+{#snippet dropdownItem(
+	icon: string,
+	label: string,
+	onClick: () => void,
+	autoClose: boolean = true,
+	extraClass: string = ''
+)}
 	<button
 		class="
 		flex items-center justify-between rounded-sm px-2 py-1.5
 		transition-all duration-100 hover:[backdrop-filter:brightness(120%)]
+		{extraClass}
 		"
 		onclick={() => {
 			onClick();
-			actionsOpen = false;
+			if (autoClose) actionsOpen = false;
 		}}
 	>
 		<span class="font-bold">{label}</span>

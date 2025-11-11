@@ -12,7 +12,7 @@
 	import { AppBskyFeedPost } from '@atcute/bluesky';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { InfiniteLoader, LoaderState } from 'svelte-infinite';
-	import { notificationStream } from '$lib/state.svelte';
+	import { clients, cursors, notificationStream, posts, viewClient } from '$lib/state.svelte';
 	import { get } from 'svelte/store';
 	import Icon from '@iconify/svelte';
 	import { sessions } from '$lib/at/oauth';
@@ -35,7 +35,6 @@
 		}
 	});
 
-	const clients = new SvelteMap<AtprotoDid, AtpClient>();
 	const selectedClient = $derived(selectedDid ? clients.get(selectedDid) : null);
 
 	const loginAccount = async (account: Account) => {
@@ -65,11 +64,6 @@
 		cursors.delete(did);
 		handleAccountSelected(newAccounts[0]?.did);
 	};
-
-	const viewClient = new AtpClient();
-
-	const posts = new SvelteMap<Did, SvelteMap<ResourceUri, PostWithUri>>();
-	const cursors = new SvelteMap<Did, { value?: string; end: boolean }>();
 
 	let isSettingsOpen = $state(false);
 	let isNotificationsOpen = $state(false);
