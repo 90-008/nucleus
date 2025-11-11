@@ -51,6 +51,12 @@ button {
 	@apply hover:cursor-pointer;
 }
 
+a {
+	&:hover {
+		@apply cursor-pointer underline;
+	}
+}
+
 .grain:before {
 	content: '';
 	background-color: transparent;

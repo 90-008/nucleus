@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { type AtpClient } from '$lib/at/client';
 	import {
+		AppBskyActorProfile,
 		AppBskyEmbedExternal,
 		AppBskyEmbedImages,
 		AppBskyEmbedVideo,
@@ -27,7 +28,7 @@
 	import * as TID from '@atcute/tid';
 	import type { PostWithUri } from '$lib/at/fetch';
 	import { onMount } from 'svelte';
-	import type { AtprotoDid } from '@atcute/lexicons/syntax';
+	import { isActorIdentifier, type AtprotoDid } from '@atcute/lexicons/syntax';
 	import { derived } from 'svelte/store';
 	import Device from 'svelte-device-info';
 	import Dropdown from './Dropdown.svelte';
@@ -74,6 +75,13 @@
 	const post = data
 		? Promise.resolve(ok(data))
 		: client.getRecord(AppBskyFeedPost.mainSchema, did, rkey);
+	let profile: AppBskyActorProfile.Main | null = $state(null);
+	onMount(async () => {
+		const p = await client.getProfile(did);
+		if (!p.ok) return;
+		profile = p.value;
+		console.log(profile.description);
+	});
 	// const replies = replyBacklinks
 	// 	? Promise.resolve(ok(replyBacklinks))
 	// 	: client.getBacklinks(
@@ -224,6 +232,7 @@
 		actionsOpen = true;
 		actionsPos = { x: event.clientX, y: event.clientY };
 		event.preventDefault();
+		event.stopPropagation();
 	};
 
 	let deleteState: 'waiting' | 'confirm' | 'deleted' = $state('waiting');
@@ -253,6 +262,9 @@
 			});
 		actionsOpen = false;
 	};
+
+	let profileOpen = $state(false);
+	let profilePopoutShowDid = $state(false);
 </script>
 
 {#snippet embedBadge(embed: AppBskyEmbeds)}
@@ -265,6 +277,100 @@
 	>
 		{getEmbedText(embed.$type!)}
 	</span>
+{/snippet}
+
+{#snippet profileInline()}
+	<button
+		class="
+		flex min-w-0 items-center gap-2 font-bold {isOnPostComposer ? 'contrast-200' : ''}
+		rounded-sm pr-1 transition-colors duration-100 ease-in-out hover:bg-white/10
+		"
+		style="color: {color};"
+		onclick={() => (profileOpen = !profileOpen)}
+	>
+		<ProfilePicture {client} {did} size={8} />
+
+		{#if profile}
+			<span class="w-min max-w-sm min-w-0 overflow-hidden text-nowrap overflow-ellipsis"
+				>{profile.displayName}</span
+			><span class="shrink-0 text-sm text-nowrap opacity-70">(@{handle})</span>
+		{:else}
+			{handle}
+		{/if}
+	</button>
+{/snippet}
+
+<!-- eslint-disable svelte/no-navigation-without-resolve -->
+{#snippet profilePopout()}
+	{@const profileDesc = profile?.description?.trim() ?? ''}
+	<Dropdown
+		class="post-dropdown max-w-xl gap-2! p-2.5! backdrop-blur-3xl! backdrop-brightness-25!"
+		style="background: {color}36; border-color: {color}99;"
+		bind:isOpen={profileOpen}
+		trigger={profileInline}
+	>
+		<div class="flex items-center gap-2">
+			<ProfilePicture {client} {did} size={20} />
+
+			<div class="flex flex-col items-start overflow-hidden overflow-ellipsis">
+				<span class="mb-1.5 min-w-0 overflow-hidden text-2xl text-nowrap overflow-ellipsis">
+					{profile?.displayName ?? handle}
+					{#if profile?.pronouns}
+						<span class="shrink-0 text-sm text-nowrap opacity-60">({profile.pronouns})</span>
+					{/if}
+				</span>
+				<button
+					oncontextmenu={(e) => {
+						const node = e.target as Node;
+						const selection = window.getSelection() ?? new Selection();
+						const range = document.createRange();
+						range.selectNodeContents(node);
+						selection.removeAllRanges();
+						selection.addRange(range);
+						e.stopPropagation();
+					}}
+					onclick={() => (profilePopoutShowDid = !profilePopoutShowDid)}
+					class="mb-0.5 text-nowrap opacity-85 select-text hover:underline"
+				>
+					{profilePopoutShowDid ? did : `@${handle}`}
+				</button>
+				{#if profile?.website}
+					<a
+						target="_blank"
+						rel="noopener noreferrer"
+						href={profile.website}
+						class="text-sm text-nowrap opacity-60">{profile.website}</a
+					>
+				{/if}
+			</div>
+		</div>
+
+		{#if profileDesc.length > 0}
+			<p class="rounded-sm bg-black/25 p-1.5 text-wrap wrap-break-word">
+				{#each profileDesc.split(/(\s)/) as line, idx (idx)}
+					{#if line === '\n'}
+						<br />
+					{:else if isActorIdentifier(line.replace(/^@/, ''))}
+						<a
+							target="_blank"
+							rel="noopener noreferrer"
+							class="text-(--nucleus-accent2)"
+							href={`${$settings.socialAppUrl}/profile/${line.replace(/^@/, '')}`}>{line}</a
+						>
+					{:else if line.startsWith('https://')}
+						<a
+							target="_blank"
+							rel="noopener noreferrer"
+							class="text-(--nucleus-accent2)"
+							href={line}>{line.replace(/https?:\/\//, '')}</a
+						>
+					{:else}
+						{line}
+					{/if}
+				{/each}
+			</p>
+		{/if}
+	</Dropdown>
 {/snippet}
 
 {#if mini}
@@ -326,36 +432,18 @@
 			>
 				<div
 					class="
-					mb-3 flex w-fit max-w-full items-center gap-1.5 rounded-sm pr-1
+					mb-3 flex w-fit max-w-full items-center gap-1 rounded-sm pr-1
 					"
 					style="background: {color}33;"
 				>
-					<ProfilePicture {client} {did} size={8} />
-
-					<span
-						class="
-						flex min-w-0 items-center gap-2 font-bold
-						{isOnPostComposer ? 'contrast-200' : ''}
-						"
-						style="color: {color};"
-					>
-						{#await client.getProfile(did)}
-							{handle}
-						{:then profile}
-							{#if profile.ok}
-								{@const profileValue = profile.value}
-								<span class="w-min min-w-0 overflow-hidden text-nowrap overflow-ellipsis"
-									>{profileValue.displayName}</span
-								><span class="text-nowrap opacity-70">(@{handle})</span>
-							{:else}
-								{handle}
-							{/if}
-						{/await}
-					</span>
+					{@render profilePopout()}
 					<span>·</span>
-					<span class="text-nowrap text-(--nucleus-fg)/67"
-						>{getRelativeTime(new Date(record.createdAt))}</span
+					<span
+						title={new Date(record.createdAt).toLocaleString()}
+						class="pl-0.5 text-nowrap text-(--nucleus-fg)/67"
 					>
+						{getRelativeTime(new Date(record.createdAt))}
+					</span>
 				</div>
 				<p class="leading-normal text-wrap wrap-break-word">
 					{record.text}
@@ -386,31 +474,34 @@
 	{#snippet embedMedia(
 		embed: AppBskyEmbedImages.Main | AppBskyEmbedVideo.Main | AppBskyEmbedExternal.Main
 	)}
-		{#if embed.$type === 'app.bsky.embed.images'}
-			<!-- todo: improve how images are displayed, and pop out on click -->
-			{#each embed.images as image (image.image)}
-				{#if isBlob(image.image)}
-					<img
-						class="rounded-sm"
-						src={img('feed_thumbnail', did, image.image.ref.$link)}
-						alt={image.alt}
-					/>
-				{/if}
-			{/each}
-		{:else if embed.$type === 'app.bsky.embed.video'}
-			{#if isBlob(embed.video)}
-				{#await didDoc then didDoc}
-					{#if didDoc.ok}
-						<!-- svelte-ignore a11y_media_has_caption -->
-						<video
-							class="rounded-sm"
-							src={blob(didDoc.value.pds, did, embed.video.ref.$link)}
-							controls
-						></video>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div oncontextmenu={(e) => e.stopPropagation()}>
+			{#if embed.$type === 'app.bsky.embed.images'}
+				<!-- todo: improve how images are displayed, and pop out on click -->
+				{#each embed.images as image (image.image)}
+					{#if isBlob(image.image)}
+						<img
+							class="w-full rounded-sm"
+							src={img('feed_thumbnail', did, image.image.ref.$link)}
+							alt={image.alt}
+						/>
 					{/if}
-				{/await}
+				{/each}
+			{:else if embed.$type === 'app.bsky.embed.video'}
+				{#if isBlob(embed.video)}
+					{#await didDoc then didDoc}
+						{#if didDoc.ok}
+							<!-- svelte-ignore a11y_media_has_caption -->
+							<video
+								class="rounded-sm"
+								src={blob(didDoc.value.pds, did, embed.video.ref.$link)}
+								controls
+							></video>
+						{/if}
+					{/await}
+				{/if}
 			{/if}
-		{/if}
+		</div>
 	{/snippet}
 	{#snippet embedPost(uri: ResourceUri)}
 		{#if quoteDepth < 2}
@@ -510,10 +601,11 @@
 			)}
 		</div>
 		<Dropdown
-			class="flex min-w-54 flex-col gap-1 rounded-sm border-2 p-1 shadow-2xl backdrop-blur-xl backdrop-brightness-60"
+			class="post-dropdown"
 			style="background: {color}36; border-color: {color}99;"
 			bind:isOpen={actionsOpen}
 			bind:position={actionsPos}
+			placement="bottom-end"
 		>
 			{@render dropdownItem('heroicons:link-20-solid', 'copy link to post', () =>
 				navigator.clipboard.writeText(`${$settings.socialAppUrl}/profile/${did}/post/${rkey}`)
@@ -577,3 +669,11 @@
 		<Icon class="h-6 w-6" {icon} />
 	</button>
 {/snippet}
+
+<style>
+	@reference "../app.css";
+
+	:global(.post-dropdown) {
+		@apply flex min-w-54 flex-col gap-1 rounded-sm border-2 p-1 shadow-2xl backdrop-blur-xl backdrop-brightness-60;
+	}
+</style>

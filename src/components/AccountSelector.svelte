@@ -93,6 +93,7 @@
 <Dropdown
 	class="min-w-52 rounded-sm border-2 border-(--nucleus-accent) bg-(--nucleus-bg) shadow-2xl"
 	bind:isOpen={isDropdownOpen}
+	placement="top-start"
 >
 	{#snippet trigger()}
 		<button
