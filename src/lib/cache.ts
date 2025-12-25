@@ -8,6 +8,11 @@ export interface PersistedLRUOptions {
 	persistOptions?: CacheOptions;
 }
 
+interface PersistedEntry<V> {
+	value: V;
+	addedAt: number;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export class PersistedLRU<K extends string, V extends {}> {
 	private memory: LRUCache<K, V>;
@@ -34,10 +39,15 @@ export class PersistedLRU<K extends string, V extends {}> {
 		const state = this.storage.getState();
 		for (const [key, val] of Object.entries(state)) {
 			try {
-				// console.log('restoring', key);
 				const k = this.unprefix(key) as unknown as K;
-				const v = val as V;
-				this.memory.set(k, v);
+
+				if (this.isPersistedEntry(val)) {
+					const entry = val as PersistedEntry<V>;
+					this.memory.set(k, entry.value, { start: entry.addedAt });
+				} else {
+					// Handle legacy data (before this update)
+					this.memory.set(k, val as V);
+				}
 			} catch (err) {
 				console.warn('skipping invalid persisted entry', key, err);
 			}
@@ -47,6 +57,7 @@ export class PersistedLRU<K extends string, V extends {}> {
 	get(key: K): V | undefined {
 		return this.memory.get(key);
 	}
+
 	getSignal(key: K): Promise<V> {
 		return new Promise<V>((resolve) => {
 			if (!this.signals.has(key)) {
@@ -58,25 +69,33 @@ export class PersistedLRU<K extends string, V extends {}> {
 			this.signals.set(key, signals);
 		});
 	}
+
 	set(key: K, value: V): void {
-		this.memory.set(key, value);
-		this.storage.set(this.prefixed(key), value);
+		const addedAt = performance.now();
+		this.memory.set(key, value, { start: addedAt });
+
+		const entry: PersistedEntry<V> = { value, addedAt };
+		this.storage.set(this.prefixed(key), entry);
+
 		const signals = this.signals.get(key);
 		let signal = signals?.pop();
 		while (signal) {
 			signal(value);
 			signal = signals?.pop();
 		}
-		this.storage.flush(); // TODO: uh evil and fucked up (this whole file is evil honestly)
+		this.storage.flush();
 	}
+
 	has(key: K): boolean {
 		return this.memory.has(key);
 	}
+
 	delete(key: K): void {
 		this.memory.delete(key);
 		this.storage.delete(this.prefixed(key));
 		this.storage.flush();
 	}
+
 	clear(): void {
 		this.memory.clear();
 		this.storage.purge();
@@ -86,7 +105,19 @@ export class PersistedLRU<K extends string, V extends {}> {
 	private prefixed(key: K): string {
 		return this.prefix + key;
 	}
+
 	private unprefix(prefixed: string): string {
 		return prefixed.slice(this.prefix.length);
+	}
+
+	// Type guard to check if data is our new PersistedEntry format
+	private isPersistedEntry(data: unknown): data is PersistedEntry<V> {
+		return (
+			data !== null &&
+			typeof data === 'object' &&
+			'value' in data &&
+			'addedAt' in data &&
+			typeof data.addedAt === 'number'
+		);
 	}
 }
