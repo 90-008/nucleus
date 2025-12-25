@@ -7,7 +7,7 @@ export const oauthMetadata = {
 	client_uri: domain,
 	logo_uri: `${domain}/favicon.png`,
 	redirect_uris: [`${domain}/`],
-	scope: 'atproto transition:generic',
+	scope: 'atproto repo:*?action=create&action=update&action=delete blob:*/*',
 	grant_types: ['authorization_code', 'refresh_token'],
 	response_types: ['code'],
 	token_endpoint_auth_method: 'none',

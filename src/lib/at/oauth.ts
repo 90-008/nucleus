@@ -1,6 +1,5 @@
 import {
 	configureOAuth,
-	defaultIdentityResolver,
 	createAuthorizationUrl,
 	finalizeAuthorization,
 	OAuthUserAgent,
@@ -10,6 +9,7 @@ import {
 
 import {
 	CompositeDidDocumentResolver,
+	LocalActorResolver,
 	PlcDidDocumentResolver,
 	WebDidDocumentResolver,
 	XrpcHandleResolver
@@ -18,14 +18,14 @@ import { slingshotUrl } from './client';
 import type { ActorIdentifier } from '@atcute/lexicons';
 import { err, ok, type Result } from '$lib/result';
 import type { AtprotoDid } from '@atcute/lexicons/syntax';
-import { clientId, redirectUri } from '$lib/oauth';
+import { clientId, oauthMetadata, redirectUri } from '$lib/oauth';
 
 configureOAuth({
 	metadata: {
 		client_id: clientId,
 		redirect_uri: redirectUri
 	},
-	identityResolver: defaultIdentityResolver({
+	identityResolver: new LocalActorResolver({
 		handleResolver: new XrpcHandleResolver({ serviceUrl: slingshotUrl.href }),
 
 		didDocumentResolver: new CompositeDidDocumentResolver({
@@ -57,7 +57,7 @@ export const flow = {
 		try {
 			const authUrl = await createAuthorizationUrl({
 				target: { type: 'account', identifier },
-				scope: 'atproto transition:generic'
+				scope: oauthMetadata.scope
 			});
 			// recommended to wait for the browser to persist local storage before proceeding
 			await new Promise((resolve) => setTimeout(resolve, 200));
