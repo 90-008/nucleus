@@ -2,6 +2,8 @@
   "version": "5",
   "specifiers": {
     "npm:@atcute/atproto@^3.1.9": "3.1.9",
+    "npm:@atcute/bluesky-richtext-builder@^2.0.4": "2.0.4",
+    "npm:@atcute/bluesky-richtext-segmenter@^2.0.4": "2.0.4",
     "npm:@atcute/bluesky@^3.2.14": "3.2.14",
     "npm:@atcute/client@^4.1.1": "4.1.1",
     "npm:@atcute/identity-resolver@^1.2.1": "1.2.1_@atcute+identity@1.1.3",
@@ -45,6 +47,20 @@
     "@atcute/atproto@3.1.9": {
       "integrity": "sha512-DyWwHCTdR4hY2BPNbLXgVmm7lI+fceOwWbE4LXbGvbvVtSn+ejSVFaAv01Ra3kWDha0whsOmbJL8JP0QPpf1+w==",
       "dependencies": [
+        "@atcute/lexicons"
+      ]
+    },
+    "@atcute/bluesky-richtext-builder@2.0.4": {
+      "integrity": "sha512-ydA9VWBPsBE/gbu1vYbmh7AZ8FLfxp+LE4eH5GgOTCOxwhs7Mgy1oHrHY+Er6gu6PfdoUoGso0uI3Wl3ZF/Mxg==",
+      "dependencies": [
+        "@atcute/bluesky",
+        "@atcute/lexicons"
+      ]
+    },
+    "@atcute/bluesky-richtext-segmenter@2.0.4": {
+      "integrity": "sha512-6m5QEAv4lU3qTy5MeJXJRRG33acipYJnMW1T7W/KrMyThGhQ7jSTTh8Z48quElgivgX7MDj6o/ow1oLUsjsCKw==",
+      "dependencies": [
+        "@atcute/bluesky",
         "@atcute/lexicons"
       ]
     },
@@ -1721,6 +1737,8 @@
     "packageJson": {
       "dependencies": [
         "npm:@atcute/atproto@^3.1.9",
+        "npm:@atcute/bluesky-richtext-builder@^2.0.4",
+        "npm:@atcute/bluesky-richtext-segmenter@^2.0.4",
         "npm:@atcute/bluesky@^3.2.14",
         "npm:@atcute/client@^4.1.1",
         "npm:@atcute/identity-resolver@^1.2.1",

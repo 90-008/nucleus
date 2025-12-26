@@ -28,12 +28,13 @@
 	import * as TID from '@atcute/tid';
 	import type { PostWithUri } from '$lib/at/fetch';
 	import { onMount } from 'svelte';
-	import { isActorIdentifier, type AtprotoDid } from '@atcute/lexicons/syntax';
+	import { type AtprotoDid } from '@atcute/lexicons/syntax';
 	import { derived } from 'svelte/store';
 	import Device from 'svelte-device-info';
 	import Dropdown from './Dropdown.svelte';
 	import { type AppBskyEmbeds } from '$lib/at/types';
 	import { settings } from '$lib/settings';
+	import RichText from './RichText.svelte';
 
 	interface Props {
 		client: AtpClient;
@@ -347,27 +348,7 @@
 
 		{#if profileDesc.length > 0}
 			<p class="rounded-sm bg-black/25 p-1.5 text-wrap wrap-break-word">
-				{#each profileDesc.split(/(\s)/) as line, idx (idx)}
-					{#if line === '\n'}
-						<br />
-					{:else if isActorIdentifier(line.replace(/^@/, ''))}
-						<a
-							target="_blank"
-							rel="noopener noreferrer"
-							class="text-(--nucleus-accent2)"
-							href={`${$settings.socialAppUrl}/profile/${line.replace(/^@/, '')}`}>{line}</a
-						>
-					{:else if line.startsWith('https://')}
-						<a
-							target="_blank"
-							rel="noopener noreferrer"
-							class="text-(--nucleus-accent2)"
-							href={line}>{line.replace(/https?:\/\//, '')}</a
-						>
-					{:else}
-						{line}
-					{/if}
-				{/each}
+				<RichText text={profileDesc} {client} />
 			</p>
 		{/if}
 	</Dropdown>
@@ -446,7 +427,7 @@
 					</span>
 				</div>
 				<p class="leading-normal text-wrap wrap-break-word">
-					{record.text}
+					<RichText text={record.text} facets={record.facets ?? []} {client} />
 					{#if isOnPostComposer && record.embed}
 						{@render embedBadge(record.embed)}
 					{/if}
