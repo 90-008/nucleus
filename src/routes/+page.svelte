@@ -5,7 +5,7 @@
 	import SettingsView from '$components/SettingsView.svelte';
 	import NotificationsView from '$components/NotificationsView.svelte';
 	import { AtpClient, type NotificationsStreamEvent } from '$lib/at/client';
-	import { accounts, type Account } from '$lib/accounts';
+	import { accounts, generateColorForDid, type Account } from '$lib/accounts';
 	import { type Did, parseCanonicalResourceUri, type ResourceUri } from '@atcute/lexicons';
 	import { onMount, tick } from 'svelte';
 	import { fetchPostsWithBacklinks, hydratePosts, type PostWithUri } from '$lib/at/fetch';
@@ -330,58 +330,47 @@
 		{/if}
 
 		<div
-			class="rounded-t-sm px-0.5 pt-0.5"
-			style="background: linear-gradient(to right, var(--nucleus-accent), var(--nucleus-accent2));"
+			class="
+			{currentView === 'timeline' ? '' : 'hidden'}
+			fixed bottom-[5.5dvh] z-20 w-full max-w-2xl p-2.5 px-4 transition-all
+			"
 		>
-			<div
-				class="rounded-t-sm"
-				style="
-    			    background: linear-gradient(to right, color-mix(in srgb, var(--nucleus-accent) 18%, var(--nucleus-bg)), color-mix(in srgb, var(--nucleus-accent2) 13%, var(--nucleus-bg)));
-    			"
-			>
-				{#if currentView === 'timeline'}
-					<!-- composer and error disclaimer (above thread list, not scrollable) -->
-					<div class="flex gap-2 px-2 pt-2 pb-1">
-						<AccountSelector
-							client={viewClient}
-							accounts={$accounts}
-							bind:selectedDid
-							onAccountSelected={handleAccountSelected}
-							onLogout={handleLogout}
-						/>
+			<!-- composer and error disclaimer (above thread list, not scrollable) -->
+			<div class="footer-border-bg rounded-sm px-0.5 py-0.5">
+				<div class="footer-bg flex gap-2 rounded-sm p-1.5 shadow-2xl">
+					<AccountSelector
+						client={viewClient}
+						accounts={$accounts}
+						bind:selectedDid
+						onAccountSelected={handleAccountSelected}
+						onLogout={handleLogout}
+					/>
 
-						{#if selectedClient}
-							<div class="flex-1">
-								<PostComposer
-									client={selectedClient}
-									onPostSent={(post) => posts.get(selectedDid!)?.set(post.uri, post)}
-									bind:_state={postComposerState}
-								/>
-							</div>
-						{:else}
-							<div
-								class="flex flex-1 items-center justify-center rounded-sm border-2 border-(--nucleus-accent)/20 bg-(--nucleus-accent)/4 px-4 py-2.5 backdrop-blur-sm"
-							>
-								<p class="text-sm opacity-80">select or add an account to post</p>
-							</div>
-						{/if}
+					{#if selectedClient}
+						<div class="flex-1">
+							<PostComposer
+								client={selectedClient}
+								onPostSent={(post) => posts.get(selectedDid!)?.set(post.uri, post)}
+								bind:_state={postComposerState}
+							/>
+						</div>
+					{:else}
+						<div
+							class="flex flex-1 items-center justify-center rounded-sm border-2 border-(--nucleus-accent)/20 bg-(--nucleus-accent)/4 px-4 py-2.5 backdrop-blur-sm"
+						>
+							<p class="text-sm opacity-80">select or add an account to post</p>
+						</div>
+					{/if}
 
-						{#if postComposerState.type === 'null' && showScrollToTop}
-							{@render appButton(
-								scrollToTop,
-								'heroicons:arrow-up-16-solid',
-								'scroll to top',
-								false
-							)}
-						{/if}
-					</div>
+					{#if postComposerState.type === 'null' && showScrollToTop}
+						{@render appButton(scrollToTop, 'heroicons:arrow-up-16-solid', 'scroll to top', false)}
+					{/if}
+				</div>
+			</div>
+		</div>
 
-					<div
-						class="mt-1 h-px w-full opacity-50"
-						style="background: linear-gradient(to right, var(--nucleus-accent), var(--nucleus-accent2));"
-					></div>
-				{/if}
-
+		<div class="footer-border-bg rounded-t-sm px-0.5 pt-0.5">
+			<div class="footer-bg rounded-t-sm">
 				<div class="flex items-center gap-1.5 px-2 py-1">
 					<div class="mb-2">
 						<h1 class="text-3xl font-bold tracking-tight">nucleus</h1>
@@ -515,3 +504,17 @@
 		{/snippet}
 	</InfiniteLoader>
 {/snippet}
+
+<style>
+	.footer-bg {
+		background: linear-gradient(
+			to right,
+			color-mix(in srgb, var(--nucleus-accent) 18%, var(--nucleus-bg)),
+			color-mix(in srgb, var(--nucleus-accent2) 13%, var(--nucleus-bg))
+		);
+	}
+
+	.footer-border-bg {
+		background: linear-gradient(to right, var(--nucleus-accent), var(--nucleus-accent2));
+	}
+</style>
