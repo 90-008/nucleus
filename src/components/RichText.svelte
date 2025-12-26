@@ -41,12 +41,13 @@
 					>
 				{:else if feature.$type === 'app.bsky.richtext.facet#link'}
 					{@const uri = new URL(feature.uri)}
+					{@const text = `${!uri.protocol.startsWith('http') ? `${uri.protocol}//` : ''}${uri.host}${uri.hash.length === 0 && uri.search.length === 0 && uri.pathname === '/' ? '' : uri.pathname}${uri.search}${uri.hash}`}
 					<a
 						class="text-(--nucleus-accent2)"
 						href={uri.href}
 						target="_blank"
 						rel="noopener noreferrer"
-						>{@render plainText(uri.href.replace(`${uri.protocol}//`, ''))}</a
+						>{@render plainText(`${text.substring(0, 40)}${text.length > 40 ? '...' : ''}`)}</a
 					>
 				{:else if feature.$type === 'app.bsky.richtext.facet#tag'}
 					<a

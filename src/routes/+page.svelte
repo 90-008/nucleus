@@ -2,11 +2,12 @@
 	import BskyPost from '$components/BskyPost.svelte';
 	import PostComposer, { type State as PostComposerState } from '$components/PostComposer.svelte';
 	import AccountSelector from '$components/AccountSelector.svelte';
-	import SettingsPopup from '$components/SettingsPopup.svelte';
+	import SettingsView from '$components/SettingsView.svelte';
+	import NotificationsView from '$components/NotificationsView.svelte';
 	import { AtpClient, type NotificationsStreamEvent } from '$lib/at/client';
 	import { accounts, type Account } from '$lib/accounts';
 	import { type Did, parseCanonicalResourceUri, type ResourceUri } from '@atcute/lexicons';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { fetchPostsWithBacklinks, hydratePosts, type PostWithUri } from '$lib/at/fetch';
 	import { expect } from '$lib/result';
 	import { AppBskyFeedPost } from '@atcute/bluesky';
@@ -19,7 +20,6 @@
 	import type { AtprotoDid } from '@atcute/lexicons/syntax';
 	import type { PageProps } from './+page';
 	import { buildThreads, filterThreads, type ThreadPost } from '$lib/thread';
-	import NotificationsPopup from '$components/NotificationsPopup.svelte';
 
 	const { data: loadData }: PageProps = $props();
 
@@ -66,8 +66,31 @@
 		handleAccountSelected(newAccounts[0]?.did);
 	};
 
-	let isSettingsOpen = $state(false);
-	let isNotificationsOpen = $state(false);
+	type View = 'timeline' | 'notifications' | 'settings';
+	let currentView = $state<View>('timeline');
+	let animClass = $state('animate-fade-in-scale');
+	let timelineScrollPosition = $state(0);
+
+	const viewOrder: Record<View, number> = {
+		timeline: 0,
+		notifications: 1,
+		settings: 2
+	};
+
+	const switchView = async (newView: View) => {
+		if (currentView === newView) return;
+		if (currentView === 'timeline') timelineScrollPosition = window.scrollY;
+
+		const direction = viewOrder[newView] > viewOrder[currentView] ? 'right' : 'left';
+		animClass = direction === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left';
+		currentView = newView;
+
+		await tick();
+
+		if (newView !== 'timeline') window.scrollTo({ top: 0, behavior: 'instant' });
+		else window.scrollTo({ top: timelineScrollPosition, behavior: 'instant' });
+	};
+
 	let reverseChronological = $state(true);
 	let viewOwnPosts = $state(true);
 
@@ -152,21 +175,6 @@
 		}
 	};
 
-	// const handleJetstream = async (subscription: JetstreamSubscription) => {
-	// 	for await (const event of subscription) {
-	// 		if (event.kind !== 'commit') continue;
-	// 		const commit = event.commit;
-	// 		if (commit.operation === 'delete') {
-	// 			continue;
-	// 		}
-	// 		const record = commit.record as AppBskyFeedPost.Main;
-	// 		addPosts(
-	// 			event.did,
-	// 			new Map([[`at://${event.did}/${commit.collection}/${commit.rkey}` as ResourceUri, record]])
-	// 		);
-	// 	}
-	// };
-
 	const loaderState = new LoaderState();
 	let scrollContainer = $state<HTMLDivElement>();
 
@@ -175,7 +183,7 @@
 	let showScrollToTop = $state(false);
 
 	const handleScroll = () => {
-		showScrollToTop = window.scrollY > 300;
+		if (currentView === 'timeline') showScrollToTop = window.scrollY > 300;
 	};
 
 	const scrollToTop = () => {
@@ -215,21 +223,11 @@
 					'app.bsky.feed.post:reply.parent.uri'
 				)
 			);
-			// jetstream.set(
-			// 	viewClient.streamJetstream(
-			// 		newAccounts.map((account) => account.did),
-			// 		'app.bsky.feed.post'
-			// 	)
-			// );
 		});
 		notificationStream.subscribe((stream) => {
 			if (!stream) return;
 			stream.listen(handleNotification);
 		});
-		// jetstream.subscribe((stream) => {
-		// 	if (!stream) return;
-		// 	handleJetstream(stream);
-		// });
 		if ($accounts.length > 0) {
 			loaderState.status = 'LOADING';
 			if (loadData.client.ok && loadData.client.value) {
@@ -252,10 +250,19 @@
 	});
 </script>
 
-{#snippet appButton(onClick: () => void, icon: string, ariaLabel: string, iconHover?: string)}
+{#snippet appButton(
+	onClick: () => void,
+	icon: string,
+	ariaLabel: string,
+	isActive: boolean,
+	iconHover?: string
+)}
 	<button
 		onclick={onClick}
-		class="group rounded-sm bg-(--nucleus-accent)/15 p-2 text-(--nucleus-accent) transition-all hover:scale-110 hover:shadow-lg"
+		class="group rounded-sm p-2 transition-all hover:scale-110 hover:shadow-lg
+		{isActive
+			? 'bg-(--nucleus-accent)/25 text-(--nucleus-accent)'
+			: 'bg-(--nucleus-accent)/10 text-(--nucleus-accent) hover:bg-(--nucleus-accent)/15'}"
 		aria-label={ariaLabel}
 	>
 		<Icon class="group-hover:hidden" {icon} width={28} />
@@ -263,26 +270,43 @@
 	</button>
 {/snippet}
 
-<div class="mx-auto max-w-2xl">
-	<!-- thread list (page scrolls as a whole) -->
-	<div
-		id="app-thread-list"
-		class="mb-4 min-h-screen p-2 [scrollbar-color:var(--nucleus-accent)_transparent]"
-		bind:this={scrollContainer}
-	>
-		{#if $accounts.length > 0}
-			{@render renderThreads()}
-		{:else}
-			<div class="flex justify-center py-4">
-				<p class="text-xl opacity-80">
-					<span class="text-4xl">x_x</span> <br /> no accounts are logged in!
-				</p>
+<div class="mx-auto flex min-h-dvh max-w-2xl flex-col">
+	<!-- Views Container -->
+	<div class="flex-1">
+		<!-- timeline -->
+		<div
+			id="app-thread-list"
+			class="min-h-full p-2 [scrollbar-color:var(--nucleus-accent)_transparent] {currentView ===
+			'timeline'
+				? `block ${animClass}`
+				: 'hidden'}"
+			bind:this={scrollContainer}
+		>
+			{#if $accounts.length > 0}
+				{@render renderThreads()}
+			{:else}
+				<div class="flex justify-center py-4">
+					<p class="text-xl opacity-80">
+						<span class="text-4xl">x_x</span> <br /> no accounts are logged in!
+					</p>
+				</div>
+			{/if}
+		</div>
+
+		<!-- other views -->
+		{#if currentView === 'settings'}
+			<div class={animClass}>
+				<SettingsView />
+			</div>
+		{:else if currentView === 'notifications'}
+			<div class={animClass}>
+				<NotificationsView />
 			</div>
 		{/if}
 	</div>
 
-	<!-- header -->
-	<div class="sticky bottom-0 z-10">
+	<!-- header / footer -->
+	<div id="app-footer" class="sticky bottom-0 z-10 mt-4">
 		{#if errors.length > 0}
 			<div class="relative m-3 mb-1 error-disclaimer">
 				<div class="flex items-center gap-2 text-red-500">
@@ -315,41 +339,48 @@
     			    background: linear-gradient(to right, color-mix(in srgb, var(--nucleus-accent) 18%, var(--nucleus-bg)), color-mix(in srgb, var(--nucleus-accent2) 13%, var(--nucleus-bg)));
     			"
 			>
-				<!-- composer and error disclaimer (above thread list, not scrollable) -->
-				<div class="flex gap-2 px-2 pt-2 pb-1">
-					<AccountSelector
-						client={viewClient}
-						accounts={$accounts}
-						bind:selectedDid
-						onAccountSelected={handleAccountSelected}
-						onLogout={handleLogout}
-					/>
+				{#if currentView === 'timeline'}
+					<!-- composer and error disclaimer (above thread list, not scrollable) -->
+					<div class="flex gap-2 px-2 pt-2 pb-1">
+						<AccountSelector
+							client={viewClient}
+							accounts={$accounts}
+							bind:selectedDid
+							onAccountSelected={handleAccountSelected}
+							onLogout={handleLogout}
+						/>
 
-					{#if selectedClient}
-						<div class="flex-1">
-							<PostComposer
-								client={selectedClient}
-								onPostSent={(post) => posts.get(selectedDid!)?.set(post.uri, post)}
-								bind:_state={postComposerState}
-							/>
-						</div>
-					{:else}
-						<div
-							class="flex flex-1 items-center justify-center rounded-sm border-2 border-(--nucleus-accent)/20 bg-(--nucleus-accent)/4 px-4 py-2.5 backdrop-blur-sm"
-						>
-							<p class="text-sm opacity-80">select or add an account to post</p>
-						</div>
-					{/if}
+						{#if selectedClient}
+							<div class="flex-1">
+								<PostComposer
+									client={selectedClient}
+									onPostSent={(post) => posts.get(selectedDid!)?.set(post.uri, post)}
+									bind:_state={postComposerState}
+								/>
+							</div>
+						{:else}
+							<div
+								class="flex flex-1 items-center justify-center rounded-sm border-2 border-(--nucleus-accent)/20 bg-(--nucleus-accent)/4 px-4 py-2.5 backdrop-blur-sm"
+							>
+								<p class="text-sm opacity-80">select or add an account to post</p>
+							</div>
+						{/if}
 
-					{#if postComposerState.type === 'null' && showScrollToTop}
-						{@render appButton(scrollToTop, 'heroicons:arrow-up-16-solid', 'scroll to top')}
-					{/if}
-				</div>
+						{#if postComposerState.type === 'null' && showScrollToTop}
+							{@render appButton(
+								scrollToTop,
+								'heroicons:arrow-up-16-solid',
+								'scroll to top',
+								false
+							)}
+						{/if}
+					</div>
 
-				<div
-					class="mt-1 h-px w-full opacity-50"
-					style="background: linear-gradient(to right, var(--nucleus-accent), var(--nucleus-accent2));"
-				></div>
+					<div
+						class="mt-1 h-px w-full opacity-50"
+						style="background: linear-gradient(to right, var(--nucleus-accent), var(--nucleus-accent2));"
+					></div>
+				{/if}
 
 				<div class="flex items-center gap-1.5 px-2 py-1">
 					<div class="mb-2">
@@ -361,33 +392,31 @@
 					</div>
 					<div class="grow"></div>
 					{@render appButton(
-						() => (isNotificationsOpen = true),
+						() => switchView('timeline'),
+						'heroicons:home',
+						'timeline',
+						currentView === 'timeline',
+						'heroicons:home-solid'
+					)}
+					{@render appButton(
+						() => switchView('notifications'),
 						'heroicons:bell',
 						'notifications',
+						currentView === 'notifications',
 						'heroicons:bell-solid'
 					)}
 					{@render appButton(
-						() => (isSettingsOpen = true),
+						() => switchView('settings'),
 						'heroicons:cog-6-tooth',
 						'settings',
+						currentView === 'settings',
 						'heroicons:cog-6-tooth-solid'
 					)}
 				</div>
-
-				<!-- <hr
-    			class="h-[4px] w-full rounded-full border-0"
-    			style="background: linear-gradient(to right, var(--nucleus-accent), var(--nucleus-accent2));"
-    		/> -->
 			</div>
 		</div>
 	</div>
 </div>
-
-<SettingsPopup bind:isOpen={isSettingsOpen} onClose={() => (isSettingsOpen = false)} />
-<NotificationsPopup
-	bind:isOpen={isNotificationsOpen}
-	onClose={() => (isNotificationsOpen = false)}
-/>
 
 {#snippet replyPost(post: ThreadPost, reverse: boolean = reverseChronological)}
 	<span

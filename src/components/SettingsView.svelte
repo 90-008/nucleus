@@ -3,15 +3,8 @@
 	import { handleCache, didDocCache, recordCache } from '$lib/at/client';
 	import { get } from 'svelte/store';
 	import ColorPicker from 'svelte-awesome-color-picker';
-	import Popup from './Popup.svelte';
 	import Tabs from './Tabs.svelte';
-
-	interface Props {
-		isOpen: boolean;
-		onClose: () => void;
-	}
-
-	let { isOpen = $bindable(false), onClose }: Props = $props();
+	import { portal } from 'svelte-portal';
 
 	type Tab = 'style' | 'moderation' | 'advanced';
 	let activeTab = $state<Tab>('advanced');
@@ -22,15 +15,6 @@
 	$effect(() => {
 		$settings.theme = localSettings.theme;
 	});
-
-	const resetSettingsToSaved = () => {
-		localSettings = $settings;
-	};
-
-	const handleClose = () => {
-		resetSettingsToSaved();
-		onClose();
-	};
 
 	const handleSave = () => {
 		settings.set(localSettings);
@@ -56,19 +40,14 @@
 	<div class="h-px bg-linear-to-r from-(--nucleus-accent) to-(--nucleus-accent2)"></div>
 {/snippet}
 
-{#snippet settingHeader(name: string, desc: string)}
-	<h3 class="mb-3 text-lg font-bold">{name}</h3>
-	<p class="mb-4 text-sm opacity-80">{desc}</p>
-{/snippet}
-
 {#snippet advancedTab()}
-	<div class="space-y-5">
+	<div class="space-y-3 p-4">
 		<div>
-			<h3 class="mb-3 text-lg font-bold">api endpoints</h3>
-			<div class="space-y-4">
+			<h3 class="header">api endpoints</h3>
+			<div class="borders space-y-4">
 				{#snippet _input(name: string, desc: string)}
 					<div>
-						<label for={name} class="mb-2 block text-sm font-semibold text-(--nucleus-fg)/80">
+						<label for={name} class="header-desc block">
 							{desc}
 						</label>
 						<input
@@ -86,9 +65,7 @@
 			</div>
 		</div>
 
-		{@render divider()}
-
-		<div>
+		<div class="borders">
 			<label for="social-app-url" class="mb-2 block text-sm font-semibold text-(--nucleus-fg)/80">
 				social-app url (for when copying links to posts / profiles)
 			</label>
@@ -101,20 +78,15 @@
 			/>
 		</div>
 
-		{@render divider()}
-
-		<div>
-			{@render settingHeader(
-				'cache management',
-				'clears cached data (records, DID documents, handles, etc.)'
-			)}
+		<h3 class="header">cache management</h3>
+		<div class="borders">
+			<p class="header-desc">clears cached data (records, DID documents, handles, etc.)</p>
 			<button onclick={handleClearCache} class="action-button"> clear cache </button>
 		</div>
 
-		{@render divider()}
-
-		<div>
-			{@render settingHeader('reset settings', 'resets all settings to their default values')}
+		<h3 class="header">reset settings</h3>
+		<div class="borders">
+			<p class="header-desc">resets all settings to their default values</p>
 			<button
 				onclick={handleReset}
 				class="action-button border-red-600 text-red-600 hover:bg-red-600/20"
@@ -126,13 +98,13 @@
 {/snippet}
 
 {#snippet styleTab()}
-	<div class="space-y-5">
+	<div class="space-y-5 p-4">
 		<div>
-			<h3 class="mb-3 text-lg font-bold">colors</h3>
-			<div class="space-y-4">
+			<h3 class="header">colors</h3>
+			<div class="borders">
 				{#snippet color(name: string, desc: string)}
 					<div>
-						<label for={name} class="mb-2 block text-sm font-semibold text-(--nucleus-fg)/80">
+						<label for={name} class="header-desc block">
 							{desc}
 						</label>
 						<div class="color-picker">
@@ -154,38 +126,60 @@
 	</div>
 {/snippet}
 
-<Popup
-	bind:isOpen
-	onClose={handleClose}
-	title="settings"
-	width="w-[42vmax] max-w-2xl"
-	height="60vh"
-	showHeaderDivider={true}
->
-	{#snippet headerActions()}
-		{#if hasReloadChanges}
-			<button onclick={handleSave} class="shrink-0 action-button"> save & reload </button>
-		{/if}
-	{/snippet}
-
-	{#if activeTab === 'advanced'}
-		{@render advancedTab()}
-	{:else if activeTab === 'moderation'}
-		<div class="flex h-full items-center justify-center">
-			<div class="text-center">
-				<div class="mb-4 text-6xl opacity-50">🚧</div>
-				<h3 class="text-xl font-bold opacity-80">todo</h3>
+<div class="flex flex-col">
+	<div class="mb-6 flex items-center justify-between p-4 pb-0">
+		<div>
+			<h2 class="text-3xl font-bold">settings</h2>
+			<div class="mt-2 flex gap-2">
+				<div class="h-1 w-8 rounded-full bg-(--nucleus-accent)"></div>
+				<div class="h-1 w-9.5 rounded-full bg-(--nucleus-accent2)"></div>
 			</div>
 		</div>
-	{:else if activeTab === 'style'}
-		{@render styleTab()}
-	{/if}
+		{#if hasReloadChanges}
+			<button onclick={handleSave} class="action-button animate-pulse shadow-lg">
+				save & reload
+			</button>
+		{/if}
+	</div>
 
-	{#snippet footer()}
+	<div class="flex-1">
+		{#if activeTab === 'advanced'}
+			{@render advancedTab()}
+		{:else if activeTab === 'moderation'}
+			<div class="p-4">
+				<div class="flex h-64 items-center justify-center">
+					<div class="text-center">
+						<div class="mb-4 text-6xl opacity-50">🚧</div>
+						<h3 class="text-xl font-bold opacity-80">todo</h3>
+					</div>
+				</div>
+			</div>
+		{:else if activeTab === 'style'}
+			{@render styleTab()}
+		{/if}
+	</div>
+
+	<div
+		use:portal={'#app-footer'}
+		class="fixed bottom-[5dvh] z-20 w-full max-w-2xl p-4 pt-2 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)]"
+	>
 		<Tabs
 			tabs={['style', 'moderation', 'advanced']}
 			bind:activeTab
 			onTabChange={(tab) => (activeTab = tab)}
 		/>
-	{/snippet}
-</Popup>
+	</div>
+</div>
+
+<style>
+	@reference "../app.css";
+	.borders {
+		@apply rounded-sm border-2 border-dashed border-(--nucleus-fg)/10 p-4;
+	}
+	.header-desc {
+		@apply mb-2 text-sm text-(--nucleus-fg)/80;
+	}
+	.header {
+		@apply mb-2 text-lg font-bold;
+	}
+</style>
