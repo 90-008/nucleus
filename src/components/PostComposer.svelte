@@ -7,6 +7,8 @@
 	import BskyPost from './BskyPost.svelte';
 	import { parseCanonicalResourceUri } from '@atcute/lexicons';
 	import type { ComAtprotoRepoStrongRef } from '@atcute/atproto';
+	import { parseToRichText } from '$lib/richtext';
+	import { tokenize } from '$lib/richtext/parser';
 
 	export type State =
 		| { type: 'null' }
@@ -32,9 +34,14 @@
 			cid: p.cid!,
 			uri: p.uri
 		});
+
+		// Parse rich text (mentions, links, tags)
+		const rt = await parseToRichText(client, text);
+
 		const record: AppBskyFeedPost.Main = {
 			$type: 'app.bsky.feed.post',
-			text,
+			text: rt.text,
+			facets: rt.facets,
 			reply:
 				_state.type === 'focused' && _state.replying
 					? {
@@ -117,6 +124,20 @@
 	/>
 {/snippet}
 
+{#snippet highlighter(text: string)}
+	{#each tokenize(text) as token, idx (idx)}
+		{@const highlighted =
+			token.type === 'mention' ||
+			token.type === 'topic' ||
+			token.type === 'link' ||
+			token.type === 'autolink'}
+		<span class={highlighted ? 'text-(--nucleus-accent2)' : ''}>{token.raw}</span>
+	{/each}
+	{#if text.endsWith('\n')}
+		<br />
+	{/if}
+{/snippet}
+
 {#snippet composer(replying?: PostWithUri, quoting?: PostWithUri)}
 	<div class="flex items-center gap-2">
 		<div class="grow"></div>
@@ -144,19 +165,30 @@
 		{@render renderPost(replying)}
 	{/if}
 	<div class="composer space-y-2">
-		<textarea
-			bind:this={textareaEl}
-			bind:value={postText}
-			onfocus={() => (_state.type = 'focused')}
-			onblur={unfocus}
-			onkeydown={(event) => {
-				if (event.key === 'Escape') unfocus();
-				if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) doPost();
-			}}
-			placeholder="what's on your mind?"
-			rows="4"
-			class="field-sizing-content resize-none"
-		></textarea>
+		<div class="relative grid">
+			<!-- todo: replace this with a proper rich text editor -->
+			<div
+				class="pointer-events-none col-start-1 row-start-1 min-h-[5lh] w-full bg-transparent text-wrap break-all whitespace-pre-wrap text-(--nucleus-fg)"
+				aria-hidden="true"
+			>
+				{@render highlighter(postText)}
+			</div>
+
+			<textarea
+				bind:this={textareaEl}
+				bind:value={postText}
+				onfocus={() => (_state.type = 'focused')}
+				onblur={unfocus}
+				onkeydown={(event) => {
+					if (event.key === 'Escape') unfocus();
+					if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) doPost();
+				}}
+				placeholder="what's on your mind?"
+				rows="4"
+				class="col-start-1 row-start-1 field-sizing-content min-h-[5lh] w-full resize-none overflow-hidden bg-transparent text-wrap break-all whitespace-pre-wrap text-transparent caret-(--nucleus-fg) placeholder:text-(--nucleus-fg)/45"
+			></textarea>
+		</div>
+
 		{#if quoting}
 			{@render renderPost(quoting)}
 		{/if}
@@ -209,7 +241,6 @@
 	</div>
 </div>
 
-<!-- TODO: this fucking blows -->
 <style>
 	@reference "../app.css";
 
@@ -224,7 +255,7 @@
 	}
 
 	textarea {
-		@apply w-full bg-transparent p-0;
+		@apply w-full p-0;
 	}
 
 	input {
@@ -235,8 +266,7 @@
 		@apply focus:scale-100;
 	}
 
-	input::placeholder,
-	textarea::placeholder {
+	input::placeholder {
 		color: color-mix(in srgb, var(--acc-color) 45%, var(--nucleus-bg));
 	}
 
