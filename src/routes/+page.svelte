@@ -4,38 +4,50 @@
 	import AccountSelector from '$components/AccountSelector.svelte';
 	import SettingsView from '$components/SettingsView.svelte';
 	import NotificationsView from '$components/NotificationsView.svelte';
-	import { AtpClient, type NotificationsStreamEvent } from '$lib/at/client';
-	import { accounts, generateColorForDid, type Account } from '$lib/accounts';
-	import { type Did, parseCanonicalResourceUri, type ResourceUri } from '@atcute/lexicons';
+	import FollowingView from '$components/FollowingView.svelte';
+	import { AtpClient, streamNotifications, type NotificationsStreamEvent } from '$lib/at/client';
+	import { accounts, type Account } from '$lib/accounts';
+	import { parseCanonicalResourceUri, type ResourceUri } from '@atcute/lexicons';
 	import { onMount, tick } from 'svelte';
-	import { fetchPostsWithBacklinks, hydratePosts, type PostWithUri } from '$lib/at/fetch';
+	import { hydratePosts } from '$lib/at/fetch';
 	import { expect } from '$lib/result';
 	import { AppBskyFeedPost } from '@atcute/bluesky';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { InfiniteLoader, LoaderState } from 'svelte-infinite';
-	import { clients, cursors, notificationStream, posts, viewClient } from '$lib/state.svelte';
+	import {
+		addPosts,
+		clients,
+		cursors,
+		fetchFollowPosts,
+		fetchFollows,
+		fetchTimeline,
+		follows,
+		getClient,
+		notificationStream,
+		posts,
+		viewClient,
+		jetstream,
+		handleJetstreamEvent
+	} from '$lib/state.svelte';
 	import { get } from 'svelte/store';
 	import Icon from '@iconify/svelte';
 	import { sessions } from '$lib/at/oauth';
-	import type { AtprotoDid } from '@atcute/lexicons/syntax';
+	import type { AtprotoDid, Did } from '@atcute/lexicons/syntax';
 	import type { PageProps } from './+page';
 	import { buildThreads, filterThreads, type ThreadPost } from '$lib/thread';
+	import { JetstreamSubscription } from '@atcute/jetstream';
+	import { settings } from '$lib/settings';
 
 	const { data: loadData }: PageProps = $props();
 
 	// svelte-ignore state_referenced_locally
 	let errors = $state(loadData.client.ok ? [] : [loadData.client.error]);
 	let errorsOpen = $state(false);
-
 	let selectedDid = $state((localStorage.getItem('selectedDid') ?? null) as AtprotoDid | null);
 	$effect(() => {
-		if (selectedDid) {
-			localStorage.setItem('selectedDid', selectedDid);
-		} else {
-			localStorage.removeItem('selectedDid');
-		}
+		if (selectedDid) localStorage.setItem('selectedDid', selectedDid);
+		else localStorage.removeItem('selectedDid');
 	});
-
 	const selectedClient = $derived(selectedDid ? clients.get(selectedDid) : null);
 
 	const loginAccount = async (account: Account) => {
@@ -48,7 +60,6 @@
 		}
 		clients.set(account.did, client);
 	};
-
 	const handleAccountSelected = async (did: AtprotoDid) => {
 		selectedDid = did;
 		const account = $accounts.find((acc) => acc.did === did);
@@ -66,20 +77,21 @@
 		handleAccountSelected(newAccounts[0]?.did);
 	};
 
-	type View = 'timeline' | 'notifications' | 'settings';
+	type View = 'timeline' | 'notifications' | 'following' | 'settings';
 	let currentView = $state<View>('timeline');
 	let animClass = $state('animate-fade-in-scale');
-	let timelineScrollPosition = $state(0);
+	let scrollPositions = new SvelteMap<View, number>();
 
 	const viewOrder: Record<View, number> = {
 		timeline: 0,
-		notifications: 1,
-		settings: 2
+		following: 1,
+		notifications: 2,
+		settings: 3
 	};
 
 	const switchView = async (newView: View) => {
 		if (currentView === newView) return;
-		if (currentView === 'timeline') timelineScrollPosition = window.scrollY;
+		scrollPositions.set(currentView, window.scrollY);
 
 		const direction = viewOrder[newView] > viewOrder[currentView] ? 'right' : 'left';
 		animClass = direction === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left';
@@ -87,66 +99,42 @@
 
 		await tick();
 
-		if (newView !== 'timeline') window.scrollTo({ top: 0, behavior: 'instant' });
-		else window.scrollTo({ top: timelineScrollPosition, behavior: 'instant' });
+		window.scrollTo({ top: scrollPositions.get(newView) || 0, behavior: 'instant' });
 	};
-
 	let reverseChronological = $state(true);
 	let viewOwnPosts = $state(true);
 
-	const threads = $derived(filterThreads(buildThreads(posts), $accounts, { viewOwnPosts }));
-
+	const threads = $derived(
+		filterThreads(
+			buildThreads(
+				$accounts.map((account) => account.did),
+				posts
+			),
+			$accounts,
+			{ viewOwnPosts }
+		)
+	);
 	let postComposerState = $state<PostComposerState>({ type: 'null' });
 
 	const expandedThreads = new SvelteSet<ResourceUri>();
 
-	const addPosts = (did: Did, accTimeline: Map<ResourceUri, PostWithUri>) => {
-		if (!posts.has(did)) {
-			posts.set(did, new SvelteMap(accTimeline));
-			return;
-		}
-		const map = posts.get(did)!;
-		for (const [uri, record] of accTimeline) map.set(uri, record);
-	};
-
-	const fetchTimeline = async (account: Account) => {
-		const client = clients.get(account.did);
-		if (!client) return;
-
-		const cursor = cursors.get(account.did);
-		if (cursor && cursor.end) return;
-
-		const accPosts = await fetchPostsWithBacklinks(client, account.did, cursor?.value, 6);
-		if (!accPosts.ok) throw `cant fetch posts @${account.handle}: ${accPosts.error}`;
-
-		// if the cursor is undefined, we've reached the end of the timeline
-		if (!accPosts.value.cursor) {
-			cursors.set(account.did, { ...cursor, end: true });
-			return;
-		}
-
-		cursors.set(account.did, { value: accPosts.value.cursor, end: false });
-		const hydrated = await hydratePosts(client, account.did, accPosts.value.posts);
-		if (!hydrated.ok) throw `cant hydrate posts @${account.handle}: ${hydrated.error}`;
-
-		addPosts(account.did, hydrated.value);
-	};
-
-	const fetchTimelines = (newAccounts: Account[]) => Promise.all(newAccounts.map(fetchTimeline));
+	const fetchTimelines = (newAccounts: Account[]) =>
+		Promise.all(newAccounts.map((acc) => fetchTimeline(acc.did)));
 
 	const handleNotification = async (event: NotificationsStreamEvent) => {
 		if (event.type === 'message') {
-			// console.log(event.data);
 			const parsedSubjectUri = expect(parseCanonicalResourceUri(event.data.link.subject));
-			const subjectPost = await viewClient.getRecord(
+			const did = parsedSubjectUri.repo as AtprotoDid;
+			const client = await getClient(did);
+			const subjectPost = await client.getRecord(
 				AppBskyFeedPost.mainSchema,
-				parsedSubjectUri.repo,
+				did,
 				parsedSubjectUri.rkey
 			);
 			if (!subjectPost.ok) return;
 
 			const parsedSourceUri = expect(parseCanonicalResourceUri(event.data.link.source_record));
-			const hydrated = await hydratePosts(viewClient, parsedSubjectUri.repo as AtprotoDid, [
+			const hydrated = await hydratePosts(client, did, [
 				{
 					record: subjectPost.value.record,
 					uri: event.data.link.subject,
@@ -164,14 +152,13 @@
 					}
 				}
 			]);
-
 			if (!hydrated.ok) {
-				errors.push(`cant hydrate posts @${parsedSubjectUri.repo}: ${hydrated.error}`);
+				errors.push(`cant hydrate posts ${did}: ${hydrated.error}`);
 				return;
 			}
 
 			// console.log(hydrated);
-			addPosts(parsedSubjectUri.repo, hydrated.value);
+			addPosts(did, hydrated.value);
 		}
 	};
 
@@ -185,7 +172,6 @@
 	const handleScroll = () => {
 		if (currentView === 'timeline') showScrollToTop = window.scrollY > 300;
 	};
-
 	const scrollToTop = () => {
 		window.scrollTo({ top: 0, behavior: 'smooth' });
 	};
@@ -218,9 +204,11 @@
 			// jetstream.set(null);
 			if (newAccounts.length === 0) return;
 			notificationStream.set(
-				viewClient.streamNotifications(
+				streamNotifications(
 					newAccounts.map((account) => account.did),
-					'app.bsky.feed.post:reply.parent.uri'
+					'app.bsky.feed.post:reply.parent.uri',
+					'app.bsky.feed.post:embed.record.record.uri',
+					'app.bsky.feed.post:embed.record.uri'
 				)
 			);
 		});
@@ -228,6 +216,20 @@
 			if (!stream) return;
 			stream.listen(handleNotification);
 		});
+
+		console.log(`creating jetstream subscription to ${$settings.endpoints.jetstream}`);
+		const jetstreamSub = new JetstreamSubscription({
+			url: $settings.endpoints.jetstream,
+			wantedCollections: ['app.bsky.feed.post'],
+			wantedDids: ['did:web:guestbook.gaze.systems'] // initially contain sentinel
+		});
+		jetstream.set(jetstreamSub);
+
+		(async () => {
+			console.log('polling for jetstream...');
+			for await (const event of jetstreamSub) handleJetstreamEvent(event);
+		})();
+
 		if ($accounts.length > 0) {
 			loaderState.status = 'LOADING';
 			if (loadData.client.ok && loadData.client.value) {
@@ -236,17 +238,33 @@
 				clients.set(loggedInDid, loadData.client.value);
 			}
 			if (!$accounts.some((account) => account.did === selectedDid)) selectedDid = $accounts[0].did;
-			console.log('onMount selectedDid', selectedDid);
+			// console.log('onMount selectedDid', selectedDid);
 			Promise.all($accounts.map(loginAccount)).then(() => {
+				$accounts.forEach((account) =>
+					fetchFollows(account.did).then(() =>
+						follows
+							.get(account.did)
+							?.forEach((follow) => fetchFollowPosts(follow.subject as AtprotoDid))
+					)
+				);
 				loadMore();
 			});
 		} else {
 			selectedDid = null;
 		}
 
-		return () => {
-			window.removeEventListener('scroll', handleScroll);
-		};
+		return () => window.removeEventListener('scroll', handleScroll);
+	});
+
+	$effect(() => {
+		const wantedDids: Did[] = ['did:web:guestbook.gaze.systems'];
+
+		for (const followMap of follows.values())
+			for (const follow of followMap.values()) wantedDids.push(follow.subject);
+		for (const account of $accounts) wantedDids.push(account.did);
+
+		console.log('updating jetstream options:', wantedDids);
+		$jetstream?.updateOptions({ wantedDids });
 	});
 </script>
 
@@ -271,15 +289,14 @@
 {/snippet}
 
 <div class="mx-auto flex min-h-dvh max-w-2xl flex-col">
-	<!-- Views Container -->
 	<div class="flex-1">
 		<!-- timeline -->
 		<div
 			id="app-thread-list"
-			class="min-h-full p-2 [scrollbar-color:var(--nucleus-accent)_transparent] {currentView ===
-			'timeline'
-				? `block ${animClass}`
-				: 'hidden'}"
+			class="
+			min-h-full p-2 [scrollbar-color:var(--nucleus-accent)_transparent]
+			{currentView === 'timeline' ? `${animClass}` : 'hidden'}
+			"
 			bind:this={scrollContainer}
 		>
 			{#if $accounts.length > 0}
@@ -292,15 +309,19 @@
 				</div>
 			{/if}
 		</div>
-
-		<!-- other views -->
 		{#if currentView === 'settings'}
 			<div class={animClass}>
 				<SettingsView />
 			</div>
-		{:else if currentView === 'notifications'}
+		{/if}
+		{#if currentView === 'notifications'}
 			<div class={animClass}>
 				<NotificationsView />
+			</div>
+		{/if}
+		{#if currentView === 'following'}
+			<div class={animClass}>
+				<FollowingView selectedClient={selectedClient!} selectedDid={selectedDid!} />
 			</div>
 		{/if}
 	</div>
@@ -386,6 +407,13 @@
 						'timeline',
 						currentView === 'timeline',
 						'heroicons:home-solid'
+					)}
+					{@render appButton(
+						() => switchView('following'),
+						'heroicons:users',
+						'following',
+						currentView === 'following',
+						'heroicons:users-solid'
 					)}
 					{@render appButton(
 						() => switchView('notifications'),

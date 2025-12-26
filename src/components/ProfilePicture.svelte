@@ -29,6 +29,7 @@
 		{#if isBlob(record.avatar)}
 			<img
 				class="rounded-sm"
+				loading="lazy"
 				style="width: calc(var(--spacing) * {size}); height: calc(var(--spacing) * {size});"
 				alt="avatar for {did}"
 				src={img('avatar_thumbnail', did, record.avatar.ref.$link)}

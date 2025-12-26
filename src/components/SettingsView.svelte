@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { defaultSettings, needsReload, settings } from '$lib/settings';
-	import { handleCache, didDocCache, recordCache } from '$lib/at/client';
 	import { get } from 'svelte/store';
 	import ColorPicker from 'svelte-awesome-color-picker';
 	import Tabs from './Tabs.svelte';
 	import { portal } from 'svelte-portal';
+	import { cache } from '$lib/cache';
 
 	type Tab = 'style' | 'moderation' | 'advanced';
 	let activeTab = $state<Tab>('advanced');
@@ -29,16 +29,10 @@
 	};
 
 	const handleClearCache = () => {
-		handleCache.clear();
-		didDocCache.clear();
-		recordCache.clear();
+		cache.clear();
 		alert('cache cleared!');
 	};
 </script>
-
-{#snippet divider()}
-	<div class="h-px bg-linear-to-r from-(--nucleus-accent) to-(--nucleus-accent2)"></div>
-{/snippet}
 
 {#snippet advancedTab()}
 	<div class="space-y-3 p-4">
@@ -62,6 +56,7 @@
 				{@render _input('slingshot', 'slingshot url (for fetching records & resolving identity)')}
 				{@render _input('spacedust', 'spacedust url (for notifications)')}
 				{@render _input('constellation', 'constellation url (for backlinks)')}
+				{@render _input('jetstream', 'jetstream url (for real-time updates)')}
 			</div>
 		</div>
 
@@ -161,7 +156,9 @@
 
 	<div
 		use:portal={'#app-footer'}
-		class="fixed bottom-[5dvh] z-20 w-full max-w-2xl p-4 pt-2 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)]"
+		class="
+		fixed bottom-[5dvh] z-20 w-full max-w-2xl p-4 pt-2 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)]
+		"
 	>
 		<Tabs
 			tabs={['style', 'moderation', 'advanced']}

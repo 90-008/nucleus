@@ -9,7 +9,7 @@
 </script>
 
 <div class="flex rounded border-x-3 border-b-3 border-(--nucleus-accent)/20">
-	{#each tabs as tab, idx (tab)}
+	{#each tabs as tab (tab)}
 		{@const isActive = activeTab === tab}
 		<button
 			onclick={() => onTabChange(tab)}

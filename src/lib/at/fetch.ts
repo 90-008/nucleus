@@ -4,7 +4,7 @@ import {
 	type Cid,
 	type ResourceUri
 } from '@atcute/lexicons';
-import { recordCache, type AtpClient } from './client';
+import { type AtpClient } from './client';
 import { err, expect, ok, type Result } from '$lib/result';
 import type { Backlinks } from './constellation';
 import { AppBskyFeedPost } from '@atcute/bluesky';
@@ -20,11 +20,10 @@ const replySource = 'app.bsky.feed.post:reply.parent.uri';
 
 export const fetchPostsWithBacklinks = async (
 	client: AtpClient,
-	repo: AtprotoDid,
 	cursor?: string,
 	limit?: number
 ): Promise<Result<{ posts: PostsWithReplyBacklinks; cursor?: string }, string>> => {
-	const recordsList = await client.listRecords('app.bsky.feed.post', repo, cursor, limit);
+	const recordsList = await client.listRecords('app.bsky.feed.post', cursor, limit);
 	if (!recordsList.ok) return err(`can't retrieve posts: ${recordsList.error}`);
 	cursor = recordsList.value.cursor;
 	const records = recordsList.value.records;
@@ -32,7 +31,6 @@ export const fetchPostsWithBacklinks = async (
 	try {
 		const allBacklinks = await Promise.all(
 			records.map(async (r): Promise<PostWithBacklinks> => {
-				recordCache.set(r.uri, r);
 				const replies = await client.getBacklinksUri(r.uri, replySource);
 				if (!replies.ok) throw `cant fetch replies: ${replies.error}`;
 				return {

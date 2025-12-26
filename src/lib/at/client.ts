@@ -4,7 +4,7 @@ import {
 	ComAtprotoRepoGetRecord,
 	ComAtprotoRepoListRecords
 } from '@atcute/atproto';
-import { Client as AtcuteClient } from '@atcute/client';
+import { Client as AtcuteClient, simpleFetchHandler } from '@atcute/client';
 import { safeParse, type Handle, type InferOutput } from '@atcute/lexicons';
 import {
 	isDid,
@@ -30,44 +30,56 @@ import * as v from '@atcute/lexicons/validations';
 import { MiniDocQuery, type MiniDoc } from './slingshot';
 import { BacklinksQuery, type Backlinks, type BacklinksSource } from './constellation';
 import type { Records } from '@atcute/lexicons/ambient';
-import { PersistedLRU } from '$lib/cache';
+import { cache as rawCache } from '$lib/cache';
 import { AppBskyActorProfile } from '@atcute/bluesky';
 import { WebSocket } from '@soffinal/websocket';
 import type { Notification } from './stardust';
 import { get } from 'svelte/store';
 import { settings } from '$lib/settings';
 import type { OAuthUserAgent } from '@atcute/oauth-browser-client';
-// import { JetstreamSubscription } from '@atcute/jetstream';
-
-const cacheTtl = 1000 * 60 * 60 * 24;
-export const handleCache = new PersistedLRU<Handle, AtprotoDid>({
-	max: 1000,
-	ttl: cacheTtl,
-	prefix: 'handle'
-});
-export const didDocCache = new PersistedLRU<ActorIdentifier, MiniDoc>({
-	max: 1000,
-	ttl: cacheTtl,
-	prefix: 'didDoc'
-});
-export const recordCache = new PersistedLRU<
-	string,
-	InferOutput<typeof ComAtprotoRepoGetRecord.mainSchema.output.schema>
->({
-	max: 5000,
-	ttl: cacheTtl,
-	prefix: 'record'
-});
 
 export const slingshotUrl: URL = new URL(get(settings).endpoints.slingshot);
 export const spacedustUrl: URL = new URL(get(settings).endpoints.spacedust);
 export const constellationUrl: URL = new URL(get(settings).endpoints.constellation);
 
-type NotificationsStreamEncoder = WebSocket.Encoder<undefined, Notification>;
-export type NotificationsStream = WebSocket<NotificationsStreamEncoder>;
-export type NotificationsStreamEvent = WebSocket.Event<NotificationsStreamEncoder>;
-
 export type RecordOutput<Output> = { uri: ResourceUri; cid: Cid | undefined; record: Output };
+
+const cacheWithHandles = rawCache.define(
+	'resolveHandle',
+	async (handle: Handle): Promise<AtprotoDid> => {
+		const res = await fetchMicrocosm(slingshotUrl, ComAtprotoIdentityResolveHandle.mainSchema, {
+			handle
+		});
+		if (!res.ok) throw new Error(res.error);
+		return res.value.did as AtprotoDid;
+	}
+);
+
+const cacheWithDidDocs = cacheWithHandles.define(
+	'resolveDidDoc',
+	async (identifier: ActorIdentifier): Promise<MiniDoc> => {
+		const res = await fetchMicrocosm(slingshotUrl, MiniDocQuery, {
+			identifier
+		});
+		if (!res.ok) throw new Error(res.error);
+		return res.value;
+	}
+);
+
+const cacheWithRecords = cacheWithDidDocs.define('fetchRecord', async (uri: ResourceUri) => {
+	const parsedUri = parseResourceUri(uri);
+	if (!parsedUri.ok) throw new Error(`can't parse resource uri: ${parsedUri.error}`);
+	const { repo, collection, rkey } = parsedUri.value;
+	const res = await fetchMicrocosm(slingshotUrl, ComAtprotoRepoGetRecord.mainSchema, {
+		repo,
+		collection: collection!,
+		rkey: rkey!
+	});
+	if (!res.ok) throw new Error(res.error);
+	return res.value;
+});
+
+const cache = cacheWithRecords;
 
 export class AtpClient {
 	public atcute: AtcuteClient | null = null;
@@ -117,40 +129,22 @@ export class AtpClient {
 		rkey: RecordKey
 	): Promise<Result<RecordOutput<Output>, string>> {
 		const collection = schema.object.shape.$type.expected;
-		const cacheKey = `${repo}:${collection}:${rkey}`;
 
-		const cached = recordCache.get(cacheKey);
-		if (cached) return ok({ uri: cached.uri, cid: cached.cid, record: cached.value as Output });
-		const cachedSignal = recordCache.getSignal(cacheKey);
+		try {
+			// Call the cached function
+			const rawValue = await cache.fetchRecord(`at://${repo}/${collection}/${rkey}`);
 
-		const result = await Promise.race([
-			fetchMicrocosm(slingshotUrl, ComAtprotoRepoGetRecord.mainSchema, {
-				repo,
-				collection,
-				rkey
-			}).then((result): Result<RecordOutput<Output>, string> => {
-				if (!result.ok) return result;
+			const parsed = safeParse(schema, rawValue.value);
+			if (!parsed.ok) return err(parsed.message);
 
-				const parsed = safeParse(schema, result.value.value);
-				if (!parsed.ok) return err(parsed.message);
-
-				recordCache.set(cacheKey, result.value);
-
-				return ok({
-					uri: result.value.uri,
-					cid: result.value.cid,
-					record: parsed.value as Output
-				});
-			}),
-			cachedSignal.then(
-				(d): Result<RecordOutput<Output>, string> =>
-					ok({ uri: d.uri, cid: d.cid, record: d.value as Output })
-			)
-		]);
-
-		if (!result.ok) return result;
-
-		return ok(result.value);
+			return ok({
+				uri: rawValue.uri,
+				cid: rawValue.cid,
+				record: parsed.value as Output
+			});
+		} catch (e) {
+			return err(String(e));
+		}
 	}
 
 	async getProfile(repo?: ActorIdentifier): Promise<Result<AppBskyActorProfile.Main, string>> {
@@ -161,61 +155,45 @@ export class AtpClient {
 
 	async listRecords<Collection extends keyof Records>(
 		collection: Collection,
-		repo: ActorIdentifier,
 		cursor?: string,
-		limit?: number
+		limit: number = 100
 	): Promise<
 		Result<InferXRPCBodyOutput<(typeof ComAtprotoRepoListRecords.mainSchema)['output']>, string>
 	> {
-		if (!this.atcute) return err('not authenticated');
+		if (!this.atcute || !this.user) return err('not authenticated');
 		const res = await this.atcute.get('com.atproto.repo.listRecords', {
 			params: {
-				repo,
+				repo: this.user.did,
 				collection,
 				cursor,
 				limit
 			}
 		});
 		if (!res.ok) return err(`${res.data.error}: ${res.data.message ?? 'no details'}`);
+
+		for (const record of res.data.records) {
+			await cache.set('fetchRecord', `fetchRecord~${record.uri}`, record, 60 * 60 * 24);
+		}
 		return ok(res.data);
 	}
 
-	async resolveHandle(identifier: ActorIdentifier): Promise<Result<AtprotoDid, string>> {
-		if (isDid(identifier)) return ok(identifier as AtprotoDid);
+	async listRecordsAll<Collection extends keyof Records>(
+		collection: Collection
+	): Promise<ReturnType<typeof this.listRecords>> {
+		const data: InferXRPCBodyOutput<(typeof ComAtprotoRepoListRecords.mainSchema)['output']> = {
+			records: []
+		};
 
-		const cached = handleCache.get(identifier);
-		if (cached) return ok(cached);
-		const cachedSignal = handleCache.getSignal(identifier);
+		let end = false;
+		while (!end) {
+			const res = await this.listRecords(collection, data.cursor);
+			if (!res.ok) return res;
+			data.cursor = res.value.cursor;
+			data.records.push(...res.value.records);
+			end = !res.value.cursor;
+		}
 
-		const res = await Promise.race([
-			fetchMicrocosm(slingshotUrl, ComAtprotoIdentityResolveHandle.mainSchema, {
-				handle: identifier
-			}),
-			cachedSignal.then((d): Result<{ did: Did }, string> => ok({ did: d }))
-		]);
-
-		const mapped = map(res, (data) => data.did as AtprotoDid);
-
-		if (mapped.ok) handleCache.set(identifier, mapped.value);
-
-		return mapped;
-	}
-
-	async resolveDidDoc(handleOrDid: ActorIdentifier): Promise<Result<MiniDoc, string>> {
-		const cached = didDocCache.get(handleOrDid);
-		if (cached) return ok(cached);
-		const cachedSignal = didDocCache.getSignal(handleOrDid);
-
-		const result = await Promise.race([
-			fetchMicrocosm(slingshotUrl, MiniDocQuery, {
-				identifier: handleOrDid
-			}),
-			cachedSignal.then((d): Result<MiniDoc, string> => ok(d))
-		]);
-
-		if (result.ok) didDocCache.set(handleOrDid, result.value);
-
-		return result;
+		return ok(data);
 	}
 
 	async getBacklinksUri(
@@ -235,16 +213,17 @@ export class AtpClient {
 		repo: ActorIdentifier,
 		collection: Nsid,
 		rkey: RecordKey,
-		source: BacklinksSource
+		source: BacklinksSource,
+		limit?: number
 	): Promise<Result<Backlinks, string>> {
-		const did = await this.resolveHandle(repo);
+		const did = await resolveHandle(repo);
 		if (!did.ok) return err(`cant resolve handle: ${did.error}`);
 
 		const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
 		const query = fetchMicrocosm(constellationUrl, BacklinksQuery, {
 			subject: `at://${did.value}/${collection}/${rkey}`,
 			source,
-			limit: 100
+			limit: limit || 100
 		});
 
 		const results = await Promise.race([query, timeout]);
@@ -252,33 +231,68 @@ export class AtpClient {
 
 		return results;
 	}
-
-	streamNotifications(subjects: Did[], ...sources: BacklinksSource[]): NotificationsStream {
-		const url = new URL(spacedustUrl);
-		url.protocol = 'wss:';
-		url.pathname = '/subscribe';
-		const searchParams = [];
-		sources.every((source) => searchParams.push(['wantedSources', source]));
-		subjects.every((subject) => searchParams.push(['wantedSubjectDids', subject]));
-		subjects.every((subject) => searchParams.push(['wantedSubjects', `at://${subject}`]));
-		searchParams.push(['instant', 'true']);
-		url.search = `?${new URLSearchParams(searchParams)}`;
-		// console.log(`streaming notifications: ${url}`);
-		const encoder = WebSocket.getDefaultEncoder<undefined, Notification>();
-		const ws = new WebSocket<typeof encoder>(url.toString(), {
-			encoder
-		});
-		return ws;
-	}
-
-	// streamJetstream(subjects: Did[], ...collections: Nsid[]) {
-	// 	return new JetstreamSubscription({
-	// 		url: 'wss://jetstream2.fr.hose.cam',
-	// 		wantedCollections: collections,
-	// 		wantedDids: subjects
-	// 	});
-	// }
 }
+
+export const newPublicClient = async (ident: ActorIdentifier): Promise<AtpClient> => {
+	const atp = new AtpClient();
+	const didDoc = await resolveDidDoc(ident);
+	if (!didDoc.ok) {
+		console.error('failed to resolve did doc', didDoc.error);
+		return atp;
+	}
+	atp.atcute = new AtcuteClient({ handler: simpleFetchHandler({ service: didDoc.value.pds }) });
+	atp.user = { did: didDoc.value.did, handle: didDoc.value.handle };
+	return atp;
+};
+
+// Wrappers that use the cache
+
+export const resolveHandle = async (
+	identifier: ActorIdentifier
+): Promise<Result<AtprotoDid, string>> => {
+	if (isDid(identifier)) return ok(identifier as AtprotoDid);
+
+	try {
+		const did = await cache.resolveHandle(identifier);
+		return ok(did);
+	} catch (e) {
+		return err(String(e));
+	}
+};
+
+export const resolveDidDoc = async (ident: ActorIdentifier): Promise<Result<MiniDoc, string>> => {
+	try {
+		const doc = await cache.resolveDidDoc(ident);
+		return ok(doc);
+	} catch (e) {
+		return err(String(e));
+	}
+};
+
+type NotificationsStreamEncoder = WebSocket.Encoder<undefined, Notification>;
+export type NotificationsStream = WebSocket<NotificationsStreamEncoder>;
+export type NotificationsStreamEvent = WebSocket.Event<NotificationsStreamEncoder>;
+
+export const streamNotifications = (
+	subjects: Did[],
+	...sources: BacklinksSource[]
+): NotificationsStream => {
+	const url = new URL(spacedustUrl);
+	url.protocol = 'wss:';
+	url.pathname = '/subscribe';
+	const searchParams = [];
+	sources.every((source) => searchParams.push(['wantedSources', source]));
+	subjects.every((subject) => searchParams.push(['wantedSubjectDids', subject]));
+	subjects.every((subject) => searchParams.push(['wantedSubjects', `at://${subject}`]));
+	searchParams.push(['instant', 'true']);
+	url.search = `?${new URLSearchParams(searchParams)}`;
+	// console.log(`streaming notifications: ${url}`);
+	const encoder = WebSocket.getDefaultEncoder<undefined, Notification>();
+	const ws = new WebSocket<typeof encoder>(url.toString(), {
+		encoder
+	});
+	return ws;
+};
 
 const fetchMicrocosm = async <
 	Schema extends XRPCQueryMetadata,

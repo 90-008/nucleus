@@ -20,11 +20,16 @@ export type Thread = {
 	branchParentPost?: ThreadPost;
 };
 
-export const buildThreads = (timelines: Map<Did, Map<ResourceUri, PostWithUri>>): Thread[] => {
+export const buildThreads = (
+	accounts: Did[],
+	posts: Map<Did, Map<ResourceUri, PostWithUri>>
+): Thread[] => {
 	const threadMap = new Map<ResourceUri, ThreadPost[]>();
 
 	// group posts by root uri into "thread" chains
-	for (const [account, timeline] of timelines) {
+	for (const account of accounts) {
+		const timeline = posts.get(account);
+		if (!timeline) continue;
 		for (const [uri, data] of timeline) {
 			const parsedUri = expect(parseCanonicalResourceUri(uri));
 			const rootUri = (data.record.reply?.root.uri as ResourceUri) || uri;

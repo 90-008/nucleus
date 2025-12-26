@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { generateColorForDid, loggingIn, type Account } from '$lib/accounts';
-	import { AtpClient } from '$lib/at/client';
+	import { AtpClient, resolveHandle } from '$lib/at/client';
 	import type { Handle } from '@atcute/lexicons';
 	import ProfilePicture from './ProfilePicture.svelte';
 	import PfpPlaceholder from './PfpPlaceholder.svelte';
@@ -67,7 +67,7 @@
 			if (isHandle(loginHandle)) handle = loginHandle;
 			else throw 'handle is invalid';
 
-			let did = await client.resolveHandle(handle);
+			let did = await resolveHandle(handle);
 			if (!did.ok) throw did.error;
 
 			await initiateLogin(did.value, handle);

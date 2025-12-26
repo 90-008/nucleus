@@ -36,7 +36,7 @@
 		});
 
 		// Parse rich text (mentions, links, tags)
-		const rt = await parseToRichText(client, text);
+		const rt = await parseToRichText(text);
 
 		const record: AppBskyFeedPost.Main = {
 			$type: 'app.bsky.feed.post',

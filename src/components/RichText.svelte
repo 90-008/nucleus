@@ -1,5 +1,4 @@
 <script lang="ts">
-	import type { AtpClient } from '$lib/at/client';
 	import { parseToRichText } from '$lib/richtext';
 	import { settings } from '$lib/settings';
 	import type { BakedRichtext } from '@atcute/bluesky-richtext-builder';
@@ -8,13 +7,12 @@
 	interface Props {
 		text: string;
 		facets?: Facet[];
-		client: AtpClient;
 	}
 
-	const { text, facets, client }: Props = $props();
+	const { text, facets }: Props = $props();
 
 	const richtext: Promise<BakedRichtext> = $derived(
-		facets ? Promise.resolve({ text, facets }) : parseToRichText(client, text)
+		facets ? Promise.resolve({ text, facets }) : parseToRichText(text)
 	);
 </script>
 

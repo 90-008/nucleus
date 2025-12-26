@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { type AtpClient } from '$lib/at/client';
+	import { resolveDidDoc, type AtpClient } from '$lib/at/client';
 	import {
 		AppBskyActorProfile,
 		AppBskyEmbedExternal,
@@ -35,6 +35,7 @@
 	import { type AppBskyEmbeds } from '$lib/at/types';
 	import { settings } from '$lib/settings';
 	import RichText from './RichText.svelte';
+	import { getRelativeTime } from '$lib/date';
 
 	interface Props {
 		client: AtpClient;
@@ -69,7 +70,7 @@
 	const color = generateColorForDid(did);
 
 	let handle: ActorIdentifier = $state(did);
-	const didDoc = client.resolveDidDoc(did).then((res) => {
+	const didDoc = resolveDidDoc(did).then((res) => {
 		if (res.ok) handle = res.value.handle;
 		return res;
 	});
@@ -129,25 +130,6 @@
 			default:
 				return '❓ has unknown embed';
 		}
-	};
-
-	const getRelativeTime = (date: Date) => {
-		const now = new Date();
-		const diff = now.getTime() - date.getTime();
-		const seconds = Math.floor(diff / 1000);
-		const minutes = Math.floor(seconds / 60);
-		const hours = Math.floor(minutes / 60);
-		const days = Math.floor(hours / 24);
-		const months = Math.floor(days / 30);
-		const years = Math.floor(months / 12);
-
-		if (years > 0) return `${years}y`;
-		if (months > 0) return `${months}m`;
-		if (days > 0) return `${days}d`;
-		if (hours > 0) return `${hours}h`;
-		if (minutes > 0) return `${minutes}m`;
-		if (seconds > 0) return `${seconds}s`;
-		return 'now';
 	};
 
 	const findBacklink = $derived(async (toDid: AtprotoDid, source: BacklinksSource) => {
@@ -348,7 +330,7 @@
 
 		{#if profileDesc.length > 0}
 			<p class="rounded-sm bg-black/25 p-1.5 text-wrap wrap-break-word">
-				<RichText text={profileDesc} {client} />
+				<RichText text={profileDesc} />
 			</p>
 		{/if}
 	</Dropdown>
@@ -427,7 +409,7 @@
 					</span>
 				</div>
 				<p class="leading-normal text-wrap wrap-break-word">
-					<RichText text={record.text} facets={record.facets ?? []} {client} />
+					<RichText text={record.text} facets={record.facets ?? []} />
 					{#if isOnPostComposer && record.embed}
 						{@render embedBadge(record.embed)}
 					{/if}

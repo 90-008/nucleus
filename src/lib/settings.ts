@@ -5,6 +5,7 @@ export type ApiEndpoints = Record<string, string> & {
 	slingshot: string;
 	spacedust: string;
 	constellation: string;
+	jetstream: string;
 };
 export type Settings = {
 	endpoints: ApiEndpoints;
@@ -16,7 +17,8 @@ export const defaultSettings: Settings = {
 	endpoints: {
 		slingshot: 'https://slingshot.microcosm.blue',
 		spacedust: 'https://spacedust.microcosm.blue',
-		constellation: 'https://constellation.microcosm.blue'
+		constellation: 'https://constellation.microcosm.blue',
+		jetstream: 'wss://jetstream2.fr.hose.cam'
 	},
 	theme: defaultTheme,
 	socialAppUrl: 'https://bsky.app'
@@ -26,8 +28,8 @@ const createSettingsStore = () => {
 	const stored = localStorage.getItem('settings');
 
 	const initial: Partial<Settings> = stored ? JSON.parse(stored) : defaultSettings;
-	initial.endpoints = initial.endpoints ?? defaultSettings.endpoints;
-	initial.theme = initial.theme ?? defaultSettings.theme;
+	initial.endpoints = { ...defaultSettings.endpoints, ...initial.endpoints };
+	initial.theme = { ...defaultSettings.theme, ...initial.theme };
 	initial.socialAppUrl = initial.socialAppUrl ?? defaultSettings.socialAppUrl;
 
 	const { subscribe, set, update } = writable<Settings>(initial as Settings);
@@ -66,6 +68,7 @@ export const needsReload = (current: Settings, other: Settings): boolean => {
 	return (
 		current.endpoints.slingshot !== other.endpoints.slingshot ||
 		current.endpoints.spacedust !== other.endpoints.spacedust ||
-		current.endpoints.constellation !== other.endpoints.constellation
+		current.endpoints.constellation !== other.endpoints.constellation ||
+		current.endpoints.jetstream !== other.endpoints.jetstream
 	);
 };

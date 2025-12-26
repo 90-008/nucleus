@@ -1,17 +1,12 @@
 import RichtextBuilder, { type BakedRichtext } from '@atcute/bluesky-richtext-builder';
 import { tokenize, type Token } from '$lib/richtext/parser';
 import type { Did, GenericUri, Handle } from '@atcute/lexicons';
-import type { AtpClient } from '$lib/at/client';
+import { resolveHandle } from '$lib/at/client';
 
-export const parseToRichText = (
-	client: AtpClient,
-	text: string
-): ReturnType<typeof processTokens> => {
-	const tokens = tokenize(text);
-	return processTokens(client, tokens);
-};
+export const parseToRichText = (text: string): ReturnType<typeof processTokens> =>
+	processTokens(tokenize(text));
 
-const processTokens = async (client: AtpClient, tokens: Token[]): Promise<BakedRichtext> => {
+const processTokens = async (tokens: Token[]): Promise<BakedRichtext> => {
 	const rt = new RichtextBuilder();
 
 	for (const token of tokens) {
@@ -23,7 +18,7 @@ const processTokens = async (client: AtpClient, tokens: Token[]): Promise<BakedR
 				let did: Did | undefined = token.did as Did | undefined;
 				if (!did) {
 					const handle = token.handle as Handle;
-					const result = await client.resolveHandle(handle);
+					const result = await resolveHandle(handle);
 					if (result.ok) did = result.value;
 				}
 				if (did) rt.addMention(token.raw, did);

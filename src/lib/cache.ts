@@ -1,123 +1,228 @@
-import { Cache, type CacheOptions } from '@wora/cache-persist';
-import { LRUCache } from 'lru-cache';
+import { createCache } from 'async-cache-dedupe';
 
-export interface PersistedLRUOptions {
-	prefix?: string;
-	max: number;
-	ttl?: number;
-	persistOptions?: CacheOptions;
-}
+const DB_NAME = 'nucleus-cache';
+const STORE_NAME = 'keyvalue';
+const DB_VERSION = 1;
 
-interface PersistedEntry<V> {
-	value: V;
-	addedAt: number;
-}
+type WriteOp =
+	| {
+			type: 'put';
+			key: string;
+			value: { value: unknown; expires: number };
+			resolve: () => void;
+			reject: (err: unknown) => void;
+	  }
+	| { type: 'delete'; key: string; resolve: () => void; reject: (err: unknown) => void };
+type ReadOp = {
+	key: string;
+	resolve: (val: unknown) => void;
+	reject: (err: unknown) => void;
+};
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export class PersistedLRU<K extends string, V extends {}> {
-	private memory: LRUCache<K, V>;
-	private storage: Cache;
-	private signals: Map<K, ((data: V) => void)[]>;
+class IDBStorage {
+	private dbPromise: Promise<IDBDatabase> | null = null;
 
-	private prefix = '';
+	private getBatch: ReadOp[] = [];
+	private writeBatch: WriteOp[] = [];
 
-	constructor(opts: PersistedLRUOptions) {
-		this.memory = new LRUCache<K, V>({
-			max: opts.max,
-			ttl: opts.ttl
-		});
-		this.storage = new Cache(opts.persistOptions);
-		this.prefix = opts.prefix ? `${opts.prefix}%` : '';
-		this.signals = new Map();
+	private getFlushScheduled = false;
+	private writeFlushScheduled = false;
 
-		this.init();
-	}
+	constructor() {
+		if (typeof indexedDB === 'undefined') {
+			return;
+		}
 
-	async init(): Promise<void> {
-		await this.storage.restore();
+		this.dbPromise = new Promise((resolve, reject) => {
+			const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-		const state = this.storage.getState();
-		for (const [key, val] of Object.entries(state)) {
-			try {
-				const k = this.unprefix(key) as unknown as K;
+			request.onerror = () => {
+				console.error('IDB open error:', request.error);
+				reject(request.error);
+			};
 
-				if (this.isPersistedEntry(val)) {
-					const entry = val as PersistedEntry<V>;
-					this.memory.set(k, entry.value, { start: entry.addedAt });
-				} else {
-					// Handle legacy data (before this update)
-					this.memory.set(k, val as V);
+			request.onsuccess = () => resolve(request.result);
+
+			request.onupgradeneeded = (event) => {
+				const db = (event.target as IDBOpenDBRequest).result;
+				if (!db.objectStoreNames.contains(STORE_NAME)) {
+					db.createObjectStore(STORE_NAME);
 				}
-			} catch (err) {
-				console.warn('skipping invalid persisted entry', key, err);
-			}
-		}
-	}
-
-	get(key: K): V | undefined {
-		return this.memory.get(key);
-	}
-
-	getSignal(key: K): Promise<V> {
-		return new Promise<V>((resolve) => {
-			if (!this.signals.has(key)) {
-				this.signals.set(key, [resolve]);
-				return;
-			}
-			const signals = this.signals.get(key)!;
-			signals.push(resolve);
-			this.signals.set(key, signals);
+			};
 		});
 	}
 
-	set(key: K, value: V): void {
-		const addedAt = performance.now();
-		this.memory.set(key, value, { start: addedAt });
-
-		const entry: PersistedEntry<V> = { value, addedAt };
-		this.storage.set(this.prefixed(key), entry);
-
-		const signals = this.signals.get(key);
-		let signal = signals?.pop();
-		while (signal) {
-			signal(value);
-			signal = signals?.pop();
+	async get(key: string): Promise<unknown> {
+		// checking in-flight writes
+		for (let i = this.writeBatch.length - 1; i >= 0; i--) {
+			const op = this.writeBatch[i];
+			if (op.key === key) {
+				if (op.type === 'delete') return undefined;
+				if (op.type === 'put') {
+					// if expired we dont want it
+					if (op.value.expires < Date.now()) return undefined;
+					return op.value.value;
+				}
+			}
 		}
-		this.storage.flush();
+
+		if (!this.dbPromise) return undefined;
+
+		return new Promise((resolve, reject) => {
+			this.getBatch.push({ key, resolve, reject });
+			this.scheduleGetFlush();
+		});
 	}
 
-	has(key: K): boolean {
-		return this.memory.has(key);
+	private scheduleGetFlush() {
+		if (this.getFlushScheduled) return;
+		this.getFlushScheduled = true;
+		queueMicrotask(() => this.flushGetBatch());
 	}
 
-	delete(key: K): void {
-		this.memory.delete(key);
-		this.storage.delete(this.prefixed(key));
-		this.storage.flush();
+	private async flushGetBatch() {
+		this.getFlushScheduled = false;
+		const batch = this.getBatch;
+		this.getBatch = [];
+
+		if (batch.length === 0) return;
+
+		try {
+			const db = await this.dbPromise;
+			if (!db) throw new Error('DB not available');
+
+			const transaction = db.transaction(STORE_NAME, 'readonly');
+			const store = transaction.objectStore(STORE_NAME);
+
+			batch.forEach(({ key, resolve }) => {
+				try {
+					const request = store.get(key);
+					request.onsuccess = () => {
+						const result = request.result;
+						if (!result) {
+							resolve(undefined);
+							return;
+						}
+						if (result.expires < Date.now()) {
+							// Fire-and-forget removal for expired items
+							this.remove(key).catch(() => {});
+							resolve(undefined);
+							return;
+						}
+						resolve(result.value);
+					};
+					request.onerror = () => resolve(undefined);
+				} catch {
+					resolve(undefined);
+				}
+			});
+		} catch (error) {
+			batch.forEach(({ reject }) => reject(error));
+		}
 	}
 
-	clear(): void {
-		this.memory.clear();
-		this.storage.purge();
-		this.storage.flush();
+	async set(key: string, value: unknown, ttl: number): Promise<void> {
+		if (!this.dbPromise) return;
+
+		const expires = Date.now() + ttl * 1000;
+		const storageValue = { value, expires };
+
+		return new Promise((resolve, reject) => {
+			this.writeBatch.push({ type: 'put', key, value: storageValue, resolve, reject });
+			this.scheduleWriteFlush();
+		});
 	}
 
-	private prefixed(key: K): string {
-		return this.prefix + key;
+	async remove(key: string): Promise<void> {
+		if (!this.dbPromise) return;
+
+		return new Promise((resolve, reject) => {
+			this.writeBatch.push({ type: 'delete', key, resolve, reject });
+			this.scheduleWriteFlush();
+		});
 	}
 
-	private unprefix(prefixed: string): string {
-		return prefixed.slice(this.prefix.length);
+	private scheduleWriteFlush() {
+		if (this.writeFlushScheduled) return;
+		this.writeFlushScheduled = true;
+		queueMicrotask(() => this.flushWriteBatch());
 	}
 
-	// Type guard to check if data is our new PersistedEntry format
-	private isPersistedEntry(data: unknown): data is PersistedEntry<V> {
-		return (
-			data !== null &&
-			typeof data === 'object' &&
-			'value' in data &&
-			'addedAt' in data &&
-			typeof data.addedAt === 'number'
-		);
+	private async flushWriteBatch() {
+		this.writeFlushScheduled = false;
+		const batch = this.writeBatch;
+		this.writeBatch = [];
+
+		if (batch.length === 0) return;
+
+		try {
+			const db = await this.dbPromise;
+			if (!db) throw new Error('DB not available');
+
+			const transaction = db.transaction(STORE_NAME, 'readwrite');
+			const store = transaction.objectStore(STORE_NAME);
+
+			batch.forEach((op) => {
+				try {
+					let request: IDBRequest;
+					if (op.type === 'put') {
+						request = store.put(op.value, op.key);
+					} else {
+						request = store.delete(op.key);
+					}
+
+					request.onsuccess = () => op.resolve();
+					request.onerror = () => op.reject(request.error);
+				} catch (err) {
+					op.reject(err);
+				}
+			});
+		} catch (error) {
+			batch.forEach(({ reject }) => reject(error));
+		}
+	}
+
+	async clear(): Promise<void> {
+		if (!this.dbPromise) return;
+		try {
+			const db = await this.dbPromise;
+			return new Promise<void>((resolve, reject) => {
+				const transaction = db.transaction(STORE_NAME, 'readwrite');
+				const store = transaction.objectStore(STORE_NAME);
+				const request = store.clear();
+
+				request.onerror = () => reject(request.error);
+				request.onsuccess = () => resolve();
+			});
+		} catch (e) {
+			console.error('IDB clear error', e);
+		}
+	}
+
+	async exists(key: string): Promise<boolean> {
+		return (await this.get(key)) !== undefined;
+	}
+
+	async invalidate(key: string): Promise<void> {
+		return this.remove(key);
+	}
+
+	// noops
+	async getTTL(key: string): Promise<void> {
+		return;
+	}
+	async refresh(): Promise<void> {
+		return;
 	}
 }
+
+export const cache = createCache({
+	storage: {
+		type: 'custom',
+		options: {
+			storage: new IDBStorage()
+		}
+	},
+	ttl: 60 * 60 * 24, // 24 hours
+	onError: (err) => console.error(err)
+});
