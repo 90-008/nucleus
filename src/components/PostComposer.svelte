@@ -8,21 +8,21 @@
 	import { parseCanonicalResourceUri } from '@atcute/lexicons';
 	import type { ComAtprotoRepoStrongRef } from '@atcute/atproto';
 
+	export type State =
+		| { type: 'null' }
+		| { type: 'focused'; quoting?: PostWithUri; replying?: PostWithUri };
+
 	interface Props {
 		client: AtpClient;
 		onPostSent: (post: PostWithUri) => void;
-		quoting?: PostWithUri;
-		replying?: PostWithUri;
+		_state: State;
 	}
 
-	let {
-		client,
-		onPostSent,
-		quoting = $bindable(undefined),
-		replying = $bindable(undefined)
-	}: Props = $props();
+	let { client, onPostSent, _state = $bindable({ type: 'null' }) }: Props = $props();
 
-	let color = $derived(
+	const isFocused = $derived(_state.type === 'focused');
+
+	const color = $derived(
 		client.user?.did ? generateColorForDid(client.user?.did) : 'var(--nucleus-accent2)'
 	);
 
@@ -35,18 +35,20 @@
 		const record: AppBskyFeedPost.Main = {
 			$type: 'app.bsky.feed.post',
 			text,
-			reply: replying
-				? {
-						root: replying.record.reply?.root ?? strongRef(replying),
-						parent: strongRef(replying)
-					}
-				: undefined,
-			embed: quoting
-				? {
-						$type: 'app.bsky.embed.record',
-						record: strongRef(quoting)
-					}
-				: undefined,
+			reply:
+				_state.type === 'focused' && _state.replying
+					? {
+							root: _state.replying.record.reply?.root ?? strongRef(_state.replying),
+							parent: strongRef(_state.replying)
+						}
+					: undefined,
+			embed:
+				_state.type === 'focused' && _state.quoting
+					? {
+							$type: 'app.bsky.embed.record',
+							record: strongRef(_state.quoting)
+						}
+					: undefined,
 			createdAt: new Date().toISOString()
 		};
 
@@ -75,13 +77,10 @@
 
 	let postText = $state('');
 	let info = $state('');
-	let isFocused = $state(false);
 	let textareaEl: HTMLTextAreaElement | undefined = $state();
 
 	const unfocus = () => {
-		isFocused = false;
-		quoting = undefined;
-		replying = undefined;
+		_state.type = 'null';
 	};
 
 	const doPost = () => {
@@ -104,7 +103,6 @@
 	$effect(() => {
 		document.documentElement.style.setProperty('--acc-color', color);
 		if (isFocused && textareaEl) textareaEl.focus();
-		if (quoting || replying) isFocused = true;
 	});
 </script>
 
@@ -119,7 +117,7 @@
 	/>
 {/snippet}
 
-{#snippet composer()}
+{#snippet composer(replying?: PostWithUri, quoting?: PostWithUri)}
 	<div class="flex items-center gap-2">
 		<div class="grow"></div>
 		<span
@@ -149,7 +147,7 @@
 		<textarea
 			bind:this={textareaEl}
 			bind:value={postText}
-			onfocus={() => (isFocused = true)}
+			onfocus={() => (_state.type = 'focused')}
 			onblur={unfocus}
 			onkeydown={(event) => {
 				if (event.key === 'Escape') unfocus();
@@ -174,9 +172,7 @@
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		onmousedown={(e) => {
-			if (isFocused) {
-				e.preventDefault();
-			}
+			if (isFocused) e.preventDefault();
 		}}
 		class="flex max-w-full rounded-sm border-2 shadow-lg transition-all duration-300
 			{!isFocused ? 'min-h-13 items-center' : ''}
@@ -196,12 +192,12 @@
 				</div>
 			{:else}
 				<div class="flex flex-col gap-2">
-					{#if isFocused}
-						{@render composer()}
+					{#if _state.type === 'focused'}
+						{@render composer(_state.replying, _state.quoting)}
 					{:else}
 						<input
 							bind:value={postText}
-							onfocus={() => (isFocused = true)}
+							onfocus={() => (_state = { type: 'focused' })}
 							type="text"
 							placeholder="what's on your mind?"
 							class="flex-1"

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import BskyPost from '$components/BskyPost.svelte';
-	import PostComposer from '$components/PostComposer.svelte';
+	import PostComposer, { type State as PostComposerState } from '$components/PostComposer.svelte';
 	import AccountSelector from '$components/AccountSelector.svelte';
 	import SettingsPopup from '$components/SettingsPopup.svelte';
 	import { AtpClient, type NotificationsStreamEvent } from '$lib/at/client';
@@ -23,6 +23,7 @@
 
 	const { data: loadData }: PageProps = $props();
 
+	// svelte-ignore state_referenced_locally
 	let errors = $state(loadData.client.ok ? [] : [loadData.client.error]);
 	let errorsOpen = $state(false);
 
@@ -72,8 +73,7 @@
 
 	const threads = $derived(filterThreads(buildThreads(posts), $accounts, { viewOwnPosts }));
 
-	let quoting = $state<PostWithUri | undefined>(undefined);
-	let replying = $state<PostWithUri | undefined>(undefined);
+	let postComposerState = $state<PostComposerState>({ type: 'null' });
 
 	const expandedThreads = new SvelteSet<ResourceUri>();
 
@@ -330,8 +330,7 @@
 							<PostComposer
 								client={selectedClient}
 								onPostSent={(post) => posts.get(selectedDid!)?.set(post.uri, post)}
-								bind:quoting
-								bind:replying
+								bind:_state={postComposerState}
 							/>
 						</div>
 					{:else}
@@ -342,7 +341,7 @@
 						</div>
 					{/if}
 
-					{#if showScrollToTop}
+					{#if postComposerState.type === 'null' && showScrollToTop}
 						{@render appButton(scrollToTop, 'heroicons:arrow-up-16-solid', 'scroll to top')}
 					{/if}
 				</div>
@@ -415,8 +414,8 @@
 					<div class="mb-1.5">
 						<BskyPost
 							client={selectedClient ?? viewClient}
-							onQuote={(post) => (quoting = post)}
-							onReply={(post) => (replying = post)}
+							onQuote={(post) => (postComposerState = { type: 'focused', quoting: post })}
+							onReply={(post) => (postComposerState = { type: 'focused', replying: post })}
 							{...post}
 						/>
 					</div>

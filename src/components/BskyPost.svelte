@@ -81,7 +81,7 @@
 		const p = await client.getProfile(did);
 		if (!p.ok) return;
 		profile = p.value;
-		console.log(profile.description);
+		// console.log(profile.description);
 	});
 	// const replies = replyBacklinks
 	// 	? Promise.resolve(ok(replyBacklinks))
@@ -97,7 +97,7 @@
 
 	const scrollToAndPulse = (targetUri: ResourceUri) => {
 		const targetId = `timeline-post-${targetUri}-0`;
-		console.log(`Scrolling to ${targetId}`);
+		// console.log(`Scrolling to ${targetId}`);
 		const element = document.getElementById(targetId);
 		if (!element) return;
 
@@ -171,7 +171,7 @@
 			// reply: backlinks[2],
 			// quote: backlinks[3]
 		};
-		console.log('findAllBacklinks', did, aturi, actions);
+		// console.log('findAllBacklinks', did, aturi, actions);
 		postActions.set(`${did}:${aturi}`, actions);
 	};
 	onMount(() => {
