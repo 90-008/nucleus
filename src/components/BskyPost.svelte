@@ -24,7 +24,14 @@
 	import BskyPost from './BskyPost.svelte';
 	import Icon from '@iconify/svelte';
 	import { type Backlink, type BacklinksSource } from '$lib/at/constellation';
-	import { clients, postActions, posts, pulsingPostId, type PostActions } from '$lib/state.svelte';
+	import {
+		clients,
+		postActions,
+		posts,
+		pulsingPostId,
+		type PostActions,
+		currentTime
+	} from '$lib/state.svelte';
 	import * as TID from '@atcute/tid';
 	import type { PostWithUri } from '$lib/at/fetch';
 	import { onMount } from 'svelte';
@@ -405,7 +412,7 @@
 						title={new Date(record.createdAt).toLocaleString()}
 						class="pl-0.5 text-nowrap text-(--nucleus-fg)/67"
 					>
-						{getRelativeTime(new Date(record.createdAt))}
+						{getRelativeTime(new Date(record.createdAt), currentTime)}
 					</span>
 				</div>
 				<p class="leading-normal text-wrap wrap-break-word">

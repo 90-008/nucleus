@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import { AtpClient, newPublicClient, type NotificationsStream } from './at/client';
-import { SvelteMap } from 'svelte/reactivity';
+import { SvelteMap, SvelteDate } from 'svelte/reactivity';
 import type { Did, InferOutput, ResourceUri } from '@atcute/lexicons';
 import type { Backlink } from './at/constellation';
 import { fetchPostsWithBacklinks, hydratePosts, type PostWithUri } from './at/fetch';
@@ -133,3 +133,11 @@ export const handleJetstreamEvent = (event: JetstreamEvent) => {
 		}
 	}
 };
+
+export const currentTime = new SvelteDate();
+
+if (typeof window !== 'undefined') {
+	setInterval(() => {
+		currentTime.setTime(Date.now());
+	}, 1000);
+}
