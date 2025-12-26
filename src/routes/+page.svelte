@@ -352,8 +352,8 @@
 
 		<div
 			class="
-			{currentView === 'timeline' ? '' : 'hidden'}
-			fixed bottom-[5.5dvh] z-20 w-full max-w-2xl p-2.5 px-4 transition-all
+			{currentView === 'timeline' || currentView === 'following' ? '' : 'hidden'}
+			z-20 w-full max-w-2xl p-2.5 px-4 pb-1 transition-all
 			"
 		>
 			<!-- composer and error disclaimer (above thread list, not scrollable) -->
@@ -389,6 +389,8 @@
 				</div>
 			</div>
 		</div>
+
+		<div id="footer-portal" class="contents"></div>
 
 		<div class="footer-border-bg rounded-t-sm px-0.5 pt-0.5">
 			<div class="footer-bg rounded-t-sm">

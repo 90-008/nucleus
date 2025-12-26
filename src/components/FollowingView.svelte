@@ -6,8 +6,7 @@
 	import { getRelativeTime } from '$lib/date';
 	import { generateColorForDid } from '$lib/accounts';
 	import { type AtprotoDid } from '@atcute/lexicons/syntax';
-	import { flip } from 'svelte/animate';
-	import { cubicOut } from 'svelte/easing';
+	import VirtualList from '@tutorlatin/svelte-tiny-virtual-list';
 
 	interface Props {
 		selectedDid: Did;
@@ -194,64 +193,16 @@
 	);
 </script>
 
-{#snippet followingItems()}
-	{#each sortedFollowing as user (user.did)}
-		{@const stats = user.data!}
-		{@const lastPostAt = stats.lastPostAt}
-		{@const relTime = getRelativeTime(lastPostAt, currentTime)}
-		{@const color = generateColorForDid(user.did)}
-		<div animate:flip={{ duration: 350, easing: cubicOut }}>
-			<div
-				class="group flex items-center gap-2 rounded-sm bg-(--nucleus-accent)/7 p-3 transition-colors hover:bg-(--post-color)/20"
-				style={`--post-color: ${color};`}
-			>
-				<ProfilePicture client={selectedClient} did={user.did} size={10} />
-				<div class="min-w-0 flex-1 space-y-1">
-					<div
-						class="flex items-baseline gap-2 font-bold transition-colors group-hover:text-(--post-color)"
-						style={`--post-color: ${color};`}
-					>
-						{#await Promise.all([user.profile, user.handle]) then [displayName, handle]}
-							<span class="truncate">{displayName || handle}</span>
-							<span class="truncate text-sm opacity-60">@{handle}</span>
-						{/await}
-					</div>
-					<div class="flex gap-2 text-xs opacity-70">
-						<span
-							class={Date.now() - lastPostAt.getTime() < 1000 * 60 * 60 * 2
-								? 'text-(--nucleus-accent)'
-								: ''}
-						>
-							posted {relTime}
-							{relTime !== 'now' ? 'ago' : ''}
-						</span>
-						{#if stats.recentPostCount > 0}
-							<span class="text-(--nucleus-accent2)">
-								{stats.recentPostCount} posts / 6h
-							</span>
-						{/if}
-						{#if followingSort === 'conversational' && stats.conversationalScore > 0}
-							<span class="ml-auto font-bold text-(--nucleus-accent)">
-								★ {stats.conversationalScore.toFixed(1)}
-							</span>
-						{/if}
-					</div>
-				</div>
-			</div>
-		</div>
-	{/each}
-{/snippet}
-
-<div class="p-2">
-	<div class="mb-4 flex flex-col justify-between gap-4 px-2 sm:flex-row sm:items-center">
+<div class="flex h-full flex-col p-2">
+	<div class="mb-4 flex items-center justify-between gap-2 p-2 px-2 md:gap-4">
 		<div>
-			<h2 class="text-3xl font-bold">following</h2>
+			<h2 class="text-2xl font-bold md:text-3xl">following</h2>
 			<div class="mt-2 flex gap-2">
 				<div class="h-1 w-8 rounded-full bg-(--nucleus-accent)"></div>
 				<div class="h-1 w-11 rounded-full bg-(--nucleus-accent2)"></div>
 			</div>
 		</div>
-		<div class="flex flex-wrap gap-2 text-sm">
+		<div class="flex gap-1 text-sm sm:gap-2">
 			{#each ['recent', 'active', 'conversational'] as type (type)}
 				<button
 					class="rounded-sm px-2 py-1 transition-colors {followingSort === type
@@ -265,7 +216,7 @@
 		</div>
 	</div>
 
-	<div class="flex flex-col gap-2">
+	<div class="min-h-0 flex-1">
 		{#if sortedFollowing.length === 0}
 			<div class="flex justify-center py-8">
 				<div
@@ -274,7 +225,55 @@
 				></div>
 			</div>
 		{:else}
-			{@render followingItems()}
+			<VirtualList height="70vh" itemCount={sortedFollowing.length} itemSize={76}>
+				{#snippet item({ index, style }: { index: number; style: string })}
+					{@const user = sortedFollowing[index]}
+					{@const stats = user.data!}
+					{@const lastPostAt = stats.lastPostAt}
+					{@const relTime = getRelativeTime(lastPostAt, currentTime)}
+					{@const color = generateColorForDid(user.did)}
+					<!-- box-border and pb-2 (0.5rem) simulates the gap-2 -->
+					<div {style} class="box-border w-full pb-2">
+						<div
+							class="group flex items-center gap-2 rounded-sm bg-(--nucleus-accent)/7 p-3 transition-colors hover:bg-(--post-color)/20"
+							style={`--post-color: ${color};`}
+						>
+							<ProfilePicture client={selectedClient} did={user.did} size={10} />
+							<div class="min-w-0 flex-1 space-y-1">
+								<div
+									class="flex items-baseline gap-2 font-bold transition-colors group-hover:text-(--post-color)"
+									style={`--post-color: ${color};`}
+								>
+									{#await Promise.all([user.profile, user.handle]) then [displayName, handle]}
+										<span class="truncate">{displayName || handle}</span>
+										<span class="truncate text-sm opacity-60">@{handle}</span>
+									{/await}
+								</div>
+								<div class="flex gap-2 text-xs opacity-70">
+									<span
+										class={Date.now() - lastPostAt.getTime() < 1000 * 60 * 60 * 2
+											? 'text-(--nucleus-accent)'
+											: ''}
+									>
+										posted {relTime}
+										{relTime !== 'now' ? 'ago' : ''}
+									</span>
+									{#if stats.recentPostCount > 0}
+										<span class="text-(--nucleus-accent2)">
+											{stats.recentPostCount} posts / 6h
+										</span>
+									{/if}
+									{#if followingSort === 'conversational' && stats.conversationalScore > 0}
+										<span class="ml-auto font-bold text-(--nucleus-accent)">
+											★ {stats.conversationalScore.toFixed(1)}
+										</span>
+									{/if}
+								</div>
+							</div>
+						</div>
+					</div>
+				{/snippet}
+			</VirtualList>
 		{/if}
 	</div>
 </div>

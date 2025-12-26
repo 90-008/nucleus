@@ -155,9 +155,9 @@
 	</div>
 
 	<div
-		use:portal={'#app-footer'}
+		use:portal={'#footer-portal'}
 		class="
-		fixed bottom-[5dvh] z-20 w-full max-w-2xl p-4 pt-2 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)]
+		z-20 w-full max-w-2xl bg-(--nucleus-bg) p-4 pt-2 pb-1 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)]
 		"
 	>
 		<Tabs

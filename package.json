@@ -27,6 +27,7 @@
 		"@atcute/tid": "^1.0.3",
 		"@floating-ui/dom": "^1.7.4",
 		"@soffinal/websocket": "^0.2.1",
+		"@tutorlatin/svelte-tiny-virtual-list": "^3.0.17",
 		"@wora/cache-persist": "^2.2.1",
 		"async-cache-dedupe": "^3.4.0",
 		"hash-wasm": "^4.12.0",

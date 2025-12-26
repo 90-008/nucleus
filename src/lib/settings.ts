@@ -25,7 +25,8 @@ export const defaultSettings: Settings = {
 };
 
 const createSettingsStore = () => {
-	const stored = localStorage.getItem('settings');
+	// Prevent SSR crash if localStorage is missing
+	const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('settings') : null;
 
 	const initial: Partial<Settings> = stored ? JSON.parse(stored) : defaultSettings;
 	initial.endpoints = { ...defaultSettings.endpoints, ...initial.endpoints };
@@ -35,28 +36,40 @@ const createSettingsStore = () => {
 	const { subscribe, set, update } = writable<Settings>(initial as Settings);
 
 	subscribe((settings) => {
+		if (typeof document === 'undefined') return;
 		const theme = settings.theme;
 		document.documentElement.style.setProperty('--nucleus-bg', theme.bg);
 		document.documentElement.style.setProperty('--nucleus-fg', theme.fg);
 		document.documentElement.style.setProperty('--nucleus-accent', theme.accent);
 		document.documentElement.style.setProperty('--nucleus-accent2', theme.accent2);
+
+		const oldMeta = document.querySelector('meta[name="theme-color"]');
+		if (oldMeta) oldMeta.remove();
+
+		const metaThemeColor = document.createElement('meta');
+		metaThemeColor.setAttribute('name', 'theme-color');
+		metaThemeColor.setAttribute('content', theme.bg);
+		document.head.appendChild(metaThemeColor);
 	});
 
 	return {
 		subscribe,
 		set: (value: Settings) => {
-			localStorage.setItem('settings', JSON.stringify(value));
+			if (typeof localStorage !== 'undefined')
+				localStorage.setItem('settings', JSON.stringify(value));
 			set(value);
 		},
 		update: (fn: (value: Settings) => Settings) => {
 			update((value) => {
 				const newValue = fn(value);
-				localStorage.setItem('settings', JSON.stringify(newValue));
+				if (typeof localStorage !== 'undefined')
+					localStorage.setItem('settings', JSON.stringify(newValue));
 				return newValue;
 			});
 		},
 		reset: () => {
-			localStorage.setItem('settings', JSON.stringify(defaultSettings));
+			if (typeof localStorage !== 'undefined')
+				localStorage.setItem('settings', JSON.stringify(defaultSettings));
 			set(defaultSettings);
 		}
 	};
