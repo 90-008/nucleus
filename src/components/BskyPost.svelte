@@ -12,27 +12,25 @@
 		type ActorIdentifier,
 		type CanonicalResourceUri,
 		type Did,
-		type Nsid,
 		type RecordKey,
 		type ResourceUri
 	} from '@atcute/lexicons';
 	import { expect, ok } from '$lib/result';
-	import { accounts, generateColorForDid } from '$lib/accounts';
+	import { generateColorForDid } from '$lib/accounts';
 	import ProfilePicture from './ProfilePicture.svelte';
 	import { isBlob } from '@atcute/lexicons/interfaces';
 	import { blob, img } from '$lib/cdn';
 	import BskyPost from './BskyPost.svelte';
 	import Icon from '@iconify/svelte';
-	import { type Backlink, type BacklinksSource } from '$lib/at/constellation';
 	import {
 		clients,
-		postActions,
-		posts,
+		allPosts,
 		pulsingPostId,
-		type PostActions,
-		currentTime
+		currentTime,
+		findBacklinksBy,
+		deletePostBacklink,
+		createPostBacklink
 	} from '$lib/state.svelte';
-	import * as TID from '@atcute/tid';
 	import type { PostWithUri } from '$lib/at/fetch';
 	import { onMount } from 'svelte';
 	import { type AtprotoDid } from '@atcute/lexicons/syntax';
@@ -43,6 +41,7 @@
 	import { settings } from '$lib/settings';
 	import RichText from './RichText.svelte';
 	import { getRelativeTime } from '$lib/date';
+	import { likeSource, repostSource } from '$lib';
 
 	interface Props {
 		client: AtpClient;
@@ -91,14 +90,6 @@
 		profile = p.value;
 		// console.log(profile.description);
 	});
-	// const replies = replyBacklinks
-	// 	? Promise.resolve(ok(replyBacklinks))
-	// 	: client.getBacklinks(
-	// 			identifier,
-	// 			'app.bsky.feed.post',
-	// 			rkey,
-	// 			'app.bsky.feed.post:reply.parent.uri'
-	// 		);
 
 	const postId = `timeline-post-${aturi}-${quoteDepth}`;
 	const isPulsing = derived(pulsingPostId, (pulsingPostId) => pulsingPostId === postId);
@@ -139,82 +130,6 @@
 		}
 	};
 
-	const findBacklink = $derived(async (toDid: AtprotoDid, source: BacklinksSource) => {
-		const backlinks = await client.getBacklinks(did, 'app.bsky.feed.post', rkey, source);
-		if (!backlinks.ok) return null;
-		return backlinks.value.records.find((r) => r.did === toDid) ?? null;
-	});
-
-	let findAllBacklinks = async (did: AtprotoDid | null) => {
-		if (!did) return;
-		if (postActions.has(`${did}:${aturi}`)) return;
-		const backlinks = await Promise.all([
-			findBacklink(did, 'app.bsky.feed.like:subject.uri'),
-			findBacklink(did, 'app.bsky.feed.repost:subject.uri')
-			// findBacklink('app.bsky.feed.post:reply.parent.uri'),
-			// findBacklink('app.bsky.feed.post:embed.record.uri')
-		]);
-		const actions: PostActions = {
-			like: backlinks[0],
-			repost: backlinks[1]
-			// reply: backlinks[2],
-			// quote: backlinks[3]
-		};
-		// console.log('findAllBacklinks', did, aturi, actions);
-		postActions.set(`${did}:${aturi}`, actions);
-	};
-	onMount(() => {
-		// findAllBacklinks($selectedDid);
-		accounts.subscribe((accs) => {
-			accs.map((acc) => acc.did).forEach((did) => findAllBacklinks(did));
-		});
-	});
-
-	const toggleLink = async (link: Backlink | null, collection: Nsid): Promise<Backlink | null> => {
-		// console.log('toggleLink', selectedDid, link, collection);
-		if (!selectedDid) return null;
-		const _post = await post;
-		if (!_post.ok) return null;
-		if (!link) {
-			if (_post.value.cid) {
-				const record = {
-					$type: collection,
-					subject: {
-						cid: _post.value.cid,
-						uri: aturi
-					},
-					createdAt: new Date().toISOString()
-				};
-				const rkey = TID.now();
-				// todo: handle errors
-				client.atcute?.post('com.atproto.repo.createRecord', {
-					input: {
-						repo: selectedDid,
-						collection,
-						record,
-						rkey
-					}
-				});
-				return {
-					collection,
-					did: selectedDid,
-					rkey
-				};
-			}
-		} else {
-			// todo: handle errors
-			client.atcute?.post('com.atproto.repo.deleteRecord', {
-				input: {
-					repo: link.did,
-					collection: link.collection,
-					rkey: link.rkey
-				}
-			});
-			return null;
-		}
-		return link;
-	};
-
 	let actionsOpen = $state(false);
 	let actionsPos = $state({ x: 0, y: 0 });
 
@@ -247,7 +162,7 @@
 			})
 			.then((result) => {
 				if (!result.ok) return;
-				posts.get(did)?.delete(aturi);
+				allPosts.get(did)?.delete(aturi);
 				deleteState = 'deleted';
 			});
 		actionsOpen = false;
@@ -428,8 +343,7 @@
 					</div>
 				{/if}
 				{#if !isOnPostComposer}
-					{@const backlinks = postActions.get(`${selectedDid!}:${post.value.uri}`)}
-					{@render postControls(post.value, backlinks)}
+					{@render postControls(post.value)}
 				{/if}
 			</div>
 		{:else}
@@ -507,7 +421,9 @@
 	<!-- todo: implement external link embeds -->
 {/snippet}
 
-{#snippet postControls(post: PostWithUri, backlinks?: PostActions)}
+{#snippet postControls(post: PostWithUri)}
+	{@const myRepost = findBacklinksBy(post.uri, repostSource, selectedDid!).length > 0}
+	{@const myLike = findBacklinksBy(post.uri, likeSource, selectedDid!).length > 0}
 	{#snippet control(
 		name: string,
 		icon: string,
@@ -529,44 +445,27 @@
 	{/snippet}
 	<div class="mt-3 flex w-full items-center justify-between">
 		<div class="flex w-fit items-center rounded-sm" style="background: {color}1f;">
-			{#snippet label(
-				name: string,
-				icon: string,
-				onClick: (link: Backlink | null | undefined) => void,
-				backlink?: Backlink | null,
-				hasSolid?: boolean
-			)}
-				{@render control(name, icon, () => onClick(backlink), backlink ? true : false, hasSolid)}
-			{/snippet}
-			{@render label('reply', 'heroicons:chat-bubble-left', () => {
-				onReply?.(post);
-			})}
-			{@render label(
+			{@render control('reply', 'heroicons:chat-bubble-left', () => onReply?.(post), false, true)}
+			{@render control(
 				'repost',
 				'heroicons:arrow-path-rounded-square-20-solid',
-				async (link) => {
-					if (link === undefined) return;
-					postActions.set(`${selectedDid!}:${aturi}`, {
-						...backlinks!,
-						repost: await toggleLink(link, 'app.bsky.feed.repost')
-					});
+				() => {
+					if (!selectedDid) return;
+					if (myRepost) deletePostBacklink(client, post, repostSource);
+					else createPostBacklink(client, post, repostSource);
 				},
-				backlinks?.repost
+				myRepost
 			)}
-			{@render label('quote', 'heroicons:paper-clip-20-solid', () => {
-				onQuote?.(post);
-			})}
-			{@render label(
+			{@render control('quote', 'heroicons:paper-clip-20-solid', () => onQuote?.(post), false)}
+			{@render control(
 				'like',
 				'heroicons:star',
-				async (link) => {
-					if (link === undefined) return;
-					postActions.set(`${selectedDid!}:${aturi}`, {
-						...backlinks!,
-						like: await toggleLink(link, 'app.bsky.feed.like')
-					});
+				() => {
+					if (!selectedDid) return;
+					if (myLike) deletePostBacklink(client, post, likeSource);
+					else createPostBacklink(client, post, likeSource);
 				},
-				backlinks?.like,
+				myLike,
 				true
 			)}
 		</div>

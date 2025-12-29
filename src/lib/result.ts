@@ -26,3 +26,6 @@ export const map = <T, E, U>(v: Result<T, E>, fn: (value: T) => U): Result<U, E>
 	}
 	return err(v.error);
 };
+
+export type OkType<R> = R extends { ok: true; value: infer T } ? T : never;
+export type ErrType<R> = R extends { ok: false; error: infer E } ? E : never;

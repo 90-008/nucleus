@@ -1,4 +1,4 @@
-import { err, expect, map, ok, type Result } from '$lib/result';
+import { err, expect, map, ok, type OkType, type Result } from '$lib/result';
 import {
 	ComAtprotoIdentityResolveHandle,
 	ComAtprotoRepoGetRecord,
@@ -37,6 +37,7 @@ import type { Notification } from './stardust';
 import { get } from 'svelte/store';
 import { settings } from '$lib/settings';
 import type { OAuthUserAgent } from '@atcute/oauth-browser-client';
+import { timestampFromCursor } from '$lib';
 
 export const slingshotUrl: URL = new URL(get(settings).endpoints.slingshot);
 export const spacedustUrl: URL = new URL(get(settings).endpoints.spacedust);
@@ -166,22 +167,26 @@ export class AtpClient {
 				repo: this.user.did,
 				collection,
 				cursor,
-				limit
+				limit,
+				reverse: false
 			}
 		});
 		if (!res.ok) return err(`${res.data.error}: ${res.data.message ?? 'no details'}`);
 
-		for (const record of res.data.records) {
+		for (const record of res.data.records)
 			await cache.set('fetchRecord', `fetchRecord~${record.uri}`, record, 60 * 60 * 24);
-		}
+
 		return ok(res.data);
 	}
 
-	async listRecordsAll<Collection extends keyof Records>(
-		collection: Collection
+	async listRecordsUntil<Collection extends keyof Records>(
+		collection: Collection,
+		cursor?: string,
+		timestamp: number = -1
 	): Promise<ReturnType<typeof this.listRecords>> {
-		const data: InferXRPCBodyOutput<(typeof ComAtprotoRepoListRecords.mainSchema)['output']> = {
-			records: []
+		const data: OkType<Awaited<ReturnType<typeof this.listRecords>>> = {
+			records: [],
+			cursor
 		};
 
 		let end = false;
@@ -190,7 +195,23 @@ export class AtpClient {
 			if (!res.ok) return res;
 			data.cursor = res.value.cursor;
 			data.records.push(...res.value.records);
-			end = !res.value.cursor;
+			end = !data.cursor;
+			if (!end && timestamp > 0) {
+				const cursorTimestamp = timestampFromCursor(data.cursor);
+				if (cursorTimestamp === undefined) {
+					console.warn(
+						'could not parse timestamp from cursor, stopping fetch to prevent infinite loop:',
+						data.cursor
+					);
+					end = true;
+				} else if (cursorTimestamp < timestamp) {
+					end = true;
+				} else {
+					console.info(
+						`${this.user?.did}: continuing to fetch ${collection}, on ${cursorTimestamp} until ${timestamp}`
+					);
+				}
+			}
 		}
 
 		return ok(data);

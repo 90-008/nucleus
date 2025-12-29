@@ -5,20 +5,184 @@ import {
 	type NotificationsStream,
 	type NotificationsStreamEvent
 } from './at/client';
-import { SvelteMap, SvelteDate } from 'svelte/reactivity';
-import type { Did, InferOutput, ResourceUri } from '@atcute/lexicons';
+import { SvelteMap, SvelteDate, SvelteSet } from 'svelte/reactivity';
+import type { Did, InferOutput, Nsid, ResourceUri } from '@atcute/lexicons';
 import { fetchPostsWithBacklinks, hydratePosts, type PostWithUri } from './at/fetch';
 import { parseCanonicalResourceUri, type AtprotoDid } from '@atcute/lexicons/syntax';
 import { AppBskyFeedPost, type AppBskyGraphFollow } from '@atcute/bluesky';
 import type { ComAtprotoRepoListRecords } from '@atcute/atproto';
 import type { JetstreamSubscription, JetstreamEvent } from '@atcute/jetstream';
 import { expect } from './result';
-import type { PostActions } from './thread';
+import type { Backlink, BacklinksSource } from './at/constellation';
+import { now as tidNow } from '@atcute/tid';
+import type { Records } from '@atcute/lexicons/ambient';
+import { likeSource, replySource, repostSource, timestampFromCursor } from '$lib';
 
 export const notificationStream = writable<NotificationsStream | null>(null);
 export const jetstream = writable<JetstreamSubscription | null>(null);
 
-export const postActions = new SvelteMap<`${Did}:${ResourceUri}`, PostActions>();
+export type BacklinksMap = SvelteMap<BacklinksSource, SvelteSet<Backlink>>;
+export const allBacklinks = new SvelteMap<ResourceUri, BacklinksMap>();
+
+export const addBacklinks = (
+	subject: ResourceUri,
+	source: BacklinksSource,
+	links: Iterable<Backlink>
+) => {
+	let postsMap = allBacklinks.get(subject);
+	if (!postsMap) {
+		postsMap = new SvelteMap();
+		allBacklinks.set(subject, postsMap);
+	}
+	let backlinksSet = postsMap.get(source);
+	if (!backlinksSet) {
+		backlinksSet = new SvelteSet();
+		postsMap.set(source, backlinksSet);
+	}
+	for (const link of links) {
+		backlinksSet.add(link);
+		// console.log(
+		// 	`added backlink at://${link.did}/${link.collection}/${link.rkey} to ${subject} from ${source}`
+		// );
+	}
+};
+
+export const removeBacklinks = (
+	subject: ResourceUri,
+	source: BacklinksSource,
+	links: Iterable<Backlink>
+) => {
+	const postsMap = allBacklinks.get(subject);
+	if (!postsMap) return;
+	const backlinksSet = postsMap.get(source);
+	if (!backlinksSet) return;
+	for (const link of links) backlinksSet.delete(link);
+};
+
+export const findBacklinksBy = (
+	subject: ResourceUri,
+	source: BacklinksSource,
+	did: Did
+): Backlink[] => {
+	const postsMap = allBacklinks.get(subject);
+	if (!postsMap) return [];
+	const backlinksSet = postsMap.get(source);
+	if (!backlinksSet) return [];
+	return Array.from(backlinksSet.values().filter((link) => link.did === did));
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const getNestedValue = (obj: any, path: string[]): any => {
+	return path.reduce((current, key) => current?.[key], obj);
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const setNestedValue = (obj: any, path: string[], value: any): void => {
+	const lastKey = path[path.length - 1];
+	const parent = path.slice(0, -1).reduce((current, key) => {
+		if (current[key] === undefined) current[key] = {};
+		return current[key];
+	}, obj);
+	parent[lastKey] = value;
+};
+
+export const backlinksCursors = new SvelteMap<
+	Did,
+	SvelteMap<BacklinksSource, string | undefined>
+>();
+
+export const fetchLinksUntil = async (
+	client: AtpClient,
+	backlinkSource: BacklinksSource,
+	timestamp: number = -1
+) => {
+	const did = client.user?.did;
+	if (!did) return;
+
+	let cursorMap = backlinksCursors.get(did);
+	if (!cursorMap) {
+		cursorMap = new SvelteMap<BacklinksSource, string | undefined>();
+		backlinksCursors.set(did, cursorMap);
+	}
+
+	const [_collection, source] = backlinkSource.split(':');
+	const collection = _collection as keyof Records;
+	const cursor = cursorMap.get(backlinkSource);
+	console.log(`${did}: fetchLinksUntil`, backlinkSource, cursor, timestamp);
+	const result = await client.listRecordsUntil(collection, cursor, timestamp);
+
+	if (!result.ok) {
+		console.error('failed to fetch links until', result.error);
+		return;
+	}
+	cursorMap.set(backlinkSource, result.value.cursor);
+
+	const path = source.split('.');
+	for (const record of result.value.records) {
+		const uri = getNestedValue(record.value, path);
+		const parsedUri = parseCanonicalResourceUri(record.uri);
+		if (!parsedUri.ok) continue;
+		addBacklinks(uri, `${collection}:${source}`, [
+			{
+				did: parsedUri.value.repo,
+				collection: parsedUri.value.collection,
+				rkey: parsedUri.value.rkey
+			}
+		]);
+	}
+};
+
+export const deletePostBacklink = async (
+	client: AtpClient,
+	post: PostWithUri,
+	source: BacklinksSource
+) => {
+	const did = client.user?.did;
+	if (!did) return;
+	const collection = source.split(':')[0] as Nsid;
+	const links = findBacklinksBy(post.uri, source, did);
+	removeBacklinks(post.uri, source, links);
+	await Promise.allSettled(
+		links.map((link) =>
+			client.atcute?.post('com.atproto.repo.deleteRecord', {
+				input: { repo: did, collection, rkey: link.rkey! }
+			})
+		)
+	);
+};
+
+export const createPostBacklink = async (
+	client: AtpClient,
+	post: PostWithUri,
+	source: BacklinksSource
+) => {
+	const did = client.user?.did;
+	if (!did) return;
+	const [_collection, subject] = source.split(':');
+	const collection = _collection as Nsid;
+	const rkey = tidNow();
+	addBacklinks(post.uri, source, [
+		{
+			did,
+			collection,
+			rkey
+		}
+	]);
+	const record = {
+		$type: collection,
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		createdAt: new Date().toISOString()
+	};
+	setNestedValue(record, subject.split('.'), post.uri);
+	await client.atcute?.post('com.atproto.repo.createRecord', {
+		input: {
+			repo: did,
+			collection,
+			rkey,
+			record
+		}
+	});
+};
 
 export const pulsingPostId = writable<string | null>(null);
 
@@ -45,7 +209,7 @@ export const addFollows = (
 
 export const fetchFollows = async (did: AtprotoDid) => {
 	const client = await getClient(did);
-	const res = await client.listRecordsAll('app.bsky.graph.follow');
+	const res = await client.listRecordsUntil('app.bsky.graph.follow');
 	if (!res.ok) return;
 	addFollows(
 		did,
@@ -53,43 +217,67 @@ export const fetchFollows = async (did: AtprotoDid) => {
 	);
 };
 
-export const fetchFollowPosts = async (did: AtprotoDid) => {
+export const fetchForInteractions = async (did: AtprotoDid) => {
 	const client = await getClient(did);
 	const res = await client.listRecords('app.bsky.feed.post');
 	if (!res.ok) return;
 	addPostsRaw(did, res.value);
+
+	const cursorTimestamp = timestampFromCursor(res.value.cursor) ?? -1;
+	const threeDaysAgo = (Date.now() - 3 * 24 * 60 * 60 * 1000) * 1000;
+	const timestamp = Math.min(cursorTimestamp, threeDaysAgo);
+	console.log(`${did}: fetchFollowPosts`, res.value.cursor, timestamp);
+	await Promise.all([repostSource].map((s) => fetchLinksUntil(client, s, timestamp)));
 };
 
-export const posts = new SvelteMap<Did, SvelteMap<ResourceUri, PostWithUri>>();
-export const cursors = new SvelteMap<Did, { value?: string; end: boolean }>();
+export const allPosts = new SvelteMap<Did, SvelteMap<ResourceUri, PostWithUri>>();
 
 export const addPostsRaw = (
-	did: Did,
-	_posts: InferOutput<ComAtprotoRepoListRecords.mainSchema['output']['schema']>
+	did: AtprotoDid,
+	newPosts: InferOutput<ComAtprotoRepoListRecords.mainSchema['output']['schema']>
 ) => {
-	const postsWithUri = new SvelteMap(
-		_posts.records.map((post) => [
-			post.uri,
-			{ cid: post.cid, uri: post.uri, record: post.value as AppBskyFeedPost.Main } as PostWithUri
-		])
-	);
-	addPosts(did, postsWithUri);
-	cursors.set(did, { value: _posts.cursor, end: _posts.cursor === undefined });
+	const postsWithUri = newPosts.records.map((post): [ResourceUri, PostWithUri] => [
+		post.uri,
+		{ cid: post.cid, uri: post.uri, record: post.value as AppBskyFeedPost.Main } as PostWithUri
+	]);
+	addPosts(postsWithUri);
+	postCursors.set(did, { value: newPosts.cursor, end: newPosts.cursor === undefined });
 };
 
-export const addPosts = (did: Did, _posts: Iterable<[ResourceUri, PostWithUri]>) => {
-	if (!posts.has(did)) {
-		posts.set(did, new SvelteMap(_posts));
-		return;
+export const addPosts = (newPosts: Iterable<[ResourceUri, PostWithUri]>) => {
+	for (const [uri, post] of newPosts) {
+		const parsedUri = expect(parseCanonicalResourceUri(uri));
+		let posts = allPosts.get(parsedUri.repo);
+		if (!posts) {
+			posts = new SvelteMap();
+			allPosts.set(parsedUri.repo, posts);
+		}
+		posts.set(uri, post);
+		const link: Backlink = {
+			did: parsedUri.repo,
+			collection: parsedUri.collection,
+			rkey: parsedUri.rkey
+		};
+		if (post.record.reply) addBacklinks(post.record.reply.parent.uri, replySource, [link]);
 	}
-	const map = posts.get(did)!;
-	for (const [uri, record] of _posts) map.set(uri, record);
+};
+
+export const timelines = new SvelteMap<Did, SvelteSet<ResourceUri>>();
+export const postCursors = new SvelteMap<Did, { value?: string; end: boolean }>();
+
+export const addTimeline = (did: Did, uris: Iterable<ResourceUri>) => {
+	let timeline = timelines.get(did);
+	if (!timeline) {
+		timeline = new SvelteSet();
+		timelines.set(did, timeline);
+	}
+	for (const uri of uris) timeline.add(uri);
 };
 
 export const fetchTimeline = async (did: AtprotoDid, limit: number = 6) => {
 	const client = await getClient(did);
 
-	const cursor = cursors.get(did);
+	const cursor = postCursors.get(did);
 	if (cursor && cursor.end) return;
 
 	const accPosts = await fetchPostsWithBacklinks(client, cursor?.value, limit);
@@ -97,15 +285,20 @@ export const fetchTimeline = async (did: AtprotoDid, limit: number = 6) => {
 
 	// if the cursor is undefined, we've reached the end of the timeline
 	if (!accPosts.value.cursor) {
-		cursors.set(did, { ...cursor, end: true });
+		postCursors.set(did, { ...cursor, end: true });
 		return;
 	}
 
-	cursors.set(did, { value: accPosts.value.cursor, end: false });
+	postCursors.set(did, { value: accPosts.value.cursor, end: false });
 	const hydrated = await hydratePosts(client, did, accPosts.value.posts);
 	if (!hydrated.ok) throw `cant hydrate posts ${did}: ${hydrated.error}`;
 
-	addPosts(did, hydrated.value);
+	addPosts(hydrated.value);
+	addTimeline(did, hydrated.value.keys());
+
+	const timestamp = timestampFromCursor(accPosts.value.cursor);
+	console.log(`${did}: fetchTimeline`, accPosts.value.cursor, timestamp);
+	await Promise.all([likeSource, repostSource].map((s) => fetchLinksUntil(client, s, timestamp)));
 };
 
 export const handleJetstreamEvent = (event: JetstreamEvent) => {
@@ -118,19 +311,16 @@ export const handleJetstreamEvent = (event: JetstreamEvent) => {
 
 	if (commit.operation === 'create') {
 		const { cid, record } = commit;
-
 		const post: PostWithUri = {
 			uri,
 			cid,
 			// assume record is valid, we trust the jetstream
 			record: record as AppBskyFeedPost.Main
 		};
-
-		addPosts(did, [[uri, post]]);
+		addPosts([[uri, post]]);
+		addTimeline(did, [uri]);
 	} else if (commit.operation === 'delete') {
-		if (posts.has(did)) {
-			posts.get(did)?.delete(uri);
-		}
+		allPosts.get(did)?.delete(uri);
 	}
 };
 
@@ -171,7 +361,8 @@ export const handleNotification = async (event: NotificationsStreamEvent) => {
 		}
 
 		// console.log(hydrated);
-		addPosts(did, hydrated.value);
+		addPosts(hydrated.value);
+		addTimeline(did, hydrated.value.keys());
 	}
 };
 

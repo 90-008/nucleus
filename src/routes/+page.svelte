@@ -11,12 +11,12 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import {
 		clients,
-		cursors,
-		fetchFollowPosts,
+		postCursors,
+		fetchForInteractions,
 		fetchFollows,
 		follows,
 		notificationStream,
-		posts,
+		allPosts,
 		viewClient,
 		jetstream,
 		handleJetstreamEvent,
@@ -64,8 +64,7 @@
 		const newAccounts = $accounts.filter((acc) => acc.did !== did);
 		$accounts = newAccounts;
 		clients.delete(did);
-		posts.delete(did);
-		cursors.delete(did);
+		postCursors.delete(did);
 		handleAccountSelected(newAccounts[0]?.did);
 	};
 
@@ -146,13 +145,14 @@
 			if (!$accounts.some((account) => account.did === selectedDid)) selectedDid = $accounts[0].did;
 			// console.log('onMount selectedDid', selectedDid);
 			Promise.all($accounts.map(loginAccount)).then(() => {
-				$accounts.forEach((account) =>
+				$accounts.forEach((account) => {
 					fetchFollows(account.did).then(() =>
 						follows
 							.get(account.did)
-							?.forEach((follow) => fetchFollowPosts(follow.subject as AtprotoDid))
-					)
-				);
+							?.forEach((follow) => fetchForInteractions(follow.subject as AtprotoDid))
+					);
+					fetchForInteractions(account.did);
+				});
 			});
 		} else {
 			selectedDid = null;
@@ -198,7 +198,7 @@
 		<!-- timeline -->
 		<TimelineView
 			class={currentView === 'timeline' ? `${animClass}` : 'hidden'}
-			client={selectedClient ?? viewClient}
+			client={selectedClient}
 			bind:postComposerState
 		/>
 
@@ -264,7 +264,7 @@
 						<div class="flex-1">
 							<PostComposer
 								client={selectedClient}
-								onPostSent={(post) => posts.get(selectedDid!)?.set(post.uri, post)}
+								onPostSent={(post) => allPosts.get(selectedDid!)?.set(post.uri, post)}
 								bind:_state={postComposerState}
 							/>
 						</div>

@@ -2,14 +2,6 @@ import { parseCanonicalResourceUri, type Did, type ResourceUri } from '@atcute/l
 import type { Account } from './accounts';
 import { expect } from './result';
 import type { PostWithUri } from './at/fetch';
-import type { Backlink } from './at/constellation';
-
-export type PostActions = {
-	like: Backlink | null;
-	repost: Backlink | null;
-	// reply: Backlink | null;
-	// quote: Backlink | null;
-};
 
 export type ThreadPost = {
 	data: PostWithUri;
@@ -29,34 +21,34 @@ export type Thread = {
 };
 
 export const buildThreads = (
-	accounts: Did[],
+	account: Did,
+	timeline: Set<ResourceUri>,
 	posts: Map<Did, Map<ResourceUri, PostWithUri>>
 ): Thread[] => {
 	const threadMap = new Map<ResourceUri, ThreadPost[]>();
 
 	// group posts by root uri into "thread" chains
-	for (const account of accounts) {
-		const timeline = posts.get(account);
-		if (!timeline) continue;
-		for (const [uri, data] of timeline) {
-			const parsedUri = expect(parseCanonicalResourceUri(uri));
-			const rootUri = (data.record.reply?.root.uri as ResourceUri) || uri;
-			const parentUri = (data.record.reply?.parent.uri as ResourceUri) || null;
+	for (const uri of timeline) {
+		const parsedUri = expect(parseCanonicalResourceUri(uri));
+		const data = posts.get(parsedUri.repo)?.get(uri);
+		if (!data) continue;
 
-			const post: ThreadPost = {
-				data,
-				account,
-				did: parsedUri.repo,
-				rkey: parsedUri.rkey,
-				parentUri,
-				depth: 0,
-				newestTime: new Date(data.record.createdAt).getTime()
-			};
+		const rootUri = (data.record.reply?.root.uri as ResourceUri) || uri;
+		const parentUri = (data.record.reply?.parent.uri as ResourceUri) || null;
 
-			if (!threadMap.has(rootUri)) threadMap.set(rootUri, []);
+		const post: ThreadPost = {
+			data,
+			account,
+			did: parsedUri.repo,
+			rkey: parsedUri.rkey,
+			parentUri,
+			depth: 0,
+			newestTime: new Date(data.record.createdAt).getTime()
+		};
 
-			threadMap.get(rootUri)!.push(post);
-		}
+		if (!threadMap.has(rootUri)) threadMap.set(rootUri, []);
+
+		threadMap.get(rootUri)!.push(post);
 	}
 
 	const threads: Thread[] = [];

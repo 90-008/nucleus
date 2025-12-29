@@ -2,13 +2,14 @@
 	import BskyPost from './BskyPost.svelte';
 	import { type State as PostComposerState } from './PostComposer.svelte';
 	import { AtpClient } from '$lib/at/client';
-	import { accounts, type Account } from '$lib/accounts';
+	import { accounts } from '$lib/accounts';
 	import { type ResourceUri } from '@atcute/lexicons';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { InfiniteLoader, LoaderState } from 'svelte-infinite';
-	import { cursors, fetchTimeline, posts, viewClient } from '$lib/state.svelte';
+	import { postCursors, fetchTimeline, allPosts, timelines } from '$lib/state.svelte';
 	import Icon from '@iconify/svelte';
 	import { buildThreads, filterThreads, type ThreadPost } from '$lib/thread';
+	import type { AtprotoDid } from '@atcute/lexicons/syntax';
 
 	interface Props {
 		client?: AtpClient | null;
@@ -18,18 +19,15 @@
 
 	let { client = null, postComposerState = $bindable(), class: className = '' }: Props = $props();
 
-	const effectiveClient = $derived(client ?? viewClient);
-
 	let reverseChronological = $state(true);
 	let viewOwnPosts = $state(true);
 	const expandedThreads = new SvelteSet<ResourceUri>();
 
+	const did = $derived(client?.user?.did);
+
 	const threads = $derived(
 		filterThreads(
-			buildThreads(
-				$accounts.map((account) => account.did),
-				posts
-			),
+			did && timelines.has(did) ? buildThreads(did, timelines.get(did)!, allPosts) : [],
 			$accounts,
 			{ viewOwnPosts }
 		)
@@ -40,17 +38,14 @@
 	let loading = $state(false);
 	let loadError = $state('');
 
-	const fetchTimelines = (newAccounts: Account[]) =>
-		Promise.all(newAccounts.map((acc) => fetchTimeline(acc.did)));
-
 	const loadMore = async () => {
-		if (loading || $accounts.length === 0) return;
+		if (loading || $accounts.length === 0 || !did) return;
 
 		loading = true;
 		loaderState.status = 'LOADING';
 
 		try {
-			await fetchTimelines($accounts);
+			await fetchTimeline(did as AtprotoDid);
 			loaderState.loaded();
 		} catch (error) {
 			loadError = `${error}`;
@@ -60,8 +55,12 @@
 		}
 
 		loading = false;
-		if (cursors.values().every((cursor) => cursor.end)) loaderState.complete();
+		if (postCursors.values().every((cursor) => cursor.end)) loaderState.complete();
 	};
+
+	$effect(() => {
+		if (threads.length === 0 && !loading) loadMore();
+	});
 </script>
 
 {#snippet replyPost(post: ThreadPost, reverse: boolean = reverseChronological)}
@@ -69,7 +68,7 @@
 		class="mb-1.5 flex items-center gap-1.5 overflow-hidden text-nowrap wrap-break-word overflow-ellipsis"
 	>
 		<span class="text-sm text-nowrap opacity-60">{reverse ? '↱' : '↳'}</span>
-		<BskyPost mini client={effectiveClient} {...post} />
+		<BskyPost mini client={client!} {...post} />
 	</span>
 {/snippet}
 
@@ -88,7 +87,7 @@
 				{#if !mini}
 					<div class="mb-1.5">
 						<BskyPost
-							client={effectiveClient}
+							client={client!}
 							onQuote={(post) => (postComposerState = { type: 'focused', quoting: post })}
 							onReply={(post) => (postComposerState = { type: 'focused', replying: post })}
 							{...post}

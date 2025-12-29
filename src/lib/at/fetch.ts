@@ -9,14 +9,13 @@ import { err, expect, ok, type Result } from '$lib/result';
 import type { Backlinks } from './constellation';
 import { AppBskyFeedPost } from '@atcute/bluesky';
 import type { AtprotoDid } from '@atcute/lexicons/syntax';
+import { replySource } from '$lib';
 
 export type PostWithUri = { uri: ResourceUri; cid: Cid | undefined; record: AppBskyFeedPost.Main };
 export type PostWithBacklinks = PostWithUri & {
 	replies: Backlinks;
 };
 export type PostsWithReplyBacklinks = PostWithBacklinks[];
-
-const replySource = 'app.bsky.feed.post:reply.parent.uri';
 
 export const fetchPostsWithBacklinks = async (
 	client: AtpClient,
@@ -31,13 +30,14 @@ export const fetchPostsWithBacklinks = async (
 	try {
 		const allBacklinks = await Promise.all(
 			records.map(async (r): Promise<PostWithBacklinks> => {
-				const replies = await client.getBacklinksUri(r.uri, replySource);
-				if (!replies.ok) throw `cant fetch replies: ${replies.error}`;
+				const result = await client.getBacklinksUri(r.uri, replySource);
+				if (!result.ok) throw `cant fetch replies: ${result.error}`;
+				const replies = result.value;
 				return {
 					uri: r.uri,
 					cid: r.cid,
 					record: r.value as AppBskyFeedPost.Main,
-					replies: replies.value
+					replies
 				};
 			})
 		);
@@ -76,9 +76,10 @@ export const hydratePosts = async (
 	const fetchUpwardsChain = async (post: PostWithUri) => {
 		let parent = post.record.reply?.parent;
 		while (parent) {
+			const parentUri = parent.uri as CanonicalResourceUri;
 			// if we already have this parent, then we already fetched this chain / are fetching it
-			if (posts.has(parent.uri as CanonicalResourceUri)) return;
-			const p = await client.getRecordUri(AppBskyFeedPost.mainSchema, parent.uri);
+			if (posts.has(parentUri)) return;
+			const p = await client.getRecordUri(AppBskyFeedPost.mainSchema, parentUri);
 			if (p.ok) {
 				posts.set(p.value.uri, p.value);
 				parent = p.value.record.reply?.parent;

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { follows, getClient, posts, postActions, currentTime } from '$lib/state.svelte';
+	import { follows, getClient, allPosts, allBacklinks, currentTime } from '$lib/state.svelte';
 	import type { Did } from '@atcute/lexicons';
 	import ProfilePicture from './ProfilePicture.svelte';
 	import { type AtpClient, resolveDidDoc } from '$lib/at/client';
@@ -22,10 +22,17 @@
 	const { selectedDid, selectedClient }: Props = $props();
 
 	let followingSort: Sort = $state('active' as Sort);
+	const followsMap = $derived(follows.get(selectedDid));
 
 	const interactionScores = $derived.by(() => {
 		if (followingSort !== 'conversational') return null;
-		return calculateInteractionScores(selectedDid, posts, postActions, currentTime.getTime());
+		return calculateInteractionScores(
+			selectedDid,
+			followsMap ?? new Map(),
+			allPosts,
+			allBacklinks,
+			currentTime.getTime()
+		);
 	});
 
 	class FollowedUserStats {
@@ -50,15 +57,14 @@
 		data = $derived.by(() =>
 			calculateFollowedUserStats(
 				followingSort,
-				selectedDid,
-				posts,
+				this.did,
+				allPosts,
 				interactionScores,
 				currentTime.getTime()
 			)
 		);
 	}
 
-	const followsMap = $derived(follows.get(selectedDid));
 	const userStatsList = $derived(
 		followsMap ? Array.from(followsMap.values()).map((f) => new FollowedUserStats(f.subject)) : []
 	);

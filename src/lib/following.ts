@@ -1,6 +1,8 @@
-import type { ActorIdentifier, Did, ResourceUri } from '@atcute/lexicons';
+import { type ActorIdentifier, type Did, type ResourceUri } from '@atcute/lexicons';
 import type { PostWithUri } from './at/fetch';
-import type { PostActions } from './thread';
+import type { Backlink, BacklinksSource } from './at/constellation';
+import { repostSource } from '$lib';
+import type { AppBskyGraphFollow } from '@atcute/bluesky';
 
 export type Sort = 'recent' | 'active' | 'conversational';
 
@@ -25,12 +27,12 @@ export const sortFollowedUser = (
 
 export const calculateFollowedUserStats = (
 	sort: Sort,
-	user: Did,
+	did: Did,
 	posts: Map<Did, Map<ResourceUri, PostWithUri>>,
 	interactionScores: Map<ActorIdentifier, number> | null,
 	now: number
 ) => {
-	const postsMap = posts.get(user);
+	const postsMap = posts.get(did);
 	if (!postsMap || postsMap.size === 0) return null;
 
 	let lastPostAtTime = 0;
@@ -53,10 +55,10 @@ export const calculateFollowedUserStats = (
 
 	let conversationalScore = 0;
 	if (sort === 'conversational' && interactionScores)
-		conversationalScore = interactionScores.get(user) || 0;
+		conversationalScore = interactionScores.get(did) || 0;
 
 	return {
-		did: user,
+		did,
 		lastPostAt: new Date(lastPostAtTime),
 		activeScore,
 		conversationalScore,
@@ -64,90 +66,161 @@ export const calculateFollowedUserStats = (
 	};
 };
 
+// weights
+const quoteWeight = 4;
+const replyWeight = 6;
+const repostWeight = 2;
+
+// interactions decay over time to prioritize recent conversations.
+// half-life of 3 days ensures that inactivity (>1 days) results in a noticeable score drop.
+const oneDay = 24 * 60 * 60 * 1000;
+const halfLifeMs = 3 * oneDay;
+const decayLambda = 0.693 / halfLifeMs;
+
+// normalization constants
+const rateBaseline = 1;
+const ratePower = 0.5;
+// consider the last 7 days for rate calculation
+const windowSize = 7 * oneDay;
+
 export const calculateInteractionScores = (
 	user: Did,
-	posts: Map<Did, Map<ResourceUri, PostWithUri>>,
-	postActions: Map<`${Did}:${ResourceUri}`, PostActions>,
+	followsMap: Map<ResourceUri, AppBskyGraphFollow.Main>,
+	allPosts: Map<Did, Map<ResourceUri, PostWithUri>>,
+	backlinks_: Map<ResourceUri, Map<BacklinksSource, Set<Backlink>>>,
 	now: number
 ) => {
-	const scores = new Map<ActorIdentifier, number>();
-
-	// Interactions are full weight for the first 3 days, then start decreasing linearly
-	// until 2 weeks, after which they decrease exponentially.
-	// Keep the same overall exponential timescale as before (half-life ~30 days).
-	const oneDay = 24 * 60 * 60 * 1000;
-	const halfLifeMs = 30 * oneDay;
-	const decayLambda = 0.693 / halfLifeMs;
-	const threeDays = 3 * oneDay;
-	const twoWeeks = 14 * oneDay;
+	const scores = new Map<Did, number>();
 
 	const decay = (time: number) => {
 		const age = Math.max(0, now - time);
-
-		// Full weight for recent interactions within 3 days
-		if (age <= threeDays) return 1;
-
-		// Between 3 days and 2 weeks, linearly interpolate down to the value
-		// that the exponential would have at 2 weeks to keep continuity.
-		if (age <= twoWeeks) {
-			const expAtTwoWeeks = Math.exp(-decayLambda * twoWeeks);
-			const t = (age - threeDays) / (twoWeeks - threeDays); // 0..1
-			// linear ramp from 1 -> expAtTwoWeeks
-			return 1 - t * (1 - expAtTwoWeeks);
-		}
-
-		// After 2 weeks, exponential decay based on the chosen lambda
 		return Math.exp(-decayLambda * age);
 	};
 
-	const replyWeight = 4;
-	const repostWeight = 2;
-	const likeWeight = 1;
+	const postRates = new Map<Did, number>();
 
-	const myPosts = posts.get(user);
-	if (myPosts) {
-		for (const post of myPosts.values()) {
+	const processPosts = (did: Did, posts: Map<ResourceUri, PostWithUri>) => {
+		let volume = 0;
+		let minTime = now;
+		let maxTime = 0;
+		let hasRecentPosts = false;
+
+		const seenRoots = new Set<ResourceUri>();
+
+		for (const [, post] of posts) {
+			const t = new Date(post.record.createdAt).getTime();
+			const dec = decay(t);
+
+			// Calculate rate based on raw volume over time frame
+			// We only care about posts within the relevant window to determine "current" activity rate
+			if (now - t < windowSize) {
+				volume += 1;
+				if (t < minTime) minTime = t;
+				if (t > maxTime) maxTime = t;
+				hasRecentPosts = true;
+			}
+
+			const processPostUri = (uri: ResourceUri, weight: number) => {
+				// only try to extract the DID
+				const match = uri.match(/^at:\/\/([^/]+)/);
+				if (!match) return;
+				const targetDid = match[1] as Did;
+				let subjectDid = targetDid;
+				// if we are processing posts of the user
+				if (did === user) {
+					// then only process posts where the user is replying to others
+					if (targetDid === user) return;
+				} else {
+					// otherwise only process posts that are replies to the user
+					if (targetDid !== user) return;
+					subjectDid = did;
+				}
+				// console.log(`${subjectDid} -> ${targetDid}`);
+				const s = scores.get(subjectDid) ?? 0;
+				scores.set(subjectDid, s + weight * dec);
+			};
 			if (post.record.reply) {
 				const parentUri = post.record.reply.parent.uri;
-				// only try to extract the DID
-				const match = parentUri.match(/^at:\/\/([^/]+)/);
-				if (match) {
-					const targetDid = match[1] as Did;
-					if (targetDid === user) continue;
-					const s = scores.get(targetDid) || 0;
-					scores.set(targetDid, s + replyWeight * decay(new Date(post.record.createdAt).getTime()));
+				const rootUri = post.record.reply.root.uri;
+				processPostUri(parentUri, replyWeight);
+				// prevent duplicates
+				if (parentUri !== rootUri && !seenRoots.has(rootUri)) {
+					processPostUri(rootUri, replyWeight);
+					seenRoots.add(rootUri);
 				}
 			}
+			if (post.record.embed?.$type === 'app.bsky.embed.record')
+				processPostUri(post.record.embed.record.uri, quoteWeight);
+			if (post.record.embed?.$type === 'app.bsky.embed.recordWithMedia')
+				processPostUri(post.record.embed.record.record.uri, quoteWeight);
 		}
+
+		let rate = 0;
+		if (hasRecentPosts) {
+			// Rate = Posts / Days
+			// Use at least 1 day to avoid skewing bursts of <24h too high
+			const days = Math.max((maxTime - minTime) / oneDay, 1);
+			rate = volume / days;
+		}
+		postRates.set(did, rate);
+	};
+
+	// process self
+	const myPosts = allPosts.get(user);
+	if (myPosts) processPosts(user, myPosts);
+	// process following
+	for (const follow of followsMap.values()) {
+		const posts = allPosts.get(follow.subject);
+		if (!posts) continue;
+		processPosts(follow.subject, posts);
 	}
 
+	const followsSet = new Set(followsMap.values().map((follow) => follow.subject));
 	// interactions with others
-	for (const [key, actions] of postActions) {
-		const sepIndex = key.indexOf(':');
-		if (sepIndex === -1) continue;
-		const did = key.slice(0, sepIndex) as Did;
-		const uri = key.slice(sepIndex + 1) as ResourceUri;
-
-		// only try to extract the DID
+	for (const [uri, backlinks] of backlinks_) {
 		const match = uri.match(/^at:\/\/([^/]+)/);
 		if (!match) continue;
 		const targetDid = match[1] as Did;
-
-		if (did === targetDid) continue;
-
-		let add = 0;
-		if (actions.like) add += likeWeight;
-		if (actions.repost) add += repostWeight;
-
-		if (add > 0) {
-			const targetPosts = posts.get(targetDid);
-			const post = targetPosts?.get(uri);
-			if (post) {
-				const time = new Date(post.record.createdAt).getTime();
-				add *= decay(time);
-			}
-			scores.set(targetDid, (scores.get(targetDid) || 0) + add);
+		// only process backlinks that target the user
+		const isSelf = targetDid === user;
+		// and are from users the user follows
+		const isFollowing = followsSet.has(targetDid);
+		if (!isSelf && !isFollowing) continue;
+		// check if the post exists
+		const post = allPosts.get(targetDid)?.get(uri);
+		if (!post) continue;
+		const reposts = backlinks.get(repostSource) ?? new Set();
+		const adds = new Map<Did, { score: number; repostCount: number }>();
+		for (const repost of reposts) {
+			// we dont count "self interactions"
+			if (isSelf && repost.did === user) continue;
+			// we dont count interactions that arent the user's
+			if (isFollowing && repost.did !== user) continue;
+			// use targetDid for following (because it will be the following did)
+			// use repost.did for self interactions (because it will be the following did)
+			const did = isFollowing ? targetDid : repost.did;
+			const add = adds.get(did) ?? { score: 0, repostCount: 0 };
+			// diminish the weight as the number of reposts increases
+			const diminishFactor = 9;
+			const weight = repostWeight * (diminishFactor / (add.repostCount + diminishFactor));
+			adds.set(did, {
+				score: add.score + weight,
+				repostCount: add.repostCount + 1
+			});
 		}
+		for (const [did, add] of adds.entries()) {
+			if (add.score === 0) continue;
+			const time = new Date(post.record.createdAt).getTime();
+			scores.set(did, (scores.get(did) ?? 0) + add.score * decay(time));
+		}
+	}
+
+	// Apply normalization
+	for (const [did, score] of scores) {
+		const rate = postRates.get(did) ?? 0;
+		// NormalizedScore = DecayScore / (PostRate + Baseline)^alpha
+		// This penalizes spammers (high rate) and inactivity (score decay vs constant rate)
+		scores.set(did, score / Math.pow(rate + rateBaseline, ratePower));
 	}
 
 	return scores;
