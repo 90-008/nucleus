@@ -168,6 +168,7 @@ export type FilterOptions = {
 
 export const filterThreads = (threads: Thread[], accounts: Account[], opts: FilterOptions) =>
 	threads.filter((thread) => {
+		if (thread.posts.length === 0) return false;
 		if (!opts.viewOwnPosts) return hasNonOwnPost(thread.posts, accounts);
 		return true;
 	});
