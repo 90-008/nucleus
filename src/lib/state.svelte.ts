@@ -1,13 +1,19 @@
 import { writable } from 'svelte/store';
-import { AtpClient, newPublicClient, type NotificationsStream } from './at/client';
+import {
+	AtpClient,
+	newPublicClient,
+	type NotificationsStream,
+	type NotificationsStreamEvent
+} from './at/client';
 import { SvelteMap, SvelteDate } from 'svelte/reactivity';
 import type { Did, InferOutput, ResourceUri } from '@atcute/lexicons';
 import type { Backlink } from './at/constellation';
 import { fetchPostsWithBacklinks, hydratePosts, type PostWithUri } from './at/fetch';
-import type { AtprotoDid } from '@atcute/lexicons/syntax';
+import { parseCanonicalResourceUri, type AtprotoDid } from '@atcute/lexicons/syntax';
 import { AppBskyFeedPost, type AppBskyGraphFollow } from '@atcute/bluesky';
 import type { ComAtprotoRepoListRecords } from '@atcute/atproto';
 import type { JetstreamSubscription, JetstreamEvent } from '@atcute/jetstream';
+import { expect } from './result';
 
 export const notificationStream = writable<NotificationsStream | null>(null);
 export const jetstream = writable<JetstreamSubscription | null>(null);
@@ -134,10 +140,50 @@ export const handleJetstreamEvent = (event: JetstreamEvent) => {
 	}
 };
 
+export const handleNotification = async (event: NotificationsStreamEvent) => {
+	if (event.type === 'message') {
+		const parsedSubjectUri = expect(parseCanonicalResourceUri(event.data.link.subject));
+		const did = parsedSubjectUri.repo as AtprotoDid;
+		const client = await getClient(did);
+		const subjectPost = await client.getRecord(
+			AppBskyFeedPost.mainSchema,
+			did,
+			parsedSubjectUri.rkey
+		);
+		if (!subjectPost.ok) return;
+
+		const parsedSourceUri = expect(parseCanonicalResourceUri(event.data.link.source_record));
+		const hydrated = await hydratePosts(client, did, [
+			{
+				record: subjectPost.value.record,
+				uri: event.data.link.subject,
+				cid: subjectPost.value.cid,
+				replies: {
+					cursor: null,
+					total: 1,
+					records: [
+						{
+							did: parsedSourceUri.repo,
+							collection: parsedSourceUri.collection,
+							rkey: parsedSourceUri.rkey
+						}
+					]
+				}
+			}
+		]);
+		if (!hydrated.ok) {
+			console.error(`cant hydrate posts ${did}: ${hydrated.error}`);
+			return;
+		}
+
+		// console.log(hydrated);
+		addPosts(did, hydrated.value);
+	}
+};
+
 export const currentTime = new SvelteDate();
 
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined')
 	setInterval(() => {
 		currentTime.setTime(Date.now());
 	}, 1000);
-}
