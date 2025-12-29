@@ -191,6 +191,27 @@
 			return statsB.lastPostAt.getTime() - statsA.lastPostAt.getTime();
 		})
 	);
+
+	let listHeight = $state(0);
+	let listContainer: HTMLDivElement | undefined = $state();
+
+	const calcHeight = () => {
+		if (!listContainer) return;
+		const footer = document.getElementById('app-footer');
+		const footerHeight = footer?.getBoundingClientRect().height || 0;
+		const top = listContainer.getBoundingClientRect().top;
+		// 24px is our bottom padding
+		listHeight = Math.max(0, window.innerHeight - top - footerHeight - 24);
+	};
+
+	$effect(() => {
+		if (listContainer) {
+			calcHeight();
+			const observer = new ResizeObserver(calcHeight);
+			observer.observe(document.body);
+			return () => observer.disconnect();
+		}
+	});
 </script>
 
 <div class="flex h-full flex-col p-2">
@@ -216,7 +237,7 @@
 		</div>
 	</div>
 
-	<div class="min-h-0 flex-1">
+	<div class="min-h-0 flex-1" bind:this={listContainer}>
 		{#if sortedFollowing.length === 0}
 			<div class="flex justify-center py-8">
 				<div
@@ -224,15 +245,14 @@
 					style="border-color: var(--nucleus-accent) var(--nucleus-accent) var(--nucleus-accent) transparent;"
 				></div>
 			</div>
-		{:else}
-			<VirtualList height="70vh" itemCount={sortedFollowing.length} itemSize={76}>
+		{:else if listHeight > 0}
+			<VirtualList height={listHeight} itemCount={sortedFollowing.length} itemSize={76}>
 				{#snippet item({ index, style }: { index: number; style: string })}
 					{@const user = sortedFollowing[index]}
 					{@const stats = user.data!}
 					{@const lastPostAt = stats.lastPostAt}
 					{@const relTime = getRelativeTime(lastPostAt, currentTime)}
 					{@const color = generateColorForDid(user.did)}
-					<!-- box-border and pb-2 (0.5rem) simulates the gap-2 -->
 					<div {style} class="box-border w-full pb-2">
 						<div
 							class="group flex items-center gap-2 rounded-sm bg-(--nucleus-accent)/7 p-3 transition-colors hover:bg-(--post-color)/20"
