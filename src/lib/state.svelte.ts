@@ -7,23 +7,17 @@ import {
 } from './at/client';
 import { SvelteMap, SvelteDate } from 'svelte/reactivity';
 import type { Did, InferOutput, ResourceUri } from '@atcute/lexicons';
-import type { Backlink } from './at/constellation';
 import { fetchPostsWithBacklinks, hydratePosts, type PostWithUri } from './at/fetch';
 import { parseCanonicalResourceUri, type AtprotoDid } from '@atcute/lexicons/syntax';
 import { AppBskyFeedPost, type AppBskyGraphFollow } from '@atcute/bluesky';
 import type { ComAtprotoRepoListRecords } from '@atcute/atproto';
 import type { JetstreamSubscription, JetstreamEvent } from '@atcute/jetstream';
 import { expect } from './result';
+import type { PostActions } from './thread';
 
 export const notificationStream = writable<NotificationsStream | null>(null);
 export const jetstream = writable<JetstreamSubscription | null>(null);
 
-export type PostActions = {
-	like: Backlink | null;
-	repost: Backlink | null;
-	// reply: Backlink | null;
-	// quote: Backlink | null;
-};
 export const postActions = new SvelteMap<`${Did}:${ResourceUri}`, PostActions>();
 
 export const pulsingPostId = writable<string | null>(null);

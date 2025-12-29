@@ -2,6 +2,14 @@ import { parseCanonicalResourceUri, type Did, type ResourceUri } from '@atcute/l
 import type { Account } from './accounts';
 import { expect } from './result';
 import type { PostWithUri } from './at/fetch';
+import type { Backlink } from './at/constellation';
+
+export type PostActions = {
+	like: Backlink | null;
+	repost: Backlink | null;
+	// reply: Backlink | null;
+	// quote: Backlink | null;
+};
 
 export type ThreadPost = {
 	data: PostWithUri;
