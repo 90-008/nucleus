@@ -16,7 +16,13 @@ import { expect } from './result';
 import type { Backlink, BacklinksSource } from './at/constellation';
 import { now as tidNow } from '@atcute/tid';
 import type { Records } from '@atcute/lexicons/ambient';
-import { likeSource, replySource, repostSource, timestampFromCursor } from '$lib';
+import {
+	extractDidFromUri,
+	likeSource,
+	replySource,
+	repostSource,
+	timestampFromCursor
+} from '$lib';
 
 export const notificationStream = writable<NotificationsStream | null>(null);
 export const jetstream = writable<JetstreamSubscription | null>(null);
@@ -231,6 +237,8 @@ export const fetchForInteractions = async (did: AtprotoDid) => {
 };
 
 export const allPosts = new SvelteMap<Did, SvelteMap<ResourceUri, PostWithUri>>();
+// did -> post uris that are replies to that did
+export const replyIndex = new SvelteMap<Did, SvelteSet<ResourceUri>>();
 
 export const addPostsRaw = (
 	did: AtprotoDid,
@@ -258,7 +266,20 @@ export const addPosts = (newPosts: Iterable<[ResourceUri, PostWithUri]>) => {
 			collection: parsedUri.collection,
 			rkey: parsedUri.rkey
 		};
-		if (post.record.reply) addBacklinks(post.record.reply.parent.uri, replySource, [link]);
+		if (post.record.reply) {
+			addBacklinks(post.record.reply.parent.uri, replySource, [link]);
+
+			// update reply index
+			const parentDid = extractDidFromUri(post.record.reply.parent.uri);
+			if (parentDid) {
+				let set = replyIndex.get(parentDid);
+				if (!set) {
+					set = new SvelteSet();
+					replyIndex.set(parentDid, set);
+				}
+				set.add(uri);
+			}
+		}
 	}
 };
 

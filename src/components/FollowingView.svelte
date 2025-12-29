@@ -1,11 +1,7 @@
 <script lang="ts">
-	import { follows, getClient, allPosts, allBacklinks, currentTime } from '$lib/state.svelte';
+	import { follows, allPosts, allBacklinks, currentTime, replyIndex } from '$lib/state.svelte';
 	import type { Did } from '@atcute/lexicons';
-	import ProfilePicture from './ProfilePicture.svelte';
-	import { type AtpClient, resolveDidDoc } from '$lib/at/client';
-	import { getRelativeTime } from '$lib/date';
-	import { generateColorForDid } from '$lib/accounts';
-	import { type AtprotoDid } from '@atcute/lexicons/syntax';
+	import { type AtpClient } from '$lib/at/client';
 	import VirtualList from '@tutorlatin/svelte-tiny-virtual-list';
 	import {
 		calculateFollowedUserStats,
@@ -13,6 +9,7 @@
 		sortFollowedUser,
 		type Sort
 	} from '$lib/following';
+	import FollowingItem from './FollowingItem.svelte';
 
 	interface Props {
 		selectedDid: Did;
@@ -24,54 +21,77 @@
 	let followingSort: Sort = $state('active' as Sort);
 	const followsMap = $derived(follows.get(selectedDid));
 
-	const interactionScores = $derived.by(() => {
-		if (followingSort !== 'conversational') return null;
-		return calculateInteractionScores(
-			selectedDid,
-			followsMap ?? new Map(),
-			allPosts,
-			allBacklinks,
-			currentTime.getTime()
-		);
-	});
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	let sortedFollowing = $state<{ did: Did; data: any }[]>([]);
 
-	class FollowedUserStats {
-		did: Did;
-		profile: Promise<string | null | undefined>;
-		handle: Promise<string>;
+	let isLongCalculation = $state(false);
+	let calculationTimer: ReturnType<typeof setTimeout> | undefined;
 
-		constructor(did: Did) {
-			this.did = did;
-			this.profile = getClient(did as AtprotoDid)
-				.then((client) => client.getProfile())
-				.then((profile) => {
-					if (profile.ok) return profile.value.displayName;
-					return null;
-				});
-			this.handle = resolveDidDoc(did).then((doc) => {
-				if (doc.ok) return doc.value.handle;
-				return 'handle.invalid';
-			});
+	// Optimization: Use a static timestamp for calculation to avoid re-sorting every second.
+	// Only update this when the sort mode changes.
+	let staticNow = $state(Date.now());
+
+	const updateList = async () => {
+		// Reset timer and loading state at start
+		if (calculationTimer) clearTimeout(calculationTimer);
+		isLongCalculation = false;
+
+		if (!followsMap) {
+			sortedFollowing = [];
+			return;
 		}
 
-		data = $derived.by(() =>
-			calculateFollowedUserStats(
+		// schedule spinner to appear only if calculation takes > 200ms
+		calculationTimer = setTimeout(() => {
+			isLongCalculation = true;
+		}, 200);
+		// yield to main thread to allow UI to show spinner/update
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		const interactionScores =
+			followingSort === 'conversational'
+				? calculateInteractionScores(
+						selectedDid,
+						followsMap,
+						allPosts,
+						allBacklinks,
+						replyIndex,
+						staticNow
+					)
+				: null;
+
+		const userStatsList = Array.from(followsMap.values()).map((f) => ({
+			did: f.subject,
+			data: calculateFollowedUserStats(
 				followingSort,
-				this.did,
+				f.subject,
 				allPosts,
 				interactionScores,
-				currentTime.getTime()
+				staticNow
 			)
-		);
-	}
+		}));
 
-	const userStatsList = $derived(
-		followsMap ? Array.from(followsMap.values()).map((f) => new FollowedUserStats(f.subject)) : []
-	);
-	const following = $derived(userStatsList.filter((u) => u.data !== null));
-	const sortedFollowing = $derived(
-		[...following].sort((a, b) => sortFollowedUser(followingSort, a.data!, b.data!))
-	);
+		const following = userStatsList.filter((u) => u.data !== null);
+		const sorted = [...following].sort((a, b) => sortFollowedUser(followingSort, a.data!, b.data!));
+
+		sortedFollowing = sorted;
+
+		// Clear timer and remove loading state immediately after done
+		if (calculationTimer) clearTimeout(calculationTimer);
+		isLongCalculation = false;
+	};
+
+	$effect(() => {
+		// Dependencies that trigger a re-sort
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const _s = followingSort;
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const _f = followsMap;
+		// Update time when sort changes
+		staticNow = Date.now();
+
+		updateList();
+	});
 
 	let listHeight = $state(0);
 	let listContainer: HTMLDivElement | undefined = $state();
@@ -119,7 +139,7 @@
 	</div>
 
 	<div class="min-h-0 flex-1" bind:this={listContainer}>
-		{#if sortedFollowing.length === 0}
+		{#if sortedFollowing.length === 0 || isLongCalculation}
 			<div class="flex justify-center py-8">
 				<div
 					class="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
@@ -130,49 +150,14 @@
 			<VirtualList height={listHeight} itemCount={sortedFollowing.length} itemSize={76}>
 				{#snippet item({ index, style }: { index: number; style: string })}
 					{@const user = sortedFollowing[index]}
-					{@const stats = user.data!}
-					{@const lastPostAt = stats.lastPostAt}
-					{@const relTime = getRelativeTime(lastPostAt, currentTime)}
-					{@const color = generateColorForDid(user.did)}
-					<div {style} class="box-border w-full pb-2">
-						<div
-							class="group flex items-center gap-2 rounded-sm bg-(--nucleus-accent)/7 p-3 transition-colors hover:bg-(--post-color)/20"
-							style={`--post-color: ${color};`}
-						>
-							<ProfilePicture client={selectedClient} did={user.did} size={10} />
-							<div class="min-w-0 flex-1 space-y-1">
-								<div
-									class="flex items-baseline gap-2 font-bold transition-colors group-hover:text-(--post-color)"
-									style={`--post-color: ${color};`}
-								>
-									{#await Promise.all([user.profile, user.handle]) then [displayName, handle]}
-										<span class="truncate">{displayName || handle}</span>
-										<span class="truncate text-sm opacity-60">@{handle}</span>
-									{/await}
-								</div>
-								<div class="flex gap-2 text-xs opacity-70">
-									<span
-										class={Date.now() - lastPostAt.getTime() < 1000 * 60 * 60 * 2
-											? 'text-(--nucleus-accent)'
-											: ''}
-									>
-										posted {relTime}
-										{relTime !== 'now' ? 'ago' : ''}
-									</span>
-									{#if stats.recentPostCount > 0}
-										<span class="text-(--nucleus-accent2)">
-											{stats.recentPostCount} posts / 6h
-										</span>
-									{/if}
-									{#if followingSort === 'conversational' && stats.conversationalScore > 0}
-										<span class="ml-auto font-bold text-(--nucleus-accent)">
-											★ {stats.conversationalScore.toFixed(1)}
-										</span>
-									{/if}
-								</div>
-							</div>
-						</div>
-					</div>
+					<FollowingItem
+						{style}
+						did={user.did}
+						stats={user.data!}
+						client={selectedClient}
+						sort={followingSort}
+						{currentTime}
+					/>
 				{/snippet}
 			</VirtualList>
 		{/if}

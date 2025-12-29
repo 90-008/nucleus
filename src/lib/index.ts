@@ -1,5 +1,6 @@
 import type {
 	CanonicalResourceUri,
+	Did,
 	ParsedCanonicalResourceUri,
 	ParsedResourceUri,
 	ResourceUri
@@ -12,6 +13,13 @@ export const toResourceUri = (parsed: ParsedResourceUri): ResourceUri => {
 };
 export const toCanonicalUri = (parsed: ParsedCanonicalResourceUri): CanonicalResourceUri => {
 	return `at://${parsed.repo}/${parsed.collection}/${parsed.rkey}${parsed.fragment ? `#${parsed.fragment}` : ''}`;
+};
+
+export const extractDidFromUri = (uri: string): Did | null => {
+	if (!uri.startsWith('at://')) return null;
+	const idx = uri.indexOf('/', 5);
+	if (idx === -1) return uri.slice(5) as Did;
+	return uri.slice(5, idx) as Did;
 };
 
 export const likeSource: BacklinksSource = 'app.bsky.feed.like:subject.uri';
