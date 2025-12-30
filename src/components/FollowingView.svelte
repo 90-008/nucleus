@@ -42,9 +42,7 @@
 		}
 
 		// schedule spinner to appear only if calculation takes > 200ms
-		calculationTimer = setTimeout(() => {
-			isLongCalculation = true;
-		}, 200);
+		calculationTimer = setTimeout(() => (isLongCalculation = true), 200);
 		// yield to main thread to allow UI to show spinner/update
 		await new Promise((resolve) => setTimeout(resolve, 0));
 

@@ -114,7 +114,8 @@
 					newAccounts.map((account) => account.did),
 					'app.bsky.feed.post:reply.parent.uri',
 					'app.bsky.feed.post:embed.record.record.uri',
-					'app.bsky.feed.post:embed.record.uri'
+					'app.bsky.feed.post:embed.record.uri',
+					'app.bsky.feed.repost:subject.uri'
 				)
 			);
 		});
@@ -127,7 +128,8 @@
 		const jetstreamSub = new JetstreamSubscription({
 			url: $settings.endpoints.jetstream,
 			wantedCollections: ['app.bsky.feed.post'],
-			wantedDids: ['did:web:guestbook.gaze.systems'] // initially contain sentinel
+			// this is here because if wantedDids is zero jetstream will send all events
+			wantedDids: ['did:web:guestbook.gaze.systems']
 		});
 		jetstream.set(jetstreamSub);
 

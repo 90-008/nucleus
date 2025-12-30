@@ -29,9 +29,7 @@ class IDBStorage {
 	private writeFlushScheduled = false;
 
 	constructor() {
-		if (typeof indexedDB === 'undefined') {
-			return;
-		}
+		if (typeof indexedDB === 'undefined') return;
 
 		this.dbPromise = new Promise((resolve, reject) => {
 			const request = indexedDB.open(DB_NAME, DB_VERSION);
@@ -165,11 +163,8 @@ class IDBStorage {
 			batch.forEach((op) => {
 				try {
 					let request: IDBRequest;
-					if (op.type === 'put') {
-						request = store.put(op.value, op.key);
-					} else {
-						request = store.delete(op.key);
-					}
+					if (op.type === 'put') request = store.put(op.value, op.key);
+					else request = store.delete(op.key);
 
 					request.onsuccess = () => op.resolve();
 					request.onerror = () => op.reject(request.error);

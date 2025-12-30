@@ -326,64 +326,79 @@ export const handleJetstreamEvent = (event: JetstreamEvent) => {
 	if (event.kind !== 'commit') return;
 
 	const { did, commit } = event;
-	if (commit.collection !== 'app.bsky.feed.post') return;
-
 	const uri: ResourceUri = `at://${did}/${commit.collection}/${commit.rkey}`;
-
-	if (commit.operation === 'create') {
-		const { cid, record } = commit;
-		const post: PostWithUri = {
-			uri,
-			cid,
-			// assume record is valid, we trust the jetstream
-			record: record as AppBskyFeedPost.Main
-		};
-		addPosts([[uri, post]]);
-		addTimeline(did, [uri]);
-	} else if (commit.operation === 'delete') {
-		allPosts.get(did)?.delete(uri);
+	if (commit.collection === 'app.bsky.feed.post') {
+		if (commit.operation === 'create') {
+			const { cid, record } = commit;
+			const post: PostWithUri = {
+				uri,
+				cid,
+				// assume record is valid, we trust the jetstream
+				record: record as AppBskyFeedPost.Main
+			};
+			addPosts([[uri, post]]);
+			addTimeline(did, [uri]);
+		} else if (commit.operation === 'delete') {
+			allPosts.get(did)?.delete(uri);
+		}
 	}
+};
+
+const handlePostNotification = async (event: NotificationsStreamEvent & { type: 'message' }) => {
+	const parsedSubjectUri = expect(parseCanonicalResourceUri(event.data.link.subject));
+	const did = parsedSubjectUri.repo as AtprotoDid;
+	const client = await getClient(did);
+	const subjectPost = await client.getRecord(
+		AppBskyFeedPost.mainSchema,
+		did,
+		parsedSubjectUri.rkey
+	);
+	if (!subjectPost.ok) return;
+
+	const parsedSourceUri = expect(parseCanonicalResourceUri(event.data.link.source_record));
+	const hydrated = await hydratePosts(client, did, [
+		{
+			record: subjectPost.value.record,
+			uri: event.data.link.subject,
+			cid: subjectPost.value.cid,
+			replies: {
+				cursor: null,
+				total: 1,
+				records: [
+					{
+						did: parsedSourceUri.repo,
+						collection: parsedSourceUri.collection,
+						rkey: parsedSourceUri.rkey
+					}
+				]
+			}
+		}
+	]);
+	if (!hydrated.ok) {
+		console.error(`cant hydrate posts ${did}: ${hydrated.error}`);
+		return;
+	}
+
+	// console.log(hydrated);
+	addPosts(hydrated.value);
+	addTimeline(did, hydrated.value.keys());
+};
+
+const handleBacklink = (event: NotificationsStreamEvent & { type: 'message' }) => {
+	const parsedSource = expect(parseCanonicalResourceUri(event.data.link.source_record));
+	addBacklinks(event.data.link.subject, event.data.link.source, [
+		{
+			did: parsedSource.repo,
+			collection: parsedSource.collection,
+			rkey: parsedSource.rkey
+		}
+	]);
 };
 
 export const handleNotification = async (event: NotificationsStreamEvent) => {
 	if (event.type === 'message') {
-		const parsedSubjectUri = expect(parseCanonicalResourceUri(event.data.link.subject));
-		const did = parsedSubjectUri.repo as AtprotoDid;
-		const client = await getClient(did);
-		const subjectPost = await client.getRecord(
-			AppBskyFeedPost.mainSchema,
-			did,
-			parsedSubjectUri.rkey
-		);
-		if (!subjectPost.ok) return;
-
-		const parsedSourceUri = expect(parseCanonicalResourceUri(event.data.link.source_record));
-		const hydrated = await hydratePosts(client, did, [
-			{
-				record: subjectPost.value.record,
-				uri: event.data.link.subject,
-				cid: subjectPost.value.cid,
-				replies: {
-					cursor: null,
-					total: 1,
-					records: [
-						{
-							did: parsedSourceUri.repo,
-							collection: parsedSourceUri.collection,
-							rkey: parsedSourceUri.rkey
-						}
-					]
-				}
-			}
-		]);
-		if (!hydrated.ok) {
-			console.error(`cant hydrate posts ${did}: ${hydrated.error}`);
-			return;
-		}
-
-		// console.log(hydrated);
-		addPosts(hydrated.value);
-		addTimeline(did, hydrated.value.keys());
+		if (event.data.link.source.startsWith('app.bsky.feed.post')) handlePostNotification(event);
+		else handleBacklink(event);
 	}
 };
 
