@@ -42,6 +42,7 @@
 	import RichText from './RichText.svelte';
 	import { getRelativeTime } from '$lib/date';
 	import { likeSource, repostSource } from '$lib';
+	import ProfileInfo from './ProfileInfo.svelte';
 
 	interface Props {
 		client: AtpClient;
@@ -72,10 +73,10 @@
 	const selectedDid = $derived(client.user?.did ?? null);
 	const actionClient = $derived(clients.get(did as AtprotoDid));
 
-	const aturi: CanonicalResourceUri = `at://${did}/app.bsky.feed.post/${rkey}`;
-	const color = generateColorForDid(did);
+	const aturi = $derived(`at://${did}/app.bsky.feed.post/${rkey}` as CanonicalResourceUri);
+	const color = $derived(generateColorForDid(did));
 
-	let handle: ActorIdentifier = $state(did);
+	let handle: ActorIdentifier = $state('handle.invalid');
 	const didDoc = resolveDidDoc(did).then((res) => {
 		if (res.ok) handle = res.value.handle;
 		return res;
@@ -91,7 +92,7 @@
 		// console.log(profile.description);
 	});
 
-	const postId = `timeline-post-${aturi}-${quoteDepth}`;
+	const postId = $derived(`timeline-post-${aturi}-${quoteDepth}`);
 	const isPulsing = derived(pulsingPostId, (pulsingPostId) => pulsingPostId === postId);
 
 	const scrollToAndPulse = (targetUri: ResourceUri) => {
@@ -169,7 +170,6 @@
 	};
 
 	let profileOpen = $state(false);
-	let profilePopoutShowDid = $state(false);
 </script>
 
 {#snippet embedBadge(embed: AppBskyEmbeds)}
@@ -207,54 +207,13 @@
 
 <!-- eslint-disable svelte/no-navigation-without-resolve -->
 {#snippet profilePopout()}
-	{@const profileDesc = profile?.description?.trim() ?? ''}
 	<Dropdown
 		class="post-dropdown max-w-xl gap-2! p-2.5! backdrop-blur-3xl! backdrop-brightness-25!"
 		style="background: {color}36; border-color: {color}99;"
 		bind:isOpen={profileOpen}
 		trigger={profileInline}
 	>
-		<div class="flex items-center gap-2">
-			<ProfilePicture {client} {did} size={20} />
-
-			<div class="flex flex-col items-start overflow-hidden overflow-ellipsis">
-				<span class="mb-1.5 min-w-0 overflow-hidden text-2xl text-nowrap overflow-ellipsis">
-					{profile?.displayName ?? handle}
-					{#if profile?.pronouns}
-						<span class="shrink-0 text-sm text-nowrap opacity-60">({profile.pronouns})</span>
-					{/if}
-				</span>
-				<button
-					oncontextmenu={(e) => {
-						const node = e.target as Node;
-						const selection = window.getSelection() ?? new Selection();
-						const range = document.createRange();
-						range.selectNodeContents(node);
-						selection.removeAllRanges();
-						selection.addRange(range);
-						e.stopPropagation();
-					}}
-					onclick={() => (profilePopoutShowDid = !profilePopoutShowDid)}
-					class="mb-0.5 text-nowrap opacity-85 select-text hover:underline"
-				>
-					{profilePopoutShowDid ? did : `@${handle}`}
-				</button>
-				{#if profile?.website}
-					<a
-						target="_blank"
-						rel="noopener noreferrer"
-						href={profile.website}
-						class="text-sm text-nowrap opacity-60">{profile.website}</a
-					>
-				{/if}
-			</div>
-		</div>
-
-		{#if profileDesc.length > 0}
-			<p class="rounded-sm bg-black/25 p-1.5 text-wrap wrap-break-word">
-				<RichText text={profileDesc} />
-			</p>
-		{/if}
+		<ProfileInfo {client} {did} {handle} {profile} />
 	</Dropdown>
 {/snippet}
 

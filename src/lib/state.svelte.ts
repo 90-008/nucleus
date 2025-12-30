@@ -114,6 +114,11 @@ export const fetchLinksUntil = async (
 	const [_collection, source] = backlinkSource.split(':');
 	const collection = _collection as keyof Records;
 	const cursor = cursorMap.get(backlinkSource);
+
+	// if already fetched we dont need to fetch again
+	const cursorTimestamp = timestampFromCursor(cursor);
+	if (cursorTimestamp && cursorTimestamp <= timestamp) return;
+
 	console.log(`${did}: fetchLinksUntil`, backlinkSource, cursor, timestamp);
 	const result = await client.listRecordsUntil(collection, cursor, timestamp);
 
@@ -193,8 +198,8 @@ export const createPostBacklink = async (
 export const pulsingPostId = writable<string | null>(null);
 
 export const viewClient = new AtpClient();
-export const clients = new SvelteMap<AtprotoDid, AtpClient>();
-export const getClient = async (did: AtprotoDid): Promise<AtpClient> => {
+export const clients = new SvelteMap<Did, AtpClient>();
+export const getClient = async (did: Did): Promise<AtpClient> => {
 	if (!clients.has(did)) clients.set(did, await newPublicClient(did));
 	return clients.get(did)!;
 };
@@ -232,7 +237,7 @@ export const fetchForInteractions = async (did: AtprotoDid) => {
 	const cursorTimestamp = timestampFromCursor(res.value.cursor) ?? -1;
 	const threeDaysAgo = (Date.now() - 3 * 24 * 60 * 60 * 1000) * 1000;
 	const timestamp = Math.min(cursorTimestamp, threeDaysAgo);
-	console.log(`${did}: fetchFollowPosts`, res.value.cursor, timestamp);
+	console.log(`${did}: fetchForInteractions`, res.value.cursor, timestamp);
 	await Promise.all([repostSource].map((s) => fetchLinksUntil(client, s, timestamp)));
 };
 
@@ -249,7 +254,6 @@ export const addPostsRaw = (
 		{ cid: post.cid, uri: post.uri, record: post.value as AppBskyFeedPost.Main } as PostWithUri
 	]);
 	addPosts(postsWithUri);
-	postCursors.set(did, { value: newPosts.cursor, end: newPosts.cursor === undefined });
 };
 
 export const addPosts = (newPosts: Iterable<[ResourceUri, PostWithUri]>) => {
@@ -296,29 +300,29 @@ export const addTimeline = (did: Did, uris: Iterable<ResourceUri>) => {
 };
 
 export const fetchTimeline = async (did: AtprotoDid, limit: number = 6) => {
-	const client = await getClient(did);
+	const targetClient = await getClient(did);
 
 	const cursor = postCursors.get(did);
 	if (cursor && cursor.end) return;
 
-	const accPosts = await fetchPostsWithBacklinks(client, cursor?.value, limit);
+	const accPosts = await fetchPostsWithBacklinks(targetClient, cursor?.value, limit);
 	if (!accPosts.ok) throw `cant fetch posts ${did}: ${accPosts.error}`;
 
 	// if the cursor is undefined, we've reached the end of the timeline
-	if (!accPosts.value.cursor) {
-		postCursors.set(did, { ...cursor, end: true });
-		return;
-	}
-
-	postCursors.set(did, { value: accPosts.value.cursor, end: false });
-	const hydrated = await hydratePosts(client, did, accPosts.value.posts);
+	postCursors.set(did, { value: accPosts.value.cursor, end: !accPosts.value.cursor });
+	const hydrated = await hydratePosts(targetClient, did, accPosts.value.posts);
 	if (!hydrated.ok) throw `cant hydrate posts ${did}: ${hydrated.error}`;
 
 	addPosts(hydrated.value);
 	addTimeline(did, hydrated.value.keys());
 
-	const timestamp = timestampFromCursor(accPosts.value.cursor);
-	console.log(`${did}: fetchTimeline`, accPosts.value.cursor, timestamp);
+	console.log(`${did}: fetchTimeline`, accPosts.value.cursor);
+};
+
+export const fetchInteractionsUntil = async (client: AtpClient, did: Did) => {
+	const cursor = postCursors.get(did);
+	if (!cursor) return;
+	const timestamp = timestampFromCursor(cursor.value);
 	await Promise.all([likeSource, repostSource].map((s) => fetchLinksUntil(client, s, timestamp)));
 };
 

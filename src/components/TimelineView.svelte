@@ -6,24 +6,36 @@
 	import { type ResourceUri } from '@atcute/lexicons';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { InfiniteLoader, LoaderState } from 'svelte-infinite';
-	import { postCursors, fetchTimeline, allPosts, timelines } from '$lib/state.svelte';
+	import {
+		postCursors,
+		fetchTimeline,
+		allPosts,
+		timelines,
+		fetchInteractionsUntil
+	} from '$lib/state.svelte';
 	import Icon from '@iconify/svelte';
 	import { buildThreads, filterThreads, type ThreadPost } from '$lib/thread';
 	import type { AtprotoDid } from '@atcute/lexicons/syntax';
 
 	interface Props {
 		client?: AtpClient | null;
+		targetDid?: AtprotoDid;
 		postComposerState: PostComposerState;
 		class?: string;
 	}
 
-	let { client = null, postComposerState = $bindable(), class: className = '' }: Props = $props();
+	let {
+		client = null,
+		targetDid = undefined,
+		postComposerState = $bindable(),
+		class: className = ''
+	}: Props = $props();
 
 	let reverseChronological = $state(true);
 	let viewOwnPosts = $state(true);
 	const expandedThreads = new SvelteSet<ResourceUri>();
 
-	const did = $derived(client?.user?.did);
+	const did = $derived(targetDid ?? client?.user?.did);
 
 	const threads = $derived(
 		filterThreads(
@@ -36,16 +48,19 @@
 	const loaderState = new LoaderState();
 	let scrollContainer = $state<HTMLDivElement>();
 	let loading = $state(false);
+	let fetchMoreInteractions: boolean | undefined = $state(false);
 	let loadError = $state('');
 
 	const loadMore = async () => {
-		if (loading || $accounts.length === 0 || !did) return;
+		if (loading || !client || !did) return;
 
 		loading = true;
 		loaderState.status = 'LOADING';
 
 		try {
 			await fetchTimeline(did as AtprotoDid);
+			// interaction fetching is done lazily so we dont block loading posts
+			fetchMoreInteractions = true;
 			loaderState.loaded();
 		} catch (error) {
 			loadError = `${error}`;
@@ -55,11 +70,17 @@
 		}
 
 		loading = false;
-		if (postCursors.values().every((cursor) => cursor.end)) loaderState.complete();
+		const cursor = postCursors.get(did as AtprotoDid);
+		if (cursor && cursor.end) loaderState.complete();
 	};
 
 	$effect(() => {
-		if (threads.length === 0 && !loading) loadMore();
+		if (threads.length === 0 && !loading && did) loadMore();
+		if (client && did && fetchMoreInteractions) {
+			// set to false so it doesnt attempt to fetch again while its already fetching
+			fetchMoreInteractions = false;
+			fetchInteractionsUntil(client, did).then(() => (fetchMoreInteractions = undefined));
+		}
 	});
 </script>
 
@@ -128,7 +149,7 @@
 	class="min-h-full p-2 [scrollbar-color:var(--nucleus-accent)_transparent] {className}"
 	bind:this={scrollContainer}
 >
-	{#if $accounts.length > 0}
+	{#if targetDid || $accounts.length > 0}
 		<InfiniteLoader
 			{loaderState}
 			triggerLoad={loadMore}

@@ -5,6 +5,7 @@
 	import NotificationsView from '$components/NotificationsView.svelte';
 	import FollowingView from '$components/FollowingView.svelte';
 	import TimelineView from '$components/TimelineView.svelte';
+	import ProfileView from '$components/ProfileView.svelte';
 	import { AtpClient, streamNotifications } from '$lib/at/client';
 	import { accounts, type Account } from '$lib/accounts';
 	import { onMount, tick } from 'svelte';
@@ -68,16 +69,19 @@
 		handleAccountSelected(newAccounts[0]?.did);
 	};
 
-	type View = 'timeline' | 'notifications' | 'following' | 'settings';
+	type View = 'timeline' | 'notifications' | 'following' | 'settings' | 'profile';
 	let currentView = $state<View>('timeline');
 	let animClass = $state('animate-fade-in-scale');
 	let scrollPositions = new SvelteMap<View, number>();
+	let viewingProfileDid = $state<AtprotoDid | null>(null);
+	let previousView = $state<View>('timeline');
 
 	const viewOrder: Record<View, number> = {
 		timeline: 0,
 		following: 1,
 		notifications: 2,
-		settings: 3
+		settings: 3,
+		profile: 4
 	};
 
 	const switchView = async (newView: View) => {
@@ -85,12 +89,23 @@
 		scrollPositions.set(currentView, window.scrollY);
 
 		const direction = viewOrder[newView] > viewOrder[currentView] ? 'right' : 'left';
-		animClass = direction === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left';
+		// Profile always slides in from right unless going back
+		if (newView === 'profile') animClass = 'animate-slide-in-right';
+		else if (currentView === 'profile') animClass = 'animate-slide-in-left';
+		else animClass = direction === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left';
+		// Don't overwrite previousView if we're just going to profile
+		if (newView !== 'profile' && currentView !== 'profile') previousView = currentView;
+		else if (newView === 'profile' && currentView !== 'profile') previousView = currentView;
 		currentView = newView;
 
 		await tick();
 
 		window.scrollTo({ top: scrollPositions.get(newView) || 0, behavior: 'instant' });
+	};
+
+	const goToProfile = (did: AtprotoDid) => {
+		viewingProfileDid = did;
+		switchView('profile');
 	};
 
 	let postComposerState = $state<PostComposerState>({ type: 'null' });
@@ -216,7 +231,21 @@
 		{/if}
 		{#if currentView === 'following'}
 			<div class={animClass}>
-				<FollowingView selectedClient={selectedClient!} selectedDid={selectedDid!} />
+				<FollowingView
+					selectedClient={selectedClient!}
+					selectedDid={selectedDid!}
+					onProfileClick={goToProfile}
+				/>
+			</div>
+		{/if}
+		{#if currentView === 'profile' && viewingProfileDid}
+			<div class={animClass}>
+				<ProfileView
+					client={selectedClient!}
+					did={viewingProfileDid}
+					onBack={() => switchView(previousView)}
+					bind:postComposerState
+				/>
 			</div>
 		{/if}
 	</div>
@@ -247,7 +276,9 @@
 
 		<div
 			class="
-			{currentView === 'timeline' || currentView === 'following' ? '' : 'hidden'}
+			{currentView === 'timeline' || currentView === 'following' || currentView === 'profile'
+				? ''
+				: 'hidden'}
 			z-20 w-full max-w-2xl p-2.5 px-4 pb-1 transition-all
 			"
 		>

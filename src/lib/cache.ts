@@ -203,6 +203,7 @@ class IDBStorage {
 	}
 
 	// noops
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	async getTTL(key: string): Promise<void> {
 		return;
 	}

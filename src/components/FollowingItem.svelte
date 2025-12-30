@@ -21,9 +21,10 @@
 		client: AtpClient;
 		sort: Sort;
 		currentTime: Date;
+		onClick?: (did: AtprotoDid) => void;
 	}
 
-	let { style, did, stats, client, sort, currentTime }: Props = $props();
+	let { style, did, stats, client, sort, currentTime, onClick }: Props = $props();
 
 	// svelte-ignore state_referenced_locally
 	const cached = profileCache.get(did);
@@ -96,8 +97,11 @@
 </script>
 
 <div {style} class="box-border w-full pb-2">
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
-		class="group flex items-center gap-2 rounded-sm bg-(--nucleus-accent)/7 p-3 transition-colors hover:bg-(--post-color)/20"
+		onclick={() => onClick?.(did as AtprotoDid)}
+		class="group flex cursor-pointer items-center gap-2 rounded-sm bg-(--nucleus-accent)/7 p-3 transition-colors hover:bg-(--post-color)/20"
 		style={`--post-color: ${color};`}
 	>
 		<ProfilePicture {client} {did} size={10} />
