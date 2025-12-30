@@ -184,7 +184,9 @@ export const createPostBacklink = async (
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		createdAt: new Date().toISOString()
 	};
-	setNestedValue(record, subject.split('.'), post.uri);
+	const subjectPath = subject.split('.');
+	setNestedValue(record, subjectPath, post.uri);
+	setNestedValue(record, [...subjectPath.slice(0, -1), 'cid'], post.cid);
 	await client.atcute?.post('com.atproto.repo.createRecord', {
 		input: {
 			repo: did,
