@@ -80,35 +80,7 @@ const cacheWithRecords = cacheWithDidDocs.define('fetchRecord', async (uri: Reso
 	return res.value;
 });
 
-type ListRecordsParams = {
-	atcute: AtcuteClient;
-	did: Did;
-	collection: Nsid;
-	cursor?: string;
-	limit?: number;
-};
-const cacheWithListRecords = cacheWithRecords.define(
-	'listRecords',
-	async (params: ListRecordsParams) => {
-		const res = await params.atcute.get('com.atproto.repo.listRecords', {
-			params: {
-				repo: params.did,
-				collection: params.collection,
-				cursor: params.cursor,
-				limit: params.limit ?? 100,
-				reverse: false
-			}
-		});
-		if (!res.ok) return err(`${res.data.error}: ${res.data.message ?? 'no details'}`);
-
-		for (const record of res.data.records)
-			await cache.set('fetchRecord', `fetchRecord~${record.uri}`, record, 60 * 60 * 24);
-
-		return ok(res.data);
-	}
-);
-
-const cache = cacheWithListRecords;
+const cache = cacheWithRecords;
 
 export class AtpClient {
 	public atcute: AtcuteClient | null = null;
@@ -190,17 +162,21 @@ export class AtpClient {
 		Result<InferXRPCBodyOutput<(typeof ComAtprotoRepoListRecords.mainSchema)['output']>, string>
 	> {
 		if (!this.atcute || !this.user) return err('not authenticated');
-		try {
-			return (await cache.listRecords({
-				atcute: this.atcute,
-				did: this.user.did,
+		const res = await this.atcute.get('com.atproto.repo.listRecords', {
+			params: {
+				repo: this.user.did,
 				collection,
 				cursor,
-				limit
-			})) as Awaited<ReturnType<typeof this.listRecords>>;
-		} catch (e) {
-			return err(String(e));
-		}
+				limit,
+				reverse: false
+			}
+		});
+		if (!res.ok) return err(`${res.data.error}: ${res.data.message ?? 'no details'}`);
+
+		for (const record of res.data.records)
+			await cache.set('fetchRecord', `fetchRecord~${record.uri}`, record, 60 * 60 * 24);
+
+		return ok(res.data);
 	}
 
 	async listRecordsUntil<Collection extends keyof Records>(

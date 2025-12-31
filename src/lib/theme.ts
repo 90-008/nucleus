@@ -18,9 +18,7 @@ export const hashColor = (input: string): string => {
 	const id = input.split(':').pop() || input;
 
 	hash = 0;
-	for (let i = 0; i < Math.min(10, id.length); i++) {
-		hash = (hash << 4) + id.charCodeAt(i);
-	}
+	for (let i = 0; i < Math.min(10, id.length); i++) hash = (hash << 4) + id.charCodeAt(i);
 	hash = hash >>> 0;
 
 	// magic mixing

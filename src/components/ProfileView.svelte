@@ -77,7 +77,13 @@
 
 			<div class="my-4 h-px bg-white/10"></div>
 
-			<TimelineView {client} targetDid={did} bind:postComposerState class="min-h-[50vh]" />
+			<TimelineView
+				showReplies={false}
+				{client}
+				targetDid={did}
+				bind:postComposerState
+				class="min-h-[50vh]"
+			/>
 		</div>
 	{/if}
 </div>

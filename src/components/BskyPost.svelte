@@ -16,14 +16,13 @@
 		type ResourceUri
 	} from '@atcute/lexicons';
 	import { expect, ok } from '$lib/result';
-	import { generateColorForDid } from '$lib/accounts';
+	import { accounts, generateColorForDid } from '$lib/accounts';
 	import ProfilePicture from './ProfilePicture.svelte';
 	import { isBlob } from '@atcute/lexicons/interfaces';
 	import { blob, img } from '$lib/cdn';
 	import BskyPost from './BskyPost.svelte';
 	import Icon from '@iconify/svelte';
 	import {
-		clients,
 		allPosts,
 		pulsingPostId,
 		currentTime,
@@ -33,7 +32,6 @@
 	} from '$lib/state.svelte';
 	import type { PostWithUri } from '$lib/at/fetch';
 	import { onMount } from 'svelte';
-	import { type AtprotoDid } from '@atcute/lexicons/syntax';
 	import { derived } from 'svelte/store';
 	import Device from 'svelte-device-info';
 	import Dropdown from './Dropdown.svelte';
@@ -71,7 +69,7 @@
 	}: Props = $props();
 
 	const selectedDid = $derived(client.user?.did ?? null);
-	const actionClient = $derived(clients.get(did as AtprotoDid));
+	const isLoggedInUser = $derived($accounts.some((acc) => acc.did === did));
 
 	const aturi = $derived(`at://${did}/app.bsky.feed.post/${rkey}` as CanonicalResourceUri);
 	const color = $derived(generateColorForDid(did));
@@ -153,7 +151,7 @@
 			return;
 		}
 
-		actionClient?.atcute
+		client?.atcute
 			?.post('com.atproto.repo.deleteRecord', {
 				input: {
 					collection: 'app.bsky.feed.post',
@@ -212,6 +210,8 @@
 		style="background: {color}36; border-color: {color}99;"
 		bind:isOpen={profileOpen}
 		trigger={profileInline}
+		onMouseEnter={() => (profileOpen = true)}
+		onMouseLeave={() => (profileOpen = false)}
 	>
 		<ProfileInfo {client} {did} {handle} {profile} />
 	</Dropdown>
@@ -444,7 +444,7 @@
 			{@render dropdownItem('heroicons:clipboard-20-solid', 'copy post text', () =>
 				navigator.clipboard.writeText(post.record.text)
 			)}
-			{#if actionClient}
+			{#if isLoggedInUser}
 				<div class="my-0.75 h-px w-full opacity-60" style="background: {color};"></div>
 				{@render dropdownItem(
 					deleteState === 'confirm' ? 'heroicons:check-20-solid' : 'heroicons:trash-20-solid',

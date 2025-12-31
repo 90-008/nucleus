@@ -22,11 +22,14 @@
 		targetDid?: AtprotoDid;
 		postComposerState: PostComposerState;
 		class?: string;
+		// whether to show replies that are not the user's own posts
+		showReplies?: boolean;
 	}
 
 	let {
 		client = null,
 		targetDid = undefined,
+		showReplies = true,
 		postComposerState = $bindable(),
 		class: className = ''
 	}: Props = $props();
@@ -38,6 +41,7 @@
 	const did = $derived(targetDid ?? client?.user?.did);
 
 	const threads = $derived(
+		// todo: apply showReplies here
 		filterThreads(
 			did && timelines.has(did) ? buildThreads(did, timelines.get(did)!, allPosts) : [],
 			$accounts,
@@ -58,7 +62,7 @@
 		loaderState.status = 'LOADING';
 
 		try {
-			await fetchTimeline(did as AtprotoDid);
+			await fetchTimeline(did as AtprotoDid, 7, showReplies);
 			// interaction fetching is done lazily so we dont block loading posts
 			fetchMoreInteractions = true;
 			loaderState.loaded();

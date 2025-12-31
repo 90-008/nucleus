@@ -16,11 +16,16 @@
 		selectedDid: Did;
 		selectedClient: AtpClient;
 		onProfileClick: (did: AtprotoDid) => void;
+		followingSort: Sort;
 	}
 
-	const { selectedDid, selectedClient, onProfileClick }: Props = $props();
+	let {
+		selectedDid,
+		selectedClient,
+		onProfileClick,
+		followingSort = $bindable('active')
+	}: Props = $props();
 
-	let followingSort: Sort = $state('active' as Sort);
 	const followsMap = $derived(follows.get(selectedDid));
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any

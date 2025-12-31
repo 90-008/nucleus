@@ -5,27 +5,38 @@ import {
 	type ResourceUri
 } from '@atcute/lexicons';
 import { type AtpClient } from './client';
-import { err, expect, ok, type Result } from '$lib/result';
+import { err, expect, ok, type Ok, type Result } from '$lib/result';
 import type { Backlinks } from './constellation';
 import { AppBskyFeedPost } from '@atcute/bluesky';
-import type { AtprotoDid } from '@atcute/lexicons/syntax';
+import type { AtprotoDid, Did, RecordKey } from '@atcute/lexicons/syntax';
 import { replySource } from '$lib';
 
 export type PostWithUri = { uri: ResourceUri; cid: Cid | undefined; record: AppBskyFeedPost.Main };
 export type PostWithBacklinks = PostWithUri & {
-	replies: Backlinks;
+	replies?: Backlinks;
 };
-export type PostsWithReplyBacklinks = PostWithBacklinks[];
 
-export const fetchPostsWithBacklinks = async (
+export const fetchPosts = async (
 	client: AtpClient,
 	cursor?: string,
-	limit?: number
-): Promise<Result<{ posts: PostsWithReplyBacklinks; cursor?: string }, string>> => {
+	limit?: number,
+	withBacklinks: boolean = true
+): Promise<Result<{ posts: PostWithBacklinks[]; cursor?: string }, string>> => {
 	const recordsList = await client.listRecords('app.bsky.feed.post', cursor, limit);
 	if (!recordsList.ok) return err(`can't retrieve posts: ${recordsList.error}`);
 	cursor = recordsList.value.cursor;
 	const records = recordsList.value.records;
+
+	if (!withBacklinks) {
+		return ok({
+			posts: records.map((r) => ({
+				uri: r.uri,
+				cid: r.cid,
+				record: r.value as AppBskyFeedPost.Main
+			})),
+			cursor
+		});
+	}
 
 	try {
 		const allBacklinks = await Promise.all(
@@ -50,21 +61,26 @@ export const fetchPostsWithBacklinks = async (
 export const hydratePosts = async (
 	client: AtpClient,
 	repo: AtprotoDid,
-	data: PostsWithReplyBacklinks
+	data: PostWithBacklinks[],
+	cacheFn: (did: Did, rkey: RecordKey) => Ok<PostWithUri> | undefined
 ): Promise<Result<Map<ResourceUri, PostWithUri>, string>> => {
 	let posts: Map<ResourceUri, PostWithUri> = new Map();
 	try {
 		const allPosts = await Promise.all(
 			data.map(async (post) => {
 				const result: PostWithUri[] = [post];
-				const replies = await Promise.all(
-					post.replies.records.map(async (r) => {
-						const reply = await client.getRecord(AppBskyFeedPost.mainSchema, r.did, r.rkey);
-						if (!reply.ok) throw `cant fetch reply: ${reply.error}`;
-						return reply.value;
-					})
-				);
-				result.push(...replies);
+				if (post.replies) {
+					const replies = await Promise.all(
+						post.replies.records.map(async (r) => {
+							const reply =
+								cacheFn(r.did, r.rkey) ??
+								(await client.getRecord(AppBskyFeedPost.mainSchema, r.did, r.rkey));
+							if (!reply.ok) throw `cant fetch reply: ${reply.error}`;
+							return reply.value;
+						})
+					);
+					result.push(...replies);
+				}
 				return result;
 			})
 		);
@@ -79,7 +95,14 @@ export const hydratePosts = async (
 			const parentUri = parent.uri as CanonicalResourceUri;
 			// if we already have this parent, then we already fetched this chain / are fetching it
 			if (posts.has(parentUri)) return;
-			const p = await client.getRecordUri(AppBskyFeedPost.mainSchema, parentUri);
+			const parsedParentUri = expect(parseCanonicalResourceUri(parentUri));
+			const p =
+				cacheFn(parsedParentUri.repo, parsedParentUri.rkey) ??
+				(await client.getRecord(
+					AppBskyFeedPost.mainSchema,
+					parsedParentUri.repo,
+					parsedParentUri.rkey
+				));
 			if (p.ok) {
 				posts.set(p.value.uri, p.value);
 				parent = p.value.record.reply?.parent;
@@ -105,7 +128,9 @@ export const hydratePosts = async (
 				if (reply.did !== postRepo) continue;
 				// if we already have this reply, then we already fetched this chain / are fetching it
 				if (posts.has(`at://${reply.did}/${reply.collection}/${reply.rkey}`)) continue;
-				const record = await client.getRecord(AppBskyFeedPost.mainSchema, reply.did, reply.rkey);
+				const record =
+					cacheFn(reply.did, reply.rkey) ??
+					(await client.getRecord(AppBskyFeedPost.mainSchema, reply.did, reply.rkey));
 				if (!record.ok) break; // TODO: this doesnt handle deleted posts in between
 				posts.set(record.value.uri, record.value);
 				promises.push(fetchDownwardsChain(record.value));

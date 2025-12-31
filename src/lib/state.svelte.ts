@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import {
 	AtpClient,
 	newPublicClient,
@@ -6,13 +6,13 @@ import {
 	type NotificationsStreamEvent
 } from './at/client';
 import { SvelteMap, SvelteDate, SvelteSet } from 'svelte/reactivity';
-import type { Did, InferOutput, Nsid, ResourceUri } from '@atcute/lexicons';
-import { fetchPostsWithBacklinks, hydratePosts, type PostWithUri } from './at/fetch';
+import type { Did, InferOutput, Nsid, RecordKey, ResourceUri } from '@atcute/lexicons';
+import { fetchPosts, hydratePosts, type PostWithUri } from './at/fetch';
 import { parseCanonicalResourceUri, type AtprotoDid } from '@atcute/lexicons/syntax';
 import { AppBskyFeedPost, type AppBskyGraphFollow } from '@atcute/bluesky';
 import type { ComAtprotoRepoListRecords } from '@atcute/atproto';
 import type { JetstreamSubscription, JetstreamEvent } from '@atcute/jetstream';
-import { expect } from './result';
+import { expect, ok } from './result';
 import type { Backlink, BacklinksSource } from './at/constellation';
 import { now as tidNow } from '@atcute/tid';
 import type { Records } from '@atcute/lexicons/ambient';
@@ -247,26 +247,33 @@ export const allPosts = new SvelteMap<Did, SvelteMap<ResourceUri, PostWithUri>>(
 // did -> post uris that are replies to that did
 export const replyIndex = new SvelteMap<Did, SvelteSet<ResourceUri>>();
 
+export const getPost = (did: Did, rkey: RecordKey) =>
+	allPosts.get(did)?.get(`at://${did}/app.bsky.feed.post/${rkey}`);
+const hydrateCacheFn: Parameters<typeof hydratePosts>[3] = (did, rkey) => {
+	const cached = getPost(did, rkey);
+	return cached ? ok(cached) : undefined;
+};
+
 export const addPostsRaw = (
 	did: AtprotoDid,
 	newPosts: InferOutput<ComAtprotoRepoListRecords.mainSchema['output']['schema']>
 ) => {
-	const postsWithUri = newPosts.records.map((post): [ResourceUri, PostWithUri] => [
-		post.uri,
-		{ cid: post.cid, uri: post.uri, record: post.value as AppBskyFeedPost.Main } as PostWithUri
-	]);
+	const postsWithUri = newPosts.records.map(
+		(post) =>
+			({ cid: post.cid, uri: post.uri, record: post.value as AppBskyFeedPost.Main }) as PostWithUri
+	);
 	addPosts(postsWithUri);
 };
 
-export const addPosts = (newPosts: Iterable<[ResourceUri, PostWithUri]>) => {
-	for (const [uri, post] of newPosts) {
-		const parsedUri = expect(parseCanonicalResourceUri(uri));
+export const addPosts = (newPosts: Iterable<PostWithUri>) => {
+	for (const post of newPosts) {
+		const parsedUri = expect(parseCanonicalResourceUri(post.uri));
 		let posts = allPosts.get(parsedUri.repo);
 		if (!posts) {
 			posts = new SvelteMap();
 			allPosts.set(parsedUri.repo, posts);
 		}
-		posts.set(uri, post);
+		posts.set(post.uri, post);
 		const link: Backlink = {
 			did: parsedUri.repo,
 			collection: parsedUri.collection,
@@ -283,7 +290,7 @@ export const addPosts = (newPosts: Iterable<[ResourceUri, PostWithUri]>) => {
 					set = new SvelteSet();
 					replyIndex.set(parentDid, set);
 				}
-				set.add(uri);
+				set.add(post.uri);
 			}
 		}
 	}
@@ -292,30 +299,49 @@ export const addPosts = (newPosts: Iterable<[ResourceUri, PostWithUri]>) => {
 export const timelines = new SvelteMap<Did, SvelteSet<ResourceUri>>();
 export const postCursors = new SvelteMap<Did, { value?: string; end: boolean }>();
 
+const traversePostChain = (post: PostWithUri) => {
+	const result = [post.uri];
+	const parentUri = post.record.reply?.parent.uri;
+	if (parentUri) {
+		const parentPost = allPosts.get(extractDidFromUri(parentUri)!)?.get(parentUri);
+		if (parentPost) result.push(...traversePostChain(parentPost));
+	}
+	return result;
+};
 export const addTimeline = (did: Did, uris: Iterable<ResourceUri>) => {
 	let timeline = timelines.get(did);
 	if (!timeline) {
 		timeline = new SvelteSet();
 		timelines.set(did, timeline);
 	}
-	for (const uri of uris) timeline.add(uri);
+	for (const uri of uris) {
+		const post = allPosts.get(did)?.get(uri);
+		// we need to traverse the post chain to add all posts in the chain to the timeline
+		// because the parent posts might not be in the timeline yet
+		const chain = post ? traversePostChain(post) : [];
+		for (const uri of chain) timeline.add(uri);
+	}
 };
 
-export const fetchTimeline = async (did: AtprotoDid, limit: number = 6) => {
+export const fetchTimeline = async (
+	did: AtprotoDid,
+	limit: number = 6,
+	withBacklinks: boolean = true
+) => {
 	const targetClient = await getClient(did);
 
 	const cursor = postCursors.get(did);
 	if (cursor && cursor.end) return;
 
-	const accPosts = await fetchPostsWithBacklinks(targetClient, cursor?.value, limit);
+	const accPosts = await fetchPosts(targetClient, cursor?.value, limit, withBacklinks);
 	if (!accPosts.ok) throw `cant fetch posts ${did}: ${accPosts.error}`;
 
 	// if the cursor is undefined, we've reached the end of the timeline
 	postCursors.set(did, { value: accPosts.value.cursor, end: !accPosts.value.cursor });
-	const hydrated = await hydratePosts(targetClient, did, accPosts.value.posts);
+	const hydrated = await hydratePosts(targetClient, did, accPosts.value.posts, hydrateCacheFn);
 	if (!hydrated.ok) throw `cant hydrate posts ${did}: ${hydrated.error}`;
 
-	addPosts(hydrated.value);
+	addPosts(hydrated.value.values());
 	addTimeline(did, hydrated.value.keys());
 
 	console.log(`${did}: fetchTimeline`, accPosts.value.cursor);
@@ -342,7 +368,7 @@ export const handleJetstreamEvent = (event: JetstreamEvent) => {
 				// assume record is valid, we trust the jetstream
 				record: record as AppBskyFeedPost.Main
 			};
-			addPosts([[uri, post]]);
+			addPosts([post]);
 			addTimeline(did, [uri]);
 		} else if (commit.operation === 'delete') {
 			allPosts.get(did)?.delete(uri);
@@ -362,7 +388,7 @@ const handlePostNotification = async (event: NotificationsStreamEvent & { type: 
 	if (!subjectPost.ok) return;
 
 	const parsedSourceUri = expect(parseCanonicalResourceUri(event.data.link.source_record));
-	const hydrated = await hydratePosts(client, did, [
+	const posts = [
 		{
 			record: subjectPost.value.record,
 			uri: event.data.link.subject,
@@ -379,14 +405,15 @@ const handlePostNotification = async (event: NotificationsStreamEvent & { type: 
 				]
 			}
 		}
-	]);
+	];
+	const hydrated = await hydratePosts(client, did, posts, hydrateCacheFn);
 	if (!hydrated.ok) {
 		console.error(`cant hydrate posts ${did}: ${hydrated.error}`);
 		return;
 	}
 
 	// console.log(hydrated);
-	addPosts(hydrated.value);
+	addPosts(hydrated.value.values());
 	addTimeline(did, hydrated.value.keys());
 };
 
@@ -414,3 +441,11 @@ if (typeof window !== 'undefined')
 	setInterval(() => {
 		currentTime.setTime(Date.now());
 	}, 1000);
+
+export type View = 'timeline' | 'notifications' | 'following' | 'settings' | 'profile';
+export const currentView = writable<View>('timeline');
+export const previousView = writable<View>('timeline');
+export const setView = (view: View) => {
+	previousView.set(get(currentView));
+	currentView.set(view);
+};

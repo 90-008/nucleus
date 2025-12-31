@@ -20,6 +20,8 @@
 		placement?: Placement;
 		offsetDistance?: number;
 		position?: { x: number; y: number };
+		onMouseEnter?: () => void;
+		onMouseLeave?: () => void;
 	}
 
 	let {
@@ -29,12 +31,19 @@
 		placement = 'bottom-start',
 		offsetDistance = 2,
 		position = $bindable(),
+		onMouseEnter,
+		onMouseLeave,
 		...restProps
 	}: Props = $props();
 
 	let triggerRef: HTMLElement | undefined = $state();
 	let contentRef: HTMLElement | undefined = $state();
 	let cleanup: (() => void) | null = null;
+
+	// State-based tracking for hover logic
+	let isTriggerHovered = false;
+	let isContentHovered = false;
+	let closeTimer: ReturnType<typeof setTimeout>;
 
 	const updatePosition = async () => {
 		const { x, y } = await computePosition(triggerRef!, contentRef!, {
@@ -70,6 +79,44 @@
 
 	const handleScroll = handleClose;
 
+	// The central check: "Should we close now?"
+	const scheduleCloseCheck = () => {
+		clearTimeout(closeTimer);
+		closeTimer = setTimeout(() => {
+			// Only close if we are NOT on the trigger AND NOT on the content
+			if (!isTriggerHovered && !isContentHovered) if (isOpen && onMouseLeave) onMouseLeave();
+		}, 30); // Small buffer to handle the physical gap between elements
+	};
+
+	const handleTriggerEnter = () => {
+		isTriggerHovered = true;
+		clearTimeout(closeTimer); // We are safe, cancel any pending close
+		if (!isOpen && onMouseEnter) onMouseEnter();
+	};
+
+	const handleTriggerLeave = () => {
+		isTriggerHovered = false;
+		scheduleCloseCheck(); // We left the trigger, check if we should close
+	};
+
+	const handleContentEnter = () => {
+		isContentHovered = true;
+		clearTimeout(closeTimer); // We made it to the content, cancel close
+	};
+
+	const handleContentLeave = () => {
+		isContentHovered = false;
+		scheduleCloseCheck(); // We left the content, check if we should close
+	};
+
+	// Reset state if the menu is closed externally
+	$effect(() => {
+		if (!isOpen) {
+			isContentHovered = false;
+			clearTimeout(closeTimer);
+		}
+	});
+
 	$effect(() => {
 		if (isOpen) {
 			cleanup = autoUpdate(triggerRef!, contentRef!, updatePosition);
@@ -79,16 +126,21 @@
 		}
 	});
 
-	onMount(() => {
-		return () => {
-			if (cleanup) cleanup();
-		};
+	onMount(() => () => {
+		if (cleanup) cleanup();
+		clearTimeout(closeTimer);
 	});
 </script>
 
 <svelte:window onkeydown={handleEscape} onmousedown={handleClickOutside} onscroll={handleScroll} />
 
-<div role="button" tabindex="0" bind:this={triggerRef}>
+<div
+	role="button"
+	tabindex="0"
+	bind:this={triggerRef}
+	onmouseenter={handleTriggerEnter}
+	onmouseleave={handleTriggerLeave}
+>
 	{@render trigger?.()}
 </div>
 
@@ -100,6 +152,8 @@
 		style={restProps.style}
 		role="menu"
 		tabindex="-1"
+		onmouseenter={handleContentEnter}
+		onmouseleave={handleContentLeave}
 	>
 		{@render children?.()}
 	</div>

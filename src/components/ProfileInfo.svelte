@@ -11,10 +11,9 @@
 		did: Did;
 		handle?: string;
 		profile?: AppBskyActorProfile.Main | null;
-		interactive?: boolean;
 	}
 
-	let { client, did, handle, profile = $bindable(null), interactive = true }: Props = $props();
+	let { client, did, handle, profile = $bindable(null) }: Props = $props();
 
 	onMount(async () => {
 		await Promise.all([
