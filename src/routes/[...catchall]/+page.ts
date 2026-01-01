@@ -5,6 +5,8 @@ import { flow, sessions } from '$lib/at/oauth';
 import { err, ok, type Result } from '$lib/result';
 import type { PageLoad } from './$types';
 
+export const prerender = false;
+
 export type PageProps = {
 	data: {
 		client: Result<AtpClient | null, string>;

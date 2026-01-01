@@ -196,7 +196,7 @@ export class AtpClient {
 			if (!res.ok) return res;
 			data.cursor = res.value.cursor;
 			data.records.push(...res.value.records);
-			end = !data.cursor;
+			end = data.records.length === 0 || !data.cursor;
 			if (!end && timestamp > 0) {
 				const cursorTimestamp = timestampFromCursor(data.cursor);
 				if (cursorTimestamp === undefined) {

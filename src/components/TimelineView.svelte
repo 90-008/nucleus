@@ -80,7 +80,13 @@
 	};
 
 	$effect(() => {
-		if (threads.length === 0 && !loading && did) loadMore();
+		if (threads.length === 0 && !loading && did) {
+			// if we saw all posts dont try to load more.
+			// this only really happens if the user has no posts at all
+			// but we do have to handle it to not cause an infinite loop
+			const cursor = did ? postCursors.get(did as AtprotoDid) : undefined;
+			if (!cursor?.end) loadMore();
+		}
 		if (client && did && fetchMoreInteractions) {
 			// set to false so it doesnt attempt to fetch again while its already fetching
 			fetchMoreInteractions = false;
