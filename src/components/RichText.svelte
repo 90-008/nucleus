@@ -33,11 +33,11 @@
 {/snippet}
 
 {#snippet segments(segments: RichtextSegment[])}
-	{#each segments as segment, idx ([segment, idx])}
+	{#each segments as segment, idx (idx)}
 		{@const { text, features: _features } = segment}
 		{@const features = _features ?? []}
 		{#if features.length > 0}
-			{#each features as feature, idx ([feature, idx])}
+			{#each features as feature, idx (idx)}
 				{#if feature.$type === 'app.bsky.richtext.facet#mention'}
 					<a
 						class="text-(--nucleus-accent2) hover:cursor-pointer hover:underline"

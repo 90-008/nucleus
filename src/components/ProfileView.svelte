@@ -71,7 +71,7 @@
 </script>
 
 <div class="flex min-h-dvh flex-col">
-	<!-- Header -->
+	<!-- header -->
 	<div
 		class="sticky top-0 z-20 flex items-center gap-4 border-b-2 bg-(--nucleus-bg)/80 p-4 backdrop-blur-md"
 		style="border-color: {color}40;"
@@ -96,7 +96,7 @@
 			<p>failed to load profile: {error}</p>
 		</div>
 	{:else}
-		<!-- Banner -->
+		<!-- banner -->
 		<div class="relative h-32 w-full overflow-hidden bg-(--nucleus-fg)/5 md:h-48">
 			{#if bannerUrl}
 				<img src={bannerUrl} alt="banner" class="h-full w-full object-cover" />

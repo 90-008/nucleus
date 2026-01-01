@@ -28,8 +28,8 @@
 	let isLongCalculation = $state(false);
 	let calculationTimer: ReturnType<typeof setTimeout> | undefined;
 
-	// Optimization: Use a static timestamp for calculation to avoid re-sorting every second.
-	// Only update this when the sort mode changes.
+	// we could update the "now" every second but its pretty unnecessary
+	// so we only do it when we receive new data or sort mode changes
 	let staticNow = $state(Date.now());
 
 	const updateList = async () => {
@@ -59,7 +59,7 @@
 					)
 				: null;
 
-		const userStatsList = Array.from(followsMap.values()).map((f) => ({
+		const userStatsList = followsMap.values().map((f) => ({
 			did: f.subject,
 			data: calculateFollowedUserStats(
 				followingSort,
@@ -80,12 +80,13 @@
 		isLongCalculation = false;
 	};
 
+	// todo: there is a bug where
 	$effect(() => {
 		// Dependencies that trigger a re-sort
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
 		const _s = followingSort;
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		const _f = followsMap;
+		const _f = followsMap?.size;
 		// Update time when sort changes
 		staticNow = Date.now();
 

@@ -10,7 +10,6 @@
 	import {
 		parseCanonicalResourceUri,
 		type ActorIdentifier,
-		type CanonicalResourceUri,
 		type Did,
 		type RecordKey,
 		type ResourceUri
