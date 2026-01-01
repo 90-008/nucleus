@@ -37,7 +37,7 @@ import type { Notification } from './stardust';
 import { get } from 'svelte/store';
 import { settings } from '$lib/settings';
 import type { OAuthUserAgent } from '@atcute/oauth-browser-client';
-import { timestampFromCursor } from '$lib';
+import { timestampFromCursor, toCanonicalUri, toResourceUri } from '$lib';
 
 export const slingshotUrl: URL = new URL(get(settings).endpoints.slingshot);
 export const spacedustUrl: URL = new URL(get(settings).endpoints.spacedust);
@@ -132,8 +132,9 @@ export class AtpClient {
 		const collection = schema.object.shape.$type.expected;
 
 		try {
-			// Call the cached function
-			const rawValue = await cache.fetchRecord(`at://${repo}/${collection}/${rkey}`);
+			const rawValue = await cache.fetchRecord(
+				toResourceUri({ repo, collection, rkey, fragment: undefined })
+			);
 
 			const parsed = safeParse(schema, rawValue.value);
 			if (!parsed.ok) return err(parsed.message);
@@ -242,7 +243,7 @@ export class AtpClient {
 
 		const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
 		const query = fetchMicrocosm(constellationUrl, BacklinksQuery, {
-			subject: `at://${did.value}/${collection}/${rkey}`,
+			subject: toCanonicalUri({ did: did.value, collection, rkey }),
 			source,
 			limit: limit || 100
 		});

@@ -5,13 +5,16 @@ import type {
 	ParsedResourceUri,
 	ResourceUri
 } from '@atcute/lexicons';
-import type { BacklinksSource } from './at/constellation';
+import type { Backlink, BacklinksSource } from './at/constellation';
 import { parse as parseTid } from '@atcute/tid';
 
 export const toResourceUri = (parsed: ParsedResourceUri): ResourceUri => {
 	return `at://${parsed.repo}${parsed.collection ? `/${parsed.collection}${parsed.rkey ? `/${parsed.rkey}` : ''}` : ''}`;
 };
-export const toCanonicalUri = (parsed: ParsedCanonicalResourceUri): CanonicalResourceUri => {
+export const toCanonicalUri = (
+	parsed: ParsedCanonicalResourceUri | Backlink
+): CanonicalResourceUri => {
+	if ('did' in parsed) return `at://${parsed.did}/${parsed.collection}/${parsed.rkey}`;
 	return `at://${parsed.repo}/${parsed.collection}/${parsed.rkey}${parsed.fragment ? `#${parsed.fragment}` : ''}`;
 };
 

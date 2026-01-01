@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	// Module-level cache for synchronous access during component recycling
+	// we have this to prevent avatars from "flickering"
 	const avatarCache = new SvelteMap<string, string | null>();
 </script>
 
@@ -24,11 +24,7 @@
 	let avatarUrl = $state<string | null>(avatarCache.get(did) ?? null);
 
 	const loadProfile = async (targetDid: Did) => {
-		// If we already have it in cache, we might want to re-validate eventually,
-		// but for UI stability, using the cache is priority.
-		// However, we still need to handle the case where we don't have it.
-		if (avatarCache.has(targetDid)) avatarUrl = avatarCache.get(targetDid) ?? null;
-		else avatarUrl = null;
+		avatarUrl = avatarCache.get(targetDid) ?? null;
 
 		try {
 			const profile = await client.getProfile(targetDid);
@@ -46,8 +42,6 @@
 					avatarCache.set(targetDid, null);
 				}
 			} else {
-				// Don't cache errors aggressively, or maybe cache 'null' to stop retrying?
-				// For now, just set local state.
 				avatarUrl = null;
 			}
 		} catch (e) {

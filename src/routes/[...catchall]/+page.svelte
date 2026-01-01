@@ -46,7 +46,7 @@
 		if (selectedDid) localStorage.setItem('selectedDid', selectedDid);
 		else localStorage.removeItem('selectedDid');
 	});
-	const selectedClient = $derived(selectedDid ? clients.get(selectedDid) : null);
+	const selectedClient = $derived(selectedDid ? clients.get(selectedDid) : undefined);
 
 	const loginAccount = async (account: Account) => {
 		if (clients.has(account.did)) return;
@@ -187,17 +187,24 @@
 	</button>
 {/snippet}
 
-{#snippet routeButton(
-	path: (typeof currentRoute)['path'],
-	icon: string,
-	ariaLabel: string,
-	iconHover?: string
-)}
+{#snippet routeButton({
+	route,
+	path = route,
+	icon,
+	iconHover = `${icon}-solid`,
+	ariaLabel = path.split('/').pop() ?? path
+}: {
+	route: (typeof currentRoute)['path'];
+	path?: string;
+	icon: string;
+	ariaLabel?: string;
+	iconHover?: string;
+})}
 	{@render appButton(
 		() => router.navigate(path),
 		icon,
 		ariaLabel,
-		path === currentRoute.path,
+		currentRoute.path === route,
 		iconHover
 	)}
 {/snippet}
@@ -211,30 +218,23 @@
 			bind:postComposerState
 		/>
 
-		{#if currentRoute.path === '/settings/:tab' || currentRoute.path === '/settings'}
+		{#if currentRoute.path === '/settings/:tab'}
 			<div class={animClass}>
-				<SettingsView tab={currentRoute.params.tab ?? 'advanced'} />
+				<SettingsView tab={currentRoute.params.tab} />
 			</div>
-		{/if}
-		{#if currentRoute.path === '/notifications'}
+		{:else if currentRoute.path === '/notifications'}
 			<div class={animClass}>
 				<NotificationsView />
 			</div>
-		{/if}
-		{#if currentRoute.path === '/following'}
+		{:else if currentRoute.path === '/following'}
 			<div class={animClass}>
-				<FollowingView
-					selectedClient={selectedClient!}
-					selectedDid={selectedDid!}
-					bind:followingSort
-				/>
+				<FollowingView client={selectedClient} bind:followingSort />
 			</div>
-		{/if}
-		{#if currentRoute.path === '/profile/:actor'}
+		{:else if currentRoute.path === '/profile/:actor'}
 			{#key currentRoute.params.actor}
 				<div class={animClass}>
 					<ProfileView
-						client={selectedClient!}
+						client={selectedClient ?? viewClient}
 						onBack={() => router.back()}
 						actor={currentRoute.params.actor}
 						bind:postComposerState
@@ -270,11 +270,7 @@
 
 		<div
 			class="
-			{router.current.path === '/' ||
-			router.current.path === '/following' ||
-			router.current.path === '/profile/:actor'
-				? ''
-				: 'hidden'}
+			{['/', '/following', '/profile/:actor'].includes(router.current.path) ? '' : 'hidden'}
 			z-20 w-full max-w-2xl p-2.5 px-4 pb-1 transition-all
 			"
 		>
@@ -328,25 +324,14 @@
 						</div>
 					</div>
 					<div class="grow"></div>
-					{@render routeButton('/', 'heroicons:home', 'timeline', 'heroicons:home-solid')}
-					{@render routeButton(
-						'/following',
-						'heroicons:users',
-						'following',
-						'heroicons:users-solid'
-					)}
-					{@render routeButton(
-						'/notifications',
-						'heroicons:bell',
-						'notifications',
-						'heroicons:bell-solid'
-					)}
-					{@render routeButton(
-						'/settings',
-						'heroicons:cog-6-tooth',
-						'settings',
-						'heroicons:cog-6-tooth-solid'
-					)}
+					{@render routeButton({ route: '/', icon: 'heroicons:home' })}
+					{@render routeButton({ route: '/following', icon: 'heroicons:users' })}
+					{@render routeButton({ route: '/notifications', icon: 'heroicons:bell' })}
+					{@render routeButton({
+						path: '/settings/advanced',
+						route: '/settings/:tab',
+						icon: 'heroicons:cog-6-tooth'
+					})}
 				</div>
 			</div>
 		</div>

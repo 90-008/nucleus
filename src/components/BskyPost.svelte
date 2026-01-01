@@ -40,7 +40,7 @@
 	import { settings } from '$lib/settings';
 	import RichText from './RichText.svelte';
 	import { getRelativeTime } from '$lib/date';
-	import { likeSource, repostSource } from '$lib';
+	import { likeSource, repostSource, toCanonicalUri } from '$lib';
 	import ProfileInfo from './ProfileInfo.svelte';
 
 	interface Props {
@@ -72,7 +72,7 @@
 	const selectedDid = $derived(client.user?.did ?? null);
 	const isLoggedInUser = $derived($accounts.some((acc) => acc.did === did));
 
-	const aturi = $derived(`at://${did}/app.bsky.feed.post/${rkey}` as CanonicalResourceUri);
+	const aturi = $derived(toCanonicalUri({ did, collection: 'app.bsky.feed.post', rkey }));
 	const color = $derived(generateColorForDid(did));
 
 	let handle: ActorIdentifier = $state('handle.invalid');
@@ -384,50 +384,69 @@
 {#snippet postControls(post: PostWithUri)}
 	{@const myRepost = findBacklinksBy(post.uri, repostSource, selectedDid!).length > 0}
 	{@const myLike = findBacklinksBy(post.uri, likeSource, selectedDid!).length > 0}
-	{#snippet control(
-		name: string,
-		icon: string,
-		onClick: (e: MouseEvent) => void,
-		isFull?: boolean,
-		hasSolid?: boolean
-	)}
+	{#snippet control({
+		name,
+		icon,
+		onClick,
+		isFull,
+		hasSolid,
+		canBeDisabled = true
+	}: {
+		name: string;
+		icon: string;
+		onClick: (e: MouseEvent) => void;
+		isFull?: boolean;
+		hasSolid?: boolean;
+		canBeDisabled?: boolean;
+	})}
 		<button
 			class="
 			px-2 py-1.5 text-(--nucleus-fg)/90 transition-all
-			duration-100 hover:[backdrop-filter:brightness(120%)]
+			duration-100 not-disabled:hover:[backdrop-filter:brightness(120%)]
+			disabled:cursor-not-allowed!
 			"
 			onclick={(e) => onClick(e)}
 			style="color: {isFull ? color : 'color-mix(in srgb, var(--nucleus-fg) 90%, transparent)'}"
 			title={name}
+			disabled={canBeDisabled ? selectedDid === null : false}
 		>
 			<Icon icon={hasSolid && isFull ? `${icon}-solid` : icon} width={20} />
 		</button>
 	{/snippet}
 	<div class="mt-3 flex w-full items-center justify-between">
 		<div class="flex w-fit items-center rounded-sm" style="background: {color}1f;">
-			{@render control('reply', 'heroicons:chat-bubble-left', () => onReply?.(post), false, true)}
-			{@render control(
-				'repost',
-				'heroicons:arrow-path-rounded-square-20-solid',
-				() => {
+			{@render control({
+				name: 'reply',
+				icon: 'heroicons:chat-bubble-left',
+				hasSolid: true,
+				onClick: () => onReply?.(post)
+			})}
+			{@render control({
+				name: 'repost',
+				icon: 'heroicons:arrow-path-rounded-square-20-solid',
+				onClick: () => {
 					if (!selectedDid) return;
 					if (myRepost) deletePostBacklink(client, post, repostSource);
 					else createPostBacklink(client, post, repostSource);
 				},
-				myRepost
-			)}
-			{@render control('quote', 'heroicons:paper-clip-20-solid', () => onQuote?.(post), false)}
-			{@render control(
-				'like',
-				'heroicons:star',
-				() => {
+				isFull: myRepost
+			})}
+			{@render control({
+				name: 'quote',
+				icon: 'heroicons:paper-clip-20-solid',
+				onClick: () => onQuote?.(post)
+			})}
+			{@render control({
+				name: 'like',
+				icon: 'heroicons:star',
+				onClick: () => {
 					if (!selectedDid) return;
 					if (myLike) deletePostBacklink(client, post, likeSource);
 					else createPostBacklink(client, post, likeSource);
 				},
-				myLike,
-				true
-			)}
+				isFull: myLike,
+				hasSolid: true
+			})}
 		</div>
 		<Dropdown
 			class="post-dropdown"
@@ -459,16 +478,21 @@
 			{#snippet trigger()}
 				<div
 					class="
-          		    w-fit items-center rounded-sm transition-opacity
+					w-fit items-center rounded-sm transition-opacity
          			duration-100 ease-in-out group-hover:opacity-100
          			{!actionsOpen && !Device.isMobile ? 'opacity-0' : ''}
          			"
 					style="background: {color}1f;"
 				>
-					{@render control('actions', 'heroicons:ellipsis-horizontal-16-solid', (e) => {
-						e.stopPropagation();
-						actionsOpen = !actionsOpen;
-						actionsPos = { x: 0, y: 0 };
+					{@render control({
+						name: 'actions',
+						icon: 'heroicons:ellipsis-horizontal-16-solid',
+						onClick: (e: MouseEvent) => {
+							e.stopPropagation();
+							actionsOpen = !actionsOpen;
+							actionsPos = { x: 0, y: 0 };
+						},
+						canBeDisabled: false
 					})}
 				</div>
 			{/snippet}

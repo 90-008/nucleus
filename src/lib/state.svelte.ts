@@ -21,7 +21,8 @@ import {
 	likeSource,
 	replySource,
 	repostSource,
-	timestampFromCursor
+	timestampFromCursor,
+	toCanonicalUri
 } from '$lib';
 import { Router } from './router.svelte';
 
@@ -231,14 +232,16 @@ export const fetchFollows = async (did: AtprotoDid) => {
 	);
 };
 
+// this fetches up to three days of posts and interactions for using in following list
 export const fetchForInteractions = async (did: AtprotoDid) => {
+	const threeDaysAgo = (Date.now() - 3 * 24 * 60 * 60 * 1000) * 1000;
+
 	const client = await getClient(did);
-	const res = await client.listRecords('app.bsky.feed.post');
+	const res = await client.listRecordsUntil('app.bsky.feed.post', undefined, threeDaysAgo);
 	if (!res.ok) return;
 	addPostsRaw(did, res.value);
 
 	const cursorTimestamp = timestampFromCursor(res.value.cursor) ?? -1;
-	const threeDaysAgo = (Date.now() - 3 * 24 * 60 * 60 * 1000) * 1000;
 	const timestamp = Math.min(cursorTimestamp, threeDaysAgo);
 	console.log(`${did}: fetchForInteractions`, res.value.cursor, timestamp);
 	await Promise.all([repostSource].map((s) => fetchLinksUntil(client, s, timestamp)));
@@ -249,7 +252,7 @@ export const allPosts = new SvelteMap<Did, SvelteMap<ResourceUri, PostWithUri>>(
 export const replyIndex = new SvelteMap<Did, SvelteSet<ResourceUri>>();
 
 export const getPost = (did: Did, rkey: RecordKey) =>
-	allPosts.get(did)?.get(`at://${did}/app.bsky.feed.post/${rkey}`);
+	allPosts.get(did)?.get(toCanonicalUri({ did, collection: 'app.bsky.feed.post', rkey }));
 const hydrateCacheFn: Parameters<typeof hydratePosts>[3] = (did, rkey) => {
 	const cached = getPost(did, rkey);
 	return cached ? ok(cached) : undefined;
@@ -359,7 +362,7 @@ export const handleJetstreamEvent = (event: JetstreamEvent) => {
 	if (event.kind !== 'commit') return;
 
 	const { did, commit } = event;
-	const uri: ResourceUri = `at://${did}/${commit.collection}/${commit.rkey}`;
+	const uri: ResourceUri = toCanonicalUri({ did, ...commit });
 	if (commit.collection === 'app.bsky.feed.post') {
 		if (commit.operation === 'create') {
 			const { cid, record } = commit;

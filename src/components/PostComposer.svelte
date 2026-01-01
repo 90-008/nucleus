@@ -67,13 +67,10 @@
 			}
 		});
 
-		if (!res) {
-			return err('failed to post: not logged in');
-		}
+		if (!res) return err('failed to post: not logged in');
 
-		if (!res.ok) {
+		if (!res.ok)
 			return err(`failed to post: ${res.data.error}: ${res.data.message ?? 'no details'}`);
-		}
 
 		return ok({
 			uri: res.data.uri,
@@ -99,15 +96,16 @@
 				postText = '';
 				info = 'posted!';
 				unfocus();
-				setTimeout(() => (info = ''), 1000 * 0.8);
+				setTimeout(() => (info = ''), 800);
 			} else {
-				// todo: add a way to clear error
 				info = res.error;
+				setTimeout(() => (info = ''), 3000);
 			}
 		});
 	};
 
 	$effect(() => {
+		if (!client.atcute) info = 'not logged in';
 		document.documentElement.style.setProperty('--acc-color', color);
 		if (isFocused && textareaEl) textareaEl.focus();
 	});

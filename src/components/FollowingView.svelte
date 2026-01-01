@@ -10,16 +10,17 @@
 		type Sort
 	} from '$lib/following';
 	import FollowingItem from './FollowingItem.svelte';
+	import NotLoggedIn from './NotLoggedIn.svelte';
 
 	interface Props {
-		selectedDid: Did;
-		selectedClient: AtpClient;
+		client: AtpClient | undefined;
 		followingSort: Sort;
 	}
 
-	let { selectedDid, selectedClient, followingSort = $bindable('active') }: Props = $props();
+	let { client, followingSort = $bindable('active') }: Props = $props();
 
-	const followsMap = $derived(follows.get(selectedDid));
+	const selectedDid = $derived(client?.user?.did);
+	const followsMap = $derived(selectedDid ? follows.get(selectedDid) : undefined);
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	let sortedFollowing = $state<{ did: Did; data: any }[]>([]);
@@ -36,7 +37,7 @@
 		if (calculationTimer) clearTimeout(calculationTimer);
 		isLongCalculation = false;
 
-		if (!followsMap) {
+		if (!followsMap || !selectedDid) {
 			sortedFollowing = [];
 			return;
 		}
@@ -137,7 +138,9 @@
 	</div>
 
 	<div class="min-h-0 flex-1" bind:this={listContainer}>
-		{#if sortedFollowing.length === 0 || isLongCalculation}
+		{#if !client}
+			<NotLoggedIn />
+		{:else if sortedFollowing.length === 0 || isLongCalculation}
 			<div class="flex justify-center py-8">
 				<div
 					class="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent"
@@ -152,7 +155,7 @@
 						{style}
 						did={user.did}
 						stats={user.data!}
-						client={selectedClient}
+						{client}
 						sort={followingSort}
 						{currentTime}
 					/>

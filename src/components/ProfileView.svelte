@@ -1,6 +1,11 @@
 <script lang="ts">
-	import { AtpClient, resolveHandle } from '$lib/at/client';
-	import type { ActorIdentifier, AtprotoDid } from '@atcute/lexicons/syntax';
+	import { AtpClient, resolveDidDoc, resolveHandle } from '$lib/at/client';
+	import {
+		isHandle,
+		type ActorIdentifier,
+		type AtprotoDid,
+		type Handle
+	} from '@atcute/lexicons/syntax';
 	import TimelineView from './TimelineView.svelte';
 	import ProfileInfo from './ProfileInfo.svelte';
 	import type { State as PostComposerState } from './PostComposer.svelte';
@@ -9,6 +14,7 @@
 	import { img } from '$lib/cdn';
 	import { isBlob } from '@atcute/lexicons/interfaces';
 	import type { AppBskyActorProfile } from '@atcute/bluesky';
+	import { onMount } from 'svelte';
 
 	interface Props {
 		client: AtpClient;
@@ -20,14 +26,17 @@
 	let { client, actor, onBack, postComposerState = $bindable({ type: 'null' }) }: Props = $props();
 
 	let profile = $state<AppBskyActorProfile.Main | null>(null);
+	const displayName = $derived(profile?.displayName ?? '');
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let did = $state<AtprotoDid | null>(null);
+	let handle = $state<Handle | null>(null);
 
 	const loadProfile = async (identifier: ActorIdentifier) => {
 		loading = true;
 		error = null;
 		profile = null;
+		handle = isHandle(identifier) ? identifier : null;
 
 		const resDid = await resolveHandle(identifier);
 		if (resDid.ok) did = resDid.value;
@@ -37,6 +46,11 @@
 			return;
 		}
 
+		if (!handle) {
+			const resHandle = await resolveDidDoc(did);
+			if (resHandle.ok) handle = resHandle.value.handle;
+		}
+
 		const res = await client.getProfile(did);
 		if (res.ok) profile = res.value;
 		else error = res.error;
@@ -44,8 +58,8 @@
 		loading = false;
 	};
 
-	$effect(() => {
-		loadProfile(actor as ActorIdentifier);
+	onMount(async () => {
+		await loadProfile(actor as ActorIdentifier);
 	});
 
 	const color = $derived(did ? generateColorForDid(did) : 'var(--nucleus-fg)');
@@ -69,7 +83,11 @@
 			<Icon icon="heroicons:arrow-left-20-solid" width={24} />
 		</button>
 		<h2 class="text-xl font-bold">
-			{profile?.displayName ?? (loading ? 'loading...' : actor || 'profile')}
+			{displayName.length > 0
+				? displayName
+				: loading
+					? 'loading...'
+					: (handle ?? actor ?? 'profile')}
 		</h2>
 	</div>
 

@@ -6,7 +6,6 @@ export const routes = [
 	{ path: '/', order: 0 },
 	{ path: '/following', order: 1 },
 	{ path: '/notifications', order: 2 },
-	{ path: '/settings', order: 3 },
 	{ path: '/settings/:tab', order: 3 },
 	{ path: '/profile/:actor', order: 4 }
 ] as const;
@@ -85,7 +84,7 @@ export class Router {
 		window.addEventListener('popstate', () => this._updateState(window.location.pathname));
 	}
 
-	match(urlPath: string): Route {
+	match(urlPath: string): Route | undefined {
 		const segments = urlPath.split('/').filter(Boolean);
 		const params: Record<string, string> = {};
 
@@ -98,7 +97,7 @@ export class Router {
 				node = node.paramChild;
 				if (node.paramName) params[node.paramName] = decodeURIComponent(segment);
 			} else {
-				return fallbackRoute;
+				return undefined;
 			}
 		}
 
@@ -110,7 +109,7 @@ export class Router {
 				url: urlPath
 			} as Route<typeof node.config.path>;
 
-		return fallbackRoute;
+		return undefined;
 	}
 
 	updateDirection(newOrder: number, oldOrder: number) {
@@ -121,6 +120,7 @@ export class Router {
 
 	private _updateState(url: string) {
 		const target = this.match(url);
+		if (!target) return;
 
 		// save scroll position
 		if (typeof window !== 'undefined') this.scrollPositions.set(this.current.url, window.scrollY);

@@ -16,6 +16,7 @@
 	import Icon from '@iconify/svelte';
 	import { buildThreads, filterThreads, type ThreadPost } from '$lib/thread';
 	import type { AtprotoDid } from '@atcute/lexicons/syntax';
+	import NotLoggedIn from './NotLoggedIn.svelte';
 
 	interface Props {
 		client?: AtpClient | null;
@@ -191,10 +192,6 @@
 			{/snippet}
 		</InfiniteLoader>
 	{:else}
-		<div class="flex justify-center py-4">
-			<p class="text-xl opacity-80">
-				<span class="text-4xl">x_x</span> <br /> no accounts are logged in!
-			</p>
-		</div>
+		<NotLoggedIn />
 	{/if}
 </div>

@@ -9,7 +9,7 @@ import { err, expect, ok, type Ok, type Result } from '$lib/result';
 import type { Backlinks } from './constellation';
 import { AppBskyFeedPost } from '@atcute/bluesky';
 import type { AtprotoDid, Did, RecordKey } from '@atcute/lexicons/syntax';
-import { replySource } from '$lib';
+import { replySource, toCanonicalUri } from '$lib';
 
 export type PostWithUri = { uri: ResourceUri; cid: Cid | undefined; record: AppBskyFeedPost.Main };
 export type PostWithBacklinks = PostWithUri & {
@@ -127,7 +127,7 @@ export const hydratePosts = async (
 			for (const reply of backlinks.value.records) {
 				if (reply.did !== postRepo) continue;
 				// if we already have this reply, then we already fetched this chain / are fetching it
-				if (posts.has(`at://${reply.did}/${reply.collection}/${reply.rkey}`)) continue;
+				if (posts.has(toCanonicalUri(reply))) continue;
 				const record =
 					cacheFn(reply.did, reply.rkey) ??
 					(await client.getRecord(AppBskyFeedPost.mainSchema, reply.did, reply.rkey));
