@@ -5,9 +5,13 @@
 	import Tabs from './Tabs.svelte';
 	import { portal } from 'svelte-portal';
 	import { cache } from '$lib/cache';
+	import { router } from '$lib/state.svelte';
 
-	type Tab = 'style' | 'moderation' | 'advanced';
-	let activeTab = $state<Tab>('advanced');
+	interface Props {
+		tab: string;
+	}
+
+	let { tab }: Props = $props();
 
 	let localSettings = $state(get(settings));
 	let hasReloadChanges = $derived(needsReload($settings, localSettings));
@@ -32,6 +36,8 @@
 		cache.clear();
 		alert('cache cleared!');
 	};
+
+	const onTabChange = (tab: string) => router.replace(`/settings/${tab}`);
 </script>
 
 {#snippet advancedTab()}
@@ -138,9 +144,9 @@
 	</div>
 
 	<div class="flex-1">
-		{#if activeTab === 'advanced'}
+		{#if tab === 'advanced'}
 			{@render advancedTab()}
-		{:else if activeTab === 'moderation'}
+		{:else if tab === 'moderation'}
 			<div class="p-4">
 				<div class="flex h-64 items-center justify-center">
 					<div class="text-center">
@@ -149,7 +155,7 @@
 					</div>
 				</div>
 			</div>
-		{:else if activeTab === 'style'}
+		{:else if tab === 'style'}
 			{@render styleTab()}
 		{/if}
 	</div>
@@ -160,11 +166,7 @@
 		z-20 w-full max-w-2xl bg-(--nucleus-bg) p-4 pt-2 pb-1 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)]
 		"
 	>
-		<Tabs
-			tabs={['style', 'moderation', 'advanced']}
-			bind:activeTab
-			onTabChange={(tab) => (activeTab = tab)}
-		/>
+		<Tabs tabs={['style', 'moderation', 'advanced']} activeTab={tab} {onTabChange} />
 	</div>
 </div>
 

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { follows, allPosts, allBacklinks, currentTime, replyIndex } from '$lib/state.svelte';
 	import type { Did } from '@atcute/lexicons';
-	import type { AtprotoDid } from '@atcute/lexicons/syntax';
 	import { type AtpClient } from '$lib/at/client';
 	import VirtualList from '@tutorlatin/svelte-tiny-virtual-list';
 	import {
@@ -15,16 +14,10 @@
 	interface Props {
 		selectedDid: Did;
 		selectedClient: AtpClient;
-		onProfileClick: (did: AtprotoDid) => void;
 		followingSort: Sort;
 	}
 
-	let {
-		selectedDid,
-		selectedClient,
-		onProfileClick,
-		followingSort = $bindable('active')
-	}: Props = $props();
+	let { selectedDid, selectedClient, followingSort = $bindable('active') }: Props = $props();
 
 	const followsMap = $derived(follows.get(selectedDid));
 
@@ -162,7 +155,6 @@
 						client={selectedClient}
 						sort={followingSort}
 						{currentTime}
-						onClick={onProfileClick}
 					/>
 				{/snippet}
 			</VirtualList>

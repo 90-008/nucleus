@@ -19,6 +19,7 @@
 		children?: import('svelte').Snippet;
 		placement?: Placement;
 		offsetDistance?: number;
+		openDelay?: number;
 		position?: { x: number; y: number };
 		onMouseEnter?: () => void;
 		onMouseLeave?: () => void;
@@ -30,6 +31,7 @@
 		children,
 		placement = 'bottom-start',
 		offsetDistance = 2,
+		openDelay = 400,
 		position = $bindable(),
 		onMouseEnter,
 		onMouseLeave,
@@ -40,10 +42,10 @@
 	let contentRef: HTMLElement | undefined = $state();
 	let cleanup: (() => void) | null = null;
 
-	// State-based tracking for hover logic
 	let isTriggerHovered = false;
 	let isContentHovered = false;
 	let closeTimer: ReturnType<typeof setTimeout>;
+	let openTimer: ReturnType<typeof setTimeout>;
 
 	const updatePosition = async () => {
 		const { x, y } = await computePosition(triggerRef!, contentRef!, {
@@ -64,6 +66,7 @@
 		let rect = element.getBoundingClientRect();
 		let x = event.clientX;
 		let y = event.clientY;
+
 		return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 	};
 
@@ -90,12 +93,19 @@
 
 	const handleTriggerEnter = () => {
 		isTriggerHovered = true;
-		clearTimeout(closeTimer); // We are safe, cancel any pending close
-		if (!isOpen && onMouseEnter) onMouseEnter();
+		clearTimeout(closeTimer);
+
+		if (!isOpen) {
+			clearTimeout(openTimer);
+			openTimer = setTimeout(() => {
+				if (onMouseEnter) onMouseEnter();
+			}, openDelay);
+		}
 	};
 
 	const handleTriggerLeave = () => {
 		isTriggerHovered = false;
+		clearTimeout(openTimer);
 		scheduleCloseCheck(); // We left the trigger, check if we should close
 	};
 
@@ -114,6 +124,7 @@
 		if (!isOpen) {
 			isContentHovered = false;
 			clearTimeout(closeTimer);
+			clearTimeout(openTimer); // Ensure open timer is cleared on external close
 		}
 	});
 
@@ -129,6 +140,7 @@
 	onMount(() => () => {
 		if (cleanup) cleanup();
 		clearTimeout(closeTimer);
+		clearTimeout(openTimer); // Cleanup open timer on unmount
 	});
 </script>
 

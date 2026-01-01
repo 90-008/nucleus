@@ -12,7 +12,7 @@
 	import type { calculateFollowedUserStats, Sort } from '$lib/following';
 	import type { AtpClient } from '$lib/at/client';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { clients, getClient } from '$lib/state.svelte';
+	import { clients, getClient, router } from '$lib/state.svelte';
 
 	interface Props {
 		style: string;
@@ -21,10 +21,9 @@
 		client: AtpClient;
 		sort: Sort;
 		currentTime: Date;
-		onClick?: (did: AtprotoDid) => void;
 	}
 
-	let { style, did, stats, client, sort, currentTime, onClick }: Props = $props();
+	let { style, did, stats, client, sort, currentTime }: Props = $props();
 
 	// svelte-ignore state_referenced_locally
 	const cached = profileCache.get(did);
@@ -94,13 +93,17 @@
 	const lastPostAt = $derived(stats?.lastPostAt ?? new Date(0));
 	const relTime = $derived(getRelativeTime(lastPostAt, currentTime));
 	const color = $derived(generateColorForDid(did));
+
+	const goToProfile = () => {
+		router.navigate(`/profile/${did}`);
+	};
 </script>
 
 <div {style} class="box-border w-full pb-2">
 	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
-		onclick={() => onClick?.(did as AtprotoDid)}
+		onclick={goToProfile}
 		class="group flex cursor-pointer items-center gap-2 rounded-sm bg-(--nucleus-accent)/7 p-3 transition-colors hover:bg-(--post-color)/20"
 		style={`--post-color: ${color};`}
 	>

@@ -18,22 +18,21 @@
 	onMount(async () => {
 		await Promise.all([
 			(async () => {
-				if (!profile) {
-					const res = await client.getProfile(did);
-					if (res.ok) profile = res.value;
-				}
+				if (profile) return;
+				const res = await client.getProfile(did);
+				if (res.ok) profile = res.value;
 			})(),
 			(async () => {
-				if (!handle) {
-					const res = await resolveDidDoc(did);
-					if (res.ok) handle = res.value.handle;
-				}
+				if (handle) return;
+				const res = await resolveDidDoc(did);
+				if (res.ok) handle = res.value.handle;
 			})()
 		]);
 	});
 
 	let displayHandle = $derived(handle ?? 'handle.invalid');
 	let profileDesc = $derived(profile?.description?.trim() ?? '');
+	let profileDisplayName = $derived(profile?.displayName ?? '');
 	let showDid = $state(false);
 </script>
 
@@ -43,7 +42,7 @@
 
 		<div class="flex min-w-0 flex-col items-start overflow-hidden overflow-ellipsis">
 			<span class="mb-1.5 min-w-0 overflow-hidden text-2xl text-nowrap overflow-ellipsis">
-				{profile?.displayName ?? displayHandle}
+				{profileDisplayName.length > 0 ? profileDisplayName : displayHandle}
 				{#if profile?.pronouns}
 					<span class="shrink-0 text-sm text-nowrap opacity-60">({profile.pronouns})</span>
 				{/if}

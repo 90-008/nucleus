@@ -1,4 +1,4 @@
-import { get, writable } from 'svelte/store';
+import { writable } from 'svelte/store';
 import {
 	AtpClient,
 	newPublicClient,
@@ -23,6 +23,7 @@ import {
 	repostSource,
 	timestampFromCursor
 } from '$lib';
+import { Router } from './router.svelte';
 
 export const notificationStream = writable<NotificationsStream | null>(null);
 export const jetstream = writable<JetstreamSubscription | null>(null);
@@ -442,10 +443,4 @@ if (typeof window !== 'undefined')
 		currentTime.setTime(Date.now());
 	}, 1000);
 
-export type View = 'timeline' | 'notifications' | 'following' | 'settings' | 'profile';
-export const currentView = writable<View>('timeline');
-export const previousView = writable<View>('timeline');
-export const setView = (view: View) => {
-	previousView.set(get(currentView));
-	currentView.set(view);
-};
+export const router = new Router();

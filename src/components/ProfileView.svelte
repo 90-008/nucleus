@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { AtpClient } from '$lib/at/client';
-	import type { AtprotoDid } from '@atcute/lexicons/syntax';
+	import { AtpClient, resolveHandle } from '$lib/at/client';
+	import type { ActorIdentifier, AtprotoDid } from '@atcute/lexicons/syntax';
 	import TimelineView from './TimelineView.svelte';
 	import ProfileInfo from './ProfileInfo.svelte';
 	import type { State as PostComposerState } from './PostComposer.svelte';
@@ -9,31 +9,50 @@
 	import { img } from '$lib/cdn';
 	import { isBlob } from '@atcute/lexicons/interfaces';
 	import type { AppBskyActorProfile } from '@atcute/bluesky';
-	import { onMount } from 'svelte';
 
 	interface Props {
 		client: AtpClient;
-		did: AtprotoDid;
+		actor: string;
 		onBack: () => void;
 		postComposerState?: PostComposerState;
 	}
 
-	let { client, did, onBack, postComposerState = $bindable({ type: 'null' }) }: Props = $props();
+	let { client, actor, onBack, postComposerState = $bindable({ type: 'null' }) }: Props = $props();
 
 	let profile = $state<AppBskyActorProfile.Main | null>(null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
+	let did = $state<AtprotoDid | null>(null);
 
-	onMount(async () => {
+	const loadProfile = async (identifier: ActorIdentifier) => {
+		loading = true;
+		error = null;
+		profile = null;
+
+		const resDid = await resolveHandle(identifier);
+		if (resDid.ok) did = resDid.value;
+		else {
+			error = resDid.error;
+			loading = false;
+			return;
+		}
+
 		const res = await client.getProfile(did);
 		if (res.ok) profile = res.value;
 		else error = res.error;
+
 		loading = false;
+	};
+
+	$effect(() => {
+		loadProfile(actor as ActorIdentifier);
 	});
 
-	const color = $derived(generateColorForDid(did));
+	const color = $derived(did ? generateColorForDid(did) : 'var(--nucleus-fg)');
 	const bannerUrl = $derived(
-		profile && isBlob(profile.banner) ? img('feed_fullsize', did, profile.banner.ref.$link) : null
+		did && profile && isBlob(profile.banner)
+			? img('feed_fullsize', did, profile.banner.ref.$link)
+			: null
 	);
 </script>
 
@@ -50,7 +69,7 @@
 			<Icon icon="heroicons:arrow-left-20-solid" width={24} />
 		</button>
 		<h2 class="text-xl font-bold">
-			{profile?.displayName ?? (loading ? 'loading...' : 'profile')}
+			{profile?.displayName ?? (loading ? 'loading...' : actor || 'profile')}
 		</h2>
 	</div>
 
@@ -72,18 +91,22 @@
 
 		<div class="px-4 pb-4">
 			<div class="relative z-10 -mt-12 mb-4">
-				<ProfileInfo {client} {did} bind:profile />
+				{#if did}
+					<ProfileInfo {client} {did} bind:profile />
+				{/if}
 			</div>
 
 			<div class="my-4 h-px bg-white/10"></div>
 
-			<TimelineView
-				showReplies={false}
-				{client}
-				targetDid={did}
-				bind:postComposerState
-				class="min-h-[50vh]"
-			/>
+			{#if did}
+				<TimelineView
+					showReplies={false}
+					{client}
+					targetDid={did}
+					bind:postComposerState
+					class="min-h-[50vh]"
+				/>
+			{/if}
 		</div>
 	{/if}
 </div>

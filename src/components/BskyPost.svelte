@@ -28,7 +28,8 @@
 		currentTime,
 		findBacklinksBy,
 		deletePostBacklink,
-		createPostBacklink
+		createPostBacklink,
+		router
 	} from '$lib/state.svelte';
 	import type { PostWithUri } from '$lib/at/fetch';
 	import { onMount } from 'svelte';
@@ -189,13 +190,13 @@
 		rounded-sm pr-1 transition-colors duration-100 ease-in-out hover:bg-white/10
 		"
 		style="color: {color};"
-		onclick={() => (profileOpen = !profileOpen)}
+		onclick={() => router.navigate(`/profile/${did}`)}
 	>
 		<ProfilePicture {client} {did} size={8} />
 
 		{#if profile}
 			<span class="w-min max-w-sm min-w-0 overflow-hidden text-nowrap overflow-ellipsis"
-				>{profile.displayName}</span
+				>{profile.displayName?.length === 0 ? handle : profile.displayName}</span
 			><span class="shrink-0 text-sm text-nowrap opacity-70">(@{handle})</span>
 		{:else}
 			{handle}

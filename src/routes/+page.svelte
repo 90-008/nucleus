@@ -8,8 +8,7 @@
 	import ProfileView from '$components/ProfileView.svelte';
 	import { AtpClient, streamNotifications } from '$lib/at/client';
 	import { accounts, type Account } from '$lib/accounts';
-	import { onMount, tick } from 'svelte';
-	import { SvelteMap } from 'svelte/reactivity';
+	import { onMount } from 'svelte';
 	import {
 		clients,
 		postCursors,
@@ -23,10 +22,7 @@
 		handleNotification,
 		addPosts,
 		addTimeline,
-		type View,
-		currentView,
-		previousView,
-		setView
+		router
 	} from '$lib/state.svelte';
 	import { get } from 'svelte/store';
 	import Icon from '@iconify/svelte';
@@ -38,6 +34,8 @@
 	import type { Sort } from '$lib/following';
 
 	const { data: loadData }: PageProps = $props();
+
+	const currentRoute = $derived(router.current);
 
 	// svelte-ignore state_referenced_locally
 	let errors = $state(loadData.client.ok ? [] : [loadData.client.error]);
@@ -77,46 +75,24 @@
 
 	let followingSort = $state('active' as Sort);
 
+	// Animation logic derived from router direction
 	let animClass = $state('animate-fade-in-scale');
-	let scrollPositions = new SvelteMap<View, number>();
-	let viewingProfileDid = $state<AtprotoDid | null>(null);
-
-	const viewOrder: Record<View, number> = {
-		timeline: 0,
-		following: 1,
-		notifications: 2,
-		settings: 3,
-		profile: 4
-	};
-
-	const switchView = async () => {
-		scrollPositions.set($previousView, window.scrollY);
-
-		const direction = viewOrder[$previousView] > viewOrder[$currentView] ? 'right' : 'left';
-		// profile always slides in from right unless going back
-		if ($currentView === 'profile') animClass = 'animate-slide-in-left';
-		else if ($previousView === 'profile') animClass = 'animate-slide-in-right';
-		else animClass = direction === 'right' ? 'animate-slide-in-right' : 'animate-slide-in-left';
-
-		await tick();
-
-		window.scrollTo({ top: scrollPositions.get($currentView) || 0, behavior: 'instant' });
-	};
-	currentView.subscribe(switchView);
-
-	const goToProfile = (did: AtprotoDid) => {
-		viewingProfileDid = did;
-		setView('profile');
-	};
+	$effect(() => {
+		if (router.direction === 'right') animClass = 'animate-slide-in-right';
+		else if (router.direction === 'left') animClass = 'animate-slide-in-left';
+		else animClass = 'animate-fade-in-scale';
+	});
 
 	let postComposerState = $state<PostComposerState>({ type: 'null' });
 	let showScrollToTop = $state(false);
 	const handleScroll = () => {
-		if ($currentView === 'timeline') showScrollToTop = window.scrollY > 300;
+		if (router.current.path === '/') showScrollToTop = window.scrollY > 300;
 	};
 	const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
 	onMount(() => {
+		router.init();
+
 		window.addEventListener('scroll', handleScroll);
 
 		accounts.subscribe((newAccounts) => {
@@ -186,7 +162,7 @@
 			for (const follow of followMap.values()) wantedDids.push(follow.subject);
 		for (const account of $accounts) wantedDids.push(account.did);
 
-		console.log('updating jetstream options:', wantedDids);
+		// console.log('updating jetstream options:', wantedDids);
 		$jetstream?.updateOptions({ wantedDids });
 	});
 </script>
@@ -211,44 +187,60 @@
 	</button>
 {/snippet}
 
+{#snippet routeButton(
+	path: (typeof currentRoute)['path'],
+	icon: string,
+	ariaLabel: string,
+	iconHover?: string
+)}
+	{@render appButton(
+		() => router.navigate(path),
+		icon,
+		ariaLabel,
+		path === currentRoute.path,
+		iconHover
+	)}
+{/snippet}
+
 <div class="mx-auto flex min-h-dvh max-w-2xl flex-col">
 	<div class="flex-1">
 		<!-- timeline -->
 		<TimelineView
-			class={$currentView === 'timeline' ? `${animClass}` : 'hidden'}
+			class={currentRoute.path === '/' ? `${animClass}` : 'hidden'}
 			client={selectedClient}
 			bind:postComposerState
 		/>
 
-		{#if $currentView === 'settings'}
+		{#if currentRoute.path === '/settings/:tab' || currentRoute.path === '/settings'}
 			<div class={animClass}>
-				<SettingsView />
+				<SettingsView tab={currentRoute.params.tab ?? 'advanced'} />
 			</div>
 		{/if}
-		{#if $currentView === 'notifications'}
+		{#if currentRoute.path === '/notifications'}
 			<div class={animClass}>
 				<NotificationsView />
 			</div>
 		{/if}
-		{#if $currentView === 'following'}
+		{#if currentRoute.path === '/following'}
 			<div class={animClass}>
 				<FollowingView
 					selectedClient={selectedClient!}
 					selectedDid={selectedDid!}
-					onProfileClick={goToProfile}
 					bind:followingSort
 				/>
 			</div>
 		{/if}
-		{#if $currentView === 'profile' && viewingProfileDid}
-			<div class={animClass}>
-				<ProfileView
-					client={selectedClient!}
-					did={viewingProfileDid}
-					onBack={() => setView($previousView)}
-					bind:postComposerState
-				/>
-			</div>
+		{#if currentRoute.path === '/profile/:actor'}
+			{#key currentRoute.params.actor}
+				<div class={animClass}>
+					<ProfileView
+						client={selectedClient!}
+						onBack={() => router.back()}
+						actor={currentRoute.params.actor}
+						bind:postComposerState
+					/>
+				</div>
+			{/key}
 		{/if}
 	</div>
 
@@ -278,7 +270,9 @@
 
 		<div
 			class="
-			{$currentView === 'timeline' || $currentView === 'following' || $currentView === 'profile'
+			{router.current.path === '/' ||
+			router.current.path === '/following' ||
+			router.current.path === '/profile/:actor'
 				? ''
 				: 'hidden'}
 			z-20 w-full max-w-2xl p-2.5 px-4 pb-1 transition-all
@@ -334,32 +328,23 @@
 						</div>
 					</div>
 					<div class="grow"></div>
-					{@render appButton(
-						() => setView('timeline'),
-						'heroicons:home',
-						'timeline',
-						$currentView === 'timeline',
-						'heroicons:home-solid'
-					)}
-					{@render appButton(
-						() => setView('following'),
+					{@render routeButton('/', 'heroicons:home', 'timeline', 'heroicons:home-solid')}
+					{@render routeButton(
+						'/following',
 						'heroicons:users',
 						'following',
-						$currentView === 'following',
 						'heroicons:users-solid'
 					)}
-					{@render appButton(
-						() => setView('notifications'),
+					{@render routeButton(
+						'/notifications',
 						'heroicons:bell',
 						'notifications',
-						$currentView === 'notifications',
 						'heroicons:bell-solid'
 					)}
-					{@render appButton(
-						() => setView('settings'),
+					{@render routeButton(
+						'/settings',
 						'heroicons:cog-6-tooth',
 						'settings',
-						$currentView === 'settings',
 						'heroicons:cog-6-tooth-solid'
 					)}
 				</div>

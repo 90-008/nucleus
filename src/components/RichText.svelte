@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { parseToRichText } from '$lib/richtext';
 	import { settings } from '$lib/settings';
+	import { router } from '$lib/state.svelte';
 	import type { BakedRichtext } from '@atcute/bluesky-richtext-builder';
 	import { segmentize, type Facet, type RichtextSegment } from '@atcute/bluesky-richtext-segmenter';
 
@@ -14,6 +15,11 @@
 	const richtext: Promise<BakedRichtext> = $derived(
 		facets ? Promise.resolve({ text, facets }) : parseToRichText(text)
 	);
+
+	const handleProfileClick = (e: MouseEvent, did: string) => {
+		e.preventDefault();
+		router.navigate(`/profile/${did}`);
+	};
 </script>
 
 {#snippet plainText(text: string)}
@@ -34,8 +40,9 @@
 			{#each features as feature, idx ([feature, idx])}
 				{#if feature.$type === 'app.bsky.richtext.facet#mention'}
 					<a
-						class="text-(--nucleus-accent2)"
-						href={`${$settings.socialAppUrl}/profile/${feature.did}`}>{@render plainText(text)}</a
+						class="text-(--nucleus-accent2) hover:cursor-pointer hover:underline"
+						href={`/profile/${feature.did}`}
+						onclick={(e) => handleProfileClick(e, feature.did)}>{@render plainText(text)}</a
 					>
 				{:else if feature.$type === 'app.bsky.richtext.facet#link'}
 					{@const uri = new URL(feature.uri)}
@@ -51,7 +58,8 @@
 					<a
 						class="text-(--nucleus-accent2)"
 						href={`${$settings.socialAppUrl}/search?q=${encodeURIComponent('#' + feature.tag)}`}
-						>{@render plainText(text)}</a
+						target="_blank"
+						rel="noopener noreferrer">{@render plainText(text)}</a
 					>
 				{:else}
 					<span>{@render plainText(text)}</span>
