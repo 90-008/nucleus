@@ -9,13 +9,14 @@
 	import type { ComAtprotoRepoStrongRef } from '@atcute/atproto';
 	import { parseToRichText } from '$lib/richtext';
 	import { tokenize } from '$lib/richtext/parser';
+	import Icon from '@iconify/svelte';
 
-	export type FocusState =
-		| { type: 'null' }
-		| { type: 'focused'; quoting?: PostWithUri; replying?: PostWithUri };
+	export type FocusState = 'null' | 'focused';
 	export type State = {
 		focus: FocusState;
 		text: string;
+		quoting?: PostWithUri;
+		replying?: PostWithUri;
 	};
 
 	interface Props {
@@ -24,13 +25,9 @@
 		_state: State;
 	}
 
-	let {
-		client,
-		onPostSent,
-		_state = $bindable({ focus: { type: 'null' }, text: '' })
-	}: Props = $props();
+	let { client, onPostSent, _state = $bindable({ focus: 'null', text: '' }) }: Props = $props();
 
-	const isFocused = $derived(_state.focus.type === 'focused');
+	const isFocused = $derived(_state.focus === 'focused');
 
 	const color = $derived(
 		client.user?.did ? generateColorForDid(client.user?.did) : 'var(--nucleus-accent2)'
@@ -46,23 +43,22 @@
 		// Parse rich text (mentions, links, tags)
 		const rt = await parseToRichText(text);
 
-		const focus = _state.focus;
 		const record: AppBskyFeedPost.Main = {
 			$type: 'app.bsky.feed.post',
 			text: rt.text,
 			facets: rt.facets,
 			reply:
-				focus.type === 'focused' && focus.replying
+				_state.focus === 'focused' && _state.replying
 					? {
-							root: focus.replying.record.reply?.root ?? strongRef(focus.replying),
-							parent: strongRef(focus.replying)
+							root: _state.replying.record.reply?.root ?? strongRef(_state.replying),
+							parent: strongRef(_state.replying)
 						}
 					: undefined,
 			embed:
-				focus.type === 'focused' && focus.quoting
+				_state.focus === 'focused' && _state.quoting
 					? {
 							$type: 'app.bsky.embed.record',
-							record: strongRef(focus.quoting)
+							record: strongRef(_state.quoting)
 						}
 					: undefined,
 			createdAt: new Date().toISOString()
@@ -91,7 +87,7 @@
 	let info = $state('');
 	let textareaEl: HTMLTextAreaElement | undefined = $state();
 
-	const unfocus = () => (_state.focus.type = 'null');
+	const unfocus = () => (_state.focus = 'null');
 
 	const doPost = () => {
 		if (_state.text.length === 0 || _state.text.length > 300) return;
@@ -117,15 +113,18 @@
 	});
 </script>
 
-{#snippet renderPost(post: PostWithUri)}
+{#snippet attachedPost(post: PostWithUri, type: 'quoting' | 'replying')}
 	{@const parsedUri = expect(parseCanonicalResourceUri(post.uri))}
-	<BskyPost
-		{client}
-		did={parsedUri.repo}
-		rkey={parsedUri.rkey}
-		data={post}
-		isOnPostComposer={true}
-	/>
+	<BskyPost {client} did={parsedUri.repo} rkey={parsedUri.rkey} data={post} isOnPostComposer={true}>
+		{#snippet cornerFragment()}
+			<button
+				class="transition-transform hover:scale-150"
+				onclick={() => {
+					if (_state.focus === 'focused') _state[type] = undefined;
+				}}><Icon width={24} icon="heroicons:x-mark-16-solid" /></button
+			>
+		{/snippet}
+	</BskyPost>
 {/snippet}
 
 {#snippet highlighter(text: string)}
@@ -166,7 +165,7 @@
 		</button>
 	</div>
 	{#if replying}
-		{@render renderPost(replying)}
+		{@render attachedPost(replying, 'replying')}
 	{/if}
 	<div class="composer space-y-2">
 		<div class="relative grid">
@@ -181,7 +180,7 @@
 			<textarea
 				bind:this={textareaEl}
 				bind:value={_state.text}
-				onfocus={() => (_state.focus.type = 'focused')}
+				onfocus={() => (_state.focus = 'focused')}
 				onblur={unfocus}
 				onkeydown={(event) => {
 					if (event.key === 'Escape') unfocus();
@@ -192,9 +191,8 @@
 				class="col-start-1 row-start-1 field-sizing-content min-h-[5lh] w-full resize-none overflow-hidden bg-transparent text-wrap break-all whitespace-pre-wrap text-transparent caret-(--nucleus-fg) placeholder:text-(--nucleus-fg)/45"
 			></textarea>
 		</div>
-
 		{#if quoting}
-			{@render renderPost(quoting)}
+			{@render attachedPost(quoting, 'quoting')}
 		{/if}
 	</div>
 {/snippet}
@@ -228,12 +226,12 @@
 				</div>
 			{:else}
 				<div class="flex flex-col gap-2">
-					{#if _state.focus.type === 'focused'}
-						{@render composer(_state.focus.replying, _state.focus.quoting)}
+					{#if _state.focus === 'focused'}
+						{@render composer(_state.replying, _state.quoting)}
 					{:else}
 						<input
 							bind:value={_state.text}
-							onfocus={() => (_state.focus.type = 'focused')}
+							onfocus={() => (_state.focus = 'focused')}
 							type="text"
 							placeholder="what's on your mind?"
 							class="flex-1"

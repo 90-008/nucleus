@@ -31,7 +31,7 @@
 		router
 	} from '$lib/state.svelte';
 	import type { PostWithUri } from '$lib/at/fetch';
-	import { onMount } from 'svelte';
+	import { onMount, type Snippet } from 'svelte';
 	import { derived } from 'svelte/store';
 	import Device from 'svelte-device-info';
 	import Dropdown from './Dropdown.svelte';
@@ -54,6 +54,7 @@
 		isOnPostComposer?: boolean;
 		onQuote?: (quote: PostWithUri) => void;
 		onReply?: (reply: PostWithUri) => void;
+		cornerFragment?: Snippet;
 	}
 
 	const {
@@ -65,7 +66,8 @@
 		mini,
 		onQuote,
 		onReply,
-		isOnPostComposer = false /* replyBacklinks */
+		isOnPostComposer = false /* replyBacklinks */,
+		cornerFragment
 	}: Props = $props();
 
 	const selectedDid = $derived(client.user?.did ?? null);
@@ -93,6 +95,7 @@
 	const postId = $derived(`timeline-post-${aturi}-${quoteDepth}`);
 	const isPulsing = derived(pulsingPostId, (pulsingPostId) => pulsingPostId === postId);
 
+	// todo: this fucking sucks
 	const scrollToAndPulse = (targetUri: ResourceUri) => {
 		const targetId = `timeline-post-${targetUri}-0`;
 		// console.log(`Scrolling to ${targetId}`);
@@ -274,21 +277,20 @@
 				border-color: {color}{isOnPostComposer ? '99' : '66'};
 				"
 			>
-				<div
-					class="
-					mb-3 flex w-fit max-w-full items-center gap-1 rounded-sm pr-1
-					"
-					style="background: {color}33;"
-				>
-					{@render profilePopout()}
-					<span>·</span>
-					<span
-						title={new Date(record.createdAt).toLocaleString()}
-						class="pl-0.5 text-nowrap text-(--nucleus-fg)/67"
-					>
-						{getRelativeTime(new Date(record.createdAt), currentTime)}
-					</span>
+				<div class="mb-3 flex max-w-full items-center justify-between">
+					<div class="flex items-center gap-1 rounded-sm pr-1" style="background: {color}33;">
+						{@render profilePopout()}
+						<span>·</span>
+						<span
+							title={new Date(record.createdAt).toLocaleString()}
+							class="pl-0.5 text-nowrap text-(--nucleus-fg)/67"
+						>
+							{getRelativeTime(new Date(record.createdAt), currentTime)}
+						</span>
+					</div>
+					{@render cornerFragment?.()}
 				</div>
+
 				<p class="leading-normal text-wrap wrap-break-word">
 					<RichText text={record.text} facets={record.facets ?? []} />
 					{#if isOnPostComposer && record.embed}

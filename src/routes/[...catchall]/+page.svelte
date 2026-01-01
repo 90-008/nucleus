@@ -83,7 +83,7 @@
 		else animClass = 'animate-fade-in-scale';
 	});
 
-	let postComposerState = $state<PostComposerState>({ focus: { type: 'null' }, text: '' });
+	let postComposerState = $state<PostComposerState>({ focus: 'null', text: '' });
 	let showScrollToTop = $state(false);
 	const handleScroll = () => {
 		if (currentRoute.path === '/' || currentRoute.path === '/profile/:actor')
@@ -306,7 +306,7 @@
 						</div>
 					{/if}
 
-					{#if postComposerState.focus.type === 'null' && showScrollToTop}
+					{#if postComposerState.focus === 'null' && showScrollToTop}
 						{@render appButton(scrollToTop, 'heroicons:arrow-up-16-solid', 'scroll to top', false)}
 					{/if}
 				</div>
