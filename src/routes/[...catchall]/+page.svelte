@@ -215,6 +215,7 @@
 		<TimelineView
 			class={currentRoute.path === '/' ? `${animClass}` : 'hidden'}
 			client={selectedClient}
+			showReplies={true}
 			bind:postComposerState
 		/>
 

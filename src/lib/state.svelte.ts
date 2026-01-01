@@ -278,13 +278,14 @@ export const addPosts = (newPosts: Iterable<PostWithUri>) => {
 			allPosts.set(parsedUri.repo, posts);
 		}
 		posts.set(post.uri, post);
-		const link: Backlink = {
-			did: parsedUri.repo,
-			collection: parsedUri.collection,
-			rkey: parsedUri.rkey
-		};
 		if (post.record.reply) {
-			addBacklinks(post.record.reply.parent.uri, replySource, [link]);
+			addBacklinks(post.record.reply.parent.uri, replySource, [
+				{
+					did: parsedUri.repo,
+					collection: parsedUri.collection,
+					rkey: parsedUri.rkey
+				}
+			]);
 
 			// update reply index
 			const parentDid = extractDidFromUri(post.record.reply.parent.uri);
@@ -322,7 +323,7 @@ export const addTimeline = (did: Did, uris: Iterable<ResourceUri>) => {
 		const post = allPosts.get(did)?.get(uri);
 		// we need to traverse the post chain to add all posts in the chain to the timeline
 		// because the parent posts might not be in the timeline yet
-		const chain = post ? traversePostChain(post) : [];
+		const chain = post ? traversePostChain(post) : [uri];
 		for (const uri of chain) timeline.add(uri);
 	}
 };
