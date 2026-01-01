@@ -80,7 +80,7 @@
 		isLongCalculation = false;
 	};
 
-	// todo: there is a bug where
+	// todo: there is a bug where the view doesn't update and just gets stuck being loaded
 	$effect(() => {
 		// Dependencies that trigger a re-sort
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars

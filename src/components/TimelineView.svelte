@@ -120,8 +120,8 @@
 					<div class="mb-1.5">
 						<BskyPost
 							client={client!}
-							onQuote={(post) => (postComposerState = { type: 'focused', quoting: post })}
-							onReply={(post) => (postComposerState = { type: 'focused', replying: post })}
+							onQuote={(post) => (postComposerState.focus = { type: 'focused', quoting: post })}
+							onReply={(post) => (postComposerState.focus = { type: 'focused', replying: post })}
 							{...post}
 						/>
 					</div>

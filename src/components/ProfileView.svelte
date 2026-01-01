@@ -20,10 +20,10 @@
 		client: AtpClient;
 		actor: string;
 		onBack: () => void;
-		postComposerState?: PostComposerState;
+		postComposerState: PostComposerState;
 	}
 
-	let { client, actor, onBack, postComposerState = $bindable({ type: 'null' }) }: Props = $props();
+	let { client, actor, onBack, postComposerState = $bindable() }: Props = $props();
 
 	let profile = $state<AppBskyActorProfile.Main | null>(null);
 	const displayName = $derived(profile?.displayName ?? '');

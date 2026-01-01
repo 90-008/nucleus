@@ -185,7 +185,7 @@
 {#snippet profileInline()}
 	<button
 		class="
-		flex min-w-0 items-center gap-2 font-bold {isOnPostComposer ? 'contrast-200' : ''}
+		flex min-w-0 items-center gap-2 font-bold {isOnPostComposer ? 'contrast-125' : ''}
 		rounded-sm pr-1 transition-colors duration-100 ease-in-out hover:bg-white/10
 		"
 		style="color: {color};"

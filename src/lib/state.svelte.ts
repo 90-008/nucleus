@@ -359,22 +359,28 @@ export const fetchInteractionsUntil = async (client: AtpClient, did: Did) => {
 	await Promise.all([likeSource, repostSource].map((s) => fetchLinksUntil(client, s, timestamp)));
 };
 
-export const handleJetstreamEvent = (event: JetstreamEvent) => {
+export const handleJetstreamEvent = async (event: JetstreamEvent) => {
 	if (event.kind !== 'commit') return;
 
 	const { did, commit } = event;
 	const uri: ResourceUri = toCanonicalUri({ did, ...commit });
 	if (commit.collection === 'app.bsky.feed.post') {
 		if (commit.operation === 'create') {
-			const { cid, record } = commit;
-			const post: PostWithUri = {
-				uri,
-				cid,
-				// assume record is valid, we trust the jetstream
-				record: record as AppBskyFeedPost.Main
-			};
-			addPosts([post]);
-			addTimeline(did, [uri]);
+			const posts = [
+				{
+					record: commit.record as AppBskyFeedPost.Main,
+					uri,
+					cid: commit.cid
+				}
+			];
+			const client = await getClient(did);
+			const hydrated = await hydratePosts(client, did, posts, hydrateCacheFn);
+			if (!hydrated.ok) {
+				console.error(`cant hydrate posts ${did}: ${hydrated.error}`);
+				return;
+			}
+			addPosts(hydrated.value.values());
+			addTimeline(did, hydrated.value.keys());
 		} else if (commit.operation === 'delete') {
 			allPosts.get(did)?.delete(uri);
 		}

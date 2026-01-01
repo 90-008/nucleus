@@ -8,7 +8,7 @@ import { type AtpClient } from './client';
 import { err, expect, ok, type Ok, type Result } from '$lib/result';
 import type { Backlinks } from './constellation';
 import { AppBskyFeedPost } from '@atcute/bluesky';
-import type { AtprotoDid, Did, RecordKey } from '@atcute/lexicons/syntax';
+import type { Did, RecordKey } from '@atcute/lexicons/syntax';
 import { replySource, toCanonicalUri } from '$lib';
 
 export type PostWithUri = { uri: ResourceUri; cid: Cid | undefined; record: AppBskyFeedPost.Main };
@@ -60,7 +60,7 @@ export const fetchPosts = async (
 
 export const hydratePosts = async (
 	client: AtpClient,
-	repo: AtprotoDid,
+	repo: Did,
 	data: PostWithBacklinks[],
 	cacheFn: (did: Did, rkey: RecordKey) => Ok<PostWithUri> | undefined
 ): Promise<Result<Map<ResourceUri, PostWithUri>, string>> => {
