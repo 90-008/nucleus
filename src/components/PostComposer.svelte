@@ -179,7 +179,7 @@
 				doPost();
 			}}
 			disabled={_state.text.length === 0 || _state.text.length > 300}
-			class="action-button border-none px-5 text-(--nucleus-fg)/94 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+			class="action-button border-none px-5 text-(--nucleus-fg)/94 disabled:cursor-not-allowed! disabled:opacity-50 disabled:hover:scale-100"
 			style="background: color-mix(in srgb, {color} 87%, transparent);"
 		>
 			post
