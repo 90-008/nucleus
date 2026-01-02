@@ -43,6 +43,7 @@
 	import { getRelativeTime } from '$lib/date';
 	import { likeSource, repostSource, toCanonicalUri } from '$lib';
 	import ProfileInfo from './ProfileInfo.svelte';
+	import PhotoSwipeGallery, { type GalleryItem } from './PhotoSwipeGallery.svelte';
 
 	interface Props {
 		client: AtpClient;
@@ -95,16 +96,15 @@
 		if (!p.ok) return;
 		profile = p.value;
 		profiles.set(did, profile);
-		// console.log(profile.description);
 	});
 
-	const postId = $derived(`timeline-post-${aturi}-${quoteDepth}`);
+	const postId = $derived(
+		`timeline-post-${did.replace(/[^a-zA-Z0-9]/g, '_')}-${rkey}-${quoteDepth}`
+	);
 	const isPulsing = derived(pulsingPostId, (pulsingPostId) => pulsingPostId === postId);
 
-	// todo: this fucking sucks
 	const scrollToAndPulse = (targetUri: ResourceUri) => {
 		const targetId = `timeline-post-${targetUri}-0`;
-		// console.log(`Scrolling to ${targetId}`);
 		const element = document.getElementById(targetId);
 		if (!element) return;
 
@@ -116,7 +116,6 @@
 				generateColorForDid(expect(parseCanonicalResourceUri(targetUri)).repo)
 			);
 			pulsingPostId.set(targetId);
-			// Clear pulse after animation
 			setTimeout(() => pulsingPostId.set(null), 1200);
 		}, 400);
 	};
@@ -212,7 +211,6 @@
 	</button>
 {/snippet}
 
-<!-- eslint-disable svelte/no-navigation-without-resolve -->
 {#snippet profilePopout()}
 	<Dropdown
 		class="post-dropdown max-w-xl gap-2! p-2.5! backdrop-blur-3xl! backdrop-brightness-25!"
@@ -328,16 +326,25 @@
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div oncontextmenu={(e) => e.stopPropagation()}>
 			{#if embed.$type === 'app.bsky.embed.images'}
-				<!-- todo: improve how images are displayed, and pop out on click -->
-				{#each embed.images as image (image.image)}
-					{#if isBlob(image.image)}
-						<img
-							class="w-full rounded-sm"
-							src={img('feed_thumbnail', did, image.image.ref.$link)}
-							alt={image.alt}
-						/>
-					{/if}
-				{/each}
+				{@const _images = embed.images.flatMap((img) =>
+					isBlob(img.image) ? [{ ...img, image: img.image }] : []
+				)}
+				{@const images = _images.map((i): GalleryItem => {
+					const sizeFactor = 200;
+					const size = {
+						width: (i.aspectRatio?.width ?? 4) * sizeFactor,
+						height: (i.aspectRatio?.height ?? 3) * sizeFactor
+					};
+					return {
+						...size,
+						src: img('feed_fullsize', did, i.image.ref.$link),
+						thumbnail: {
+							src: img('feed_thumbnail', did, i.image.ref.$link),
+							...size
+						}
+					};
+				})}
+				<PhotoSwipeGallery {images} />
 			{:else if embed.$type === 'app.bsky.embed.video'}
 				{#if isBlob(embed.video)}
 					{#await didDoc then didDoc}
@@ -385,7 +392,6 @@
 			{@render embedMedia(embed.media)}
 		</div>
 	{/if}
-	<!-- todo: implement external link embeds -->
 {/snippet}
 
 {#snippet postControls(post: PostWithUri)}
@@ -535,5 +541,52 @@
 
 	:global(.post-dropdown) {
 		@apply flex min-w-54 flex-col gap-1 rounded-sm border-2 p-1 shadow-2xl backdrop-blur-xl backdrop-brightness-60;
+	}
+
+	.image-grid {
+		display: grid;
+		gap: 2px;
+		border-radius: 0.375rem;
+		overflow: hidden;
+		max-height: 500px;
+	}
+
+	/* 1 image: full width */
+	.image-grid.count-1 {
+		grid-template-columns: 1fr;
+	}
+
+	/* 2 images: side by side */
+	.image-grid.count-2 {
+		grid-template-columns: repeat(2, 1fr);
+	}
+
+	/* 3 images: first spans left, two stack on right */
+	.image-grid.count-3 {
+		grid-template-columns: repeat(2, 1fr);
+		grid-template-rows: repeat(2, 1fr);
+	}
+	.image-grid.count-3 a:first-child {
+		grid-row: 1 / 3;
+	}
+
+	/* 4+ images: 2x2 grid */
+	.image-grid.count-4,
+	.image-grid.count-5 {
+		grid-template-columns: repeat(2, 1fr);
+		grid-template-rows: repeat(2, 1fr);
+	}
+
+	.image-item {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+		cursor: pointer;
+		transition: opacity 0.2s;
+	}
+
+	.image-item:hover {
+		opacity: 0.9;
 	}
 </style>

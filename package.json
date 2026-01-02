@@ -32,6 +32,7 @@
 		"async-cache-dedupe": "^3.4.0",
 		"hash-wasm": "^4.12.0",
 		"lru-cache": "^11.2.4",
+		"photoswipe": "^5.4.4",
 		"svelte-device-info": "^1.0.6",
 		"svelte-infinite": "^0.5.1",
 		"svelte-portal": "^2.2.1"
