@@ -9,8 +9,8 @@
 	} from '@atcute/bluesky';
 	import {
 		parseCanonicalResourceUri,
-		type ActorIdentifier,
 		type Did,
+		type Handle,
 		type RecordKey,
 		type ResourceUri
 	} from '@atcute/lexicons';
@@ -28,7 +28,9 @@
 		findBacklinksBy,
 		deletePostBacklink,
 		createPostBacklink,
-		router
+		router,
+		profiles,
+		handles
 	} from '$lib/state.svelte';
 	import type { PostWithUri } from '$lib/at/fetch';
 	import { onMount, type Snippet } from 'svelte';
@@ -76,19 +78,23 @@
 	const aturi = $derived(toCanonicalUri({ did, collection: 'app.bsky.feed.post', rkey }));
 	const color = $derived(generateColorForDid(did));
 
-	let handle: ActorIdentifier = $state('handle.invalid');
+	let handle: Handle = $state(handles.get(did) ?? 'handle.invalid');
 	const didDoc = resolveDidDoc(did).then((res) => {
-		if (res.ok) handle = res.value.handle;
+		if (res.ok) {
+			handle = res.value.handle;
+			handles.set(did, handle);
+		}
 		return res;
 	});
 	const post = data
 		? Promise.resolve(ok(data))
 		: client.getRecord(AppBskyFeedPost.mainSchema, did, rkey);
-	let profile: AppBskyActorProfile.Main | null = $state(null);
+	let profile: AppBskyActorProfile.Main | null = $state(profiles.get(did) ?? null);
 	onMount(async () => {
 		const p = await client.getProfile(did);
 		if (!p.ok) return;
 		profile = p.value;
+		profiles.set(did, profile);
 		// console.log(profile.description);
 	});
 

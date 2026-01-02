@@ -10,6 +10,7 @@
 	import { parseToRichText } from '$lib/richtext';
 	import { tokenize } from '$lib/richtext/parser';
 	import Icon from '@iconify/svelte';
+	import ProfilePicture from './ProfilePicture.svelte';
 
 	export type FocusState = 'null' | 'focused';
 	export type State = {
@@ -40,7 +41,6 @@
 			uri: p.uri
 		});
 
-		// Parse rich text (mentions, links, tags)
 		const rt = await parseToRichText(text);
 
 		const record: AppBskyFeedPost.Main = {
@@ -120,11 +120,32 @@
 			<button
 				class="transition-transform hover:scale-150"
 				onclick={() => {
-					if (_state.focus === 'focused') _state[type] = undefined;
+					_state[type] = undefined;
 				}}><Icon width={24} icon="heroicons:x-mark-16-solid" /></button
 			>
 		{/snippet}
 	</BskyPost>
+{/snippet}
+
+{#snippet attachmentIndicator(post: PostWithUri, type: 'quoting' | 'replying')}
+	{@const parsedUri = expect(parseCanonicalResourceUri(post.uri))}
+	{@const color = generateColorForDid(parsedUri.repo)}
+	<div
+		class="flex shrink-0 items-center gap-1.5 rounded-sm border py-0.5 pr-0.5 pl-1 text-xs font-bold transition-all"
+		style="
+			background: color-mix(in srgb, {color} 10%, transparent);
+			border-color: {color};
+			color: {color};
+		"
+		title={type === 'replying' ? `replying to @${parsedUri.repo}` : `quoting @${parsedUri.repo}`}
+	>
+		<span class="truncate text-sm font-normal opacity-90">
+			{type === 'replying' ? 'replying to' : 'quoting'}
+		</span>
+		<div class="shrink-0">
+			<ProfilePicture {client} did={parsedUri.repo} size={5} />
+		</div>
+	</div>
 {/snippet}
 
 {#snippet highlighter(text: string)}
@@ -216,7 +237,7 @@
 			: `color-mix(in srgb, color-mix(in srgb, var(--nucleus-bg) 85%, ${color}) 70%, transparent)`};
 			border-color: color-mix(in srgb, {color} {isFocused ? '100' : '40'}%, transparent);"
 	>
-		<div class="w-full p-1.5 px-2">
+		<div class="w-full p-1 px-2">
 			{#if info.length > 0}
 				<div
 					class="rounded-sm px-3 py-1.5 text-center font-medium text-nowrap overflow-ellipsis"
@@ -229,13 +250,28 @@
 					{#if _state.focus === 'focused'}
 						{@render composer(_state.replying, _state.quoting)}
 					{:else}
-						<input
-							bind:value={_state.text}
-							onfocus={() => (_state.focus = 'focused')}
-							type="text"
-							placeholder="what's on your mind?"
-							class="flex-1"
-						/>
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<div
+							class="composer relative flex cursor-text items-center gap-0 py-0! transition-all hover:brightness-110"
+							onmousedown={(e) => {
+								if (e.defaultPrevented) return;
+								_state.focus = 'focused';
+							}}
+						>
+							{#if _state.replying}
+								{@render attachmentIndicator(_state.replying, 'replying')}
+							{/if}
+							<input
+								bind:value={_state.text}
+								onfocus={() => (_state.focus = 'focused')}
+								type="text"
+								placeholder="what's on your mind?"
+								class="min-w-0 flex-1 border-none bg-transparent outline-none placeholder:text-(--nucleus-fg)/45 focus:ring-0"
+							/>
+							{#if _state.quoting}
+								{@render attachmentIndicator(_state.quoting, 'quoting')}
+							{/if}
+						</div>
 					{/if}
 				</div>
 			{/if}
@@ -253,7 +289,7 @@
 	}
 
 	.composer {
-		@apply p-2;
+		@apply p-1;
 	}
 
 	textarea {
@@ -261,7 +297,7 @@
 	}
 
 	input {
-		@apply p-1 px-2;
+		@apply p-1.5;
 	}
 
 	.composer {

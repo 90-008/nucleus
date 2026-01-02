@@ -1,31 +1,41 @@
 <script lang="ts">
 	import { AtpClient, resolveDidDoc } from '$lib/at/client';
-	import type { Did } from '@atcute/lexicons/syntax';
+	import type { Did, Handle } from '@atcute/lexicons/syntax';
 	import type { AppBskyActorProfile } from '@atcute/bluesky';
 	import ProfilePicture from './ProfilePicture.svelte';
 	import RichText from './RichText.svelte';
 	import { onMount } from 'svelte';
+	import { handles, profiles } from '$lib/state.svelte';
 
 	interface Props {
 		client: AtpClient;
 		did: Did;
-		handle?: string;
+		handle?: Handle;
 		profile?: AppBskyActorProfile.Main | null;
 	}
 
-	let { client, did, handle, profile = $bindable(null) }: Props = $props();
+	let {
+		client,
+		did,
+		handle = handles.get(did),
+		profile = $bindable(profiles.get(did) ?? null)
+	}: Props = $props();
 
 	onMount(async () => {
 		await Promise.all([
 			(async () => {
 				if (profile) return;
 				const res = await client.getProfile(did);
-				if (res.ok) profile = res.value;
+				if (!res.ok) return;
+				profile = res.value;
+				profiles.set(did, res.value);
 			})(),
 			(async () => {
 				if (handle) return;
 				const res = await resolveDidDoc(did);
-				if (res.ok) handle = res.value.handle;
+				if (!res.ok) return;
+				handle = res.value.handle;
+				handles.set(did, res.value.handle);
 			})()
 		]);
 	});

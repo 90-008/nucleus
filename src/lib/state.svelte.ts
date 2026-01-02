@@ -6,10 +6,10 @@ import {
 	type NotificationsStreamEvent
 } from './at/client';
 import { SvelteMap, SvelteDate, SvelteSet } from 'svelte/reactivity';
-import type { Did, InferOutput, Nsid, RecordKey, ResourceUri } from '@atcute/lexicons';
+import type { Did, Handle, InferOutput, Nsid, RecordKey, ResourceUri } from '@atcute/lexicons';
 import { fetchPosts, hydratePosts, type PostWithUri } from './at/fetch';
 import { parseCanonicalResourceUri, type AtprotoDid } from '@atcute/lexicons/syntax';
-import { AppBskyFeedPost, type AppBskyGraphFollow } from '@atcute/bluesky';
+import { AppBskyActorProfile, AppBskyFeedPost, type AppBskyGraphFollow } from '@atcute/bluesky';
 import type { ComAtprotoRepoListRecords } from '@atcute/atproto';
 import type { JetstreamSubscription, JetstreamEvent } from '@atcute/jetstream';
 import { expect, ok } from './result';
@@ -28,6 +28,9 @@ import { Router } from './router.svelte';
 
 export const notificationStream = writable<NotificationsStream | null>(null);
 export const jetstream = writable<JetstreamSubscription | null>(null);
+
+export const profiles = new SvelteMap<Did, AppBskyActorProfile.Main>();
+export const handles = new SvelteMap<Did, Handle>();
 
 export type BacklinksMap = SvelteMap<BacklinksSource, SvelteSet<Backlink>>;
 export const allBacklinks = new SvelteMap<ResourceUri, BacklinksMap>();

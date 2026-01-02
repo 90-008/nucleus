@@ -4,6 +4,7 @@
 		isHandle,
 		type ActorIdentifier,
 		type AtprotoDid,
+		type Did,
 		type Handle
 	} from '@atcute/lexicons/syntax';
 	import TimelineView from './TimelineView.svelte';
@@ -15,6 +16,7 @@
 	import { isBlob } from '@atcute/lexicons/interfaces';
 	import type { AppBskyActorProfile } from '@atcute/bluesky';
 	import { onMount } from 'svelte';
+	import { handles, profiles } from '$lib/state.svelte';
 
 	interface Props {
 		client: AtpClient;
@@ -25,12 +27,12 @@
 
 	let { client, actor, onBack, postComposerState = $bindable() }: Props = $props();
 
-	let profile = $state<AppBskyActorProfile.Main | null>(null);
+	let profile = $state<AppBskyActorProfile.Main | null>(profiles.get(actor as Did) ?? null);
 	const displayName = $derived(profile?.displayName ?? '');
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let did = $state<AtprotoDid | null>(null);
-	let handle = $state<Handle | null>(null);
+	let handle = $state<Handle | null>(handles.get(actor as Did) ?? null);
 
 	const loadProfile = async (identifier: ActorIdentifier) => {
 		loading = true;
@@ -46,14 +48,21 @@
 			return;
 		}
 
+		if (!handle) handle = handles.get(did) ?? null;
+
 		if (!handle) {
 			const resHandle = await resolveDidDoc(did);
-			if (resHandle.ok) handle = resHandle.value.handle;
+			if (resHandle.ok) {
+				handle = resHandle.value.handle;
+				handles.set(did, resHandle.value.handle);
+			}
 		}
 
 		const res = await client.getProfile(did);
-		if (res.ok) profile = res.value;
-		else error = res.error;
+		if (res.ok) {
+			profile = res.value;
+			profiles.set(did, res.value);
+		} else error = res.error;
 
 		loading = false;
 	};

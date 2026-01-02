@@ -43,9 +43,7 @@ class IDBStorage {
 
 			request.onupgradeneeded = (event) => {
 				const db = (event.target as IDBOpenDBRequest).result;
-				if (!db.objectStoreNames.contains(STORE_NAME)) {
-					db.createObjectStore(STORE_NAME);
-				}
+				if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
 			};
 		});
 	}

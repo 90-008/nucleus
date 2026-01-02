@@ -1,8 +1,3 @@
-<script lang="ts" module>
-	// we have this to prevent avatars from "flickering"
-	const avatarCache = new SvelteMap<string, string | null>();
-</script>
-
 <script lang="ts">
 	import { generateColorForDid } from '$lib/accounts';
 	import type { AtpClient } from '$lib/at/client';
@@ -10,7 +5,7 @@
 	import PfpPlaceholder from './PfpPlaceholder.svelte';
 	import { img } from '$lib/cdn';
 	import type { Did } from '@atcute/lexicons';
-	import { SvelteMap } from 'svelte/reactivity';
+	import { profiles } from '$lib/state.svelte';
 
 	interface Props {
 		client: AtpClient;
@@ -21,33 +16,27 @@
 	let { client, did, size }: Props = $props();
 
 	// svelte-ignore state_referenced_locally
-	let avatarUrl = $state<string | null>(avatarCache.get(did) ?? null);
+	let avatarBlob = $state(profiles.get(did)?.avatar);
+	const avatarUrl: string | null = $derived(
+		isBlob(avatarBlob) ? img('avatar_thumbnail', did, avatarBlob.ref.$link) : null
+	);
 
 	const loadProfile = async (targetDid: Did) => {
-		avatarUrl = avatarCache.get(targetDid) ?? null;
+		const cachedBlob = profiles.get(did)?.avatar;
+		if (cachedBlob) {
+			avatarBlob = cachedBlob;
+			return;
+		}
 
 		try {
 			const profile = await client.getProfile(targetDid);
-
-			if (did !== targetDid) return;
-
 			if (profile.ok) {
-				const record = profile.value;
-				if (isBlob(record.avatar)) {
-					const url = img('avatar_thumbnail', targetDid, record.avatar.ref.$link);
-					avatarUrl = url;
-					avatarCache.set(targetDid, url);
-				} else {
-					avatarUrl = null;
-					avatarCache.set(targetDid, null);
-				}
-			} else {
-				avatarUrl = null;
-			}
+				avatarBlob = profile.value.avatar;
+				profiles.set(did, profile.value);
+			} else avatarBlob = undefined;
 		} catch (e) {
-			if (did !== targetDid) return;
 			console.error(`${targetDid}: failed to load pfp`, e);
-			avatarUrl = null;
+			avatarBlob = undefined;
 		}
 	};
 
