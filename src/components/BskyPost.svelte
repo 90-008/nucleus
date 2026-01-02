@@ -1,12 +1,6 @@
 <script lang="ts">
 	import { resolveDidDoc, type AtpClient } from '$lib/at/client';
-	import {
-		AppBskyActorProfile,
-		AppBskyEmbedExternal,
-		AppBskyEmbedImages,
-		AppBskyEmbedVideo,
-		AppBskyFeedPost
-	} from '@atcute/bluesky';
+	import { AppBskyActorProfile, AppBskyEmbedRecord, AppBskyFeedPost } from '@atcute/bluesky';
 	import {
 		parseCanonicalResourceUri,
 		type Did,
@@ -17,8 +11,6 @@
 	import { expect, ok } from '$lib/result';
 	import { accounts, generateColorForDid } from '$lib/accounts';
 	import ProfilePicture from './ProfilePicture.svelte';
-	import { isBlob } from '@atcute/lexicons/interfaces';
-	import { blob, img } from '$lib/cdn';
 	import BskyPost from './BskyPost.svelte';
 	import Icon from '@iconify/svelte';
 	import {
@@ -37,13 +29,13 @@
 	import { derived } from 'svelte/store';
 	import Device from 'svelte-device-info';
 	import Dropdown from './Dropdown.svelte';
-	import { type AppBskyEmbeds } from '$lib/at/types';
 	import { settings } from '$lib/settings';
 	import RichText from './RichText.svelte';
 	import { getRelativeTime } from '$lib/date';
 	import { likeSource, repostSource, toCanonicalUri } from '$lib';
 	import ProfileInfo from './ProfileInfo.svelte';
-	import PhotoSwipeGallery, { type GalleryItem } from './PhotoSwipeGallery.svelte';
+	import EmbedBadge from './EmbedBadge.svelte';
+	import EmbedMedia from './EmbedMedia.svelte';
 
 	interface Props {
 		client: AtpClient;
@@ -80,12 +72,14 @@
 	const color = $derived(generateColorForDid(did));
 
 	let handle: Handle = $state(handles.get(did) ?? 'handle.invalid');
-	const didDoc = resolveDidDoc(did).then((res) => {
-		if (res.ok) {
-			handle = res.value.handle;
-			handles.set(did, handle);
-		}
-		return res;
+	onMount(() => {
+		resolveDidDoc(did).then((res) => {
+			if (res.ok) {
+				handle = res.value.handle;
+				handles.set(did, handle);
+			}
+			return res;
+		});
 	});
 	const post = data
 		? Promise.resolve(ok(data))
@@ -118,23 +112,6 @@
 			pulsingPostId.set(targetId);
 			setTimeout(() => pulsingPostId.set(null), 1200);
 		}, 400);
-	};
-
-	const getEmbedText = (embedType: string) => {
-		switch (embedType) {
-			case 'app.bsky.embed.external':
-				return '🔗 has external link';
-			case 'app.bsky.embed.record':
-				return '💬 has quote';
-			case 'app.bsky.embed.images':
-				return '🖼️ has images';
-			case 'app.bsky.embed.video':
-				return '🎥 has video';
-			case 'app.bsky.embed.recordWithMedia':
-				return '📎 has quote with media';
-			default:
-				return '❓ has unknown embed';
-		}
 	};
 
 	let actionsOpen = $state(false);
@@ -177,18 +154,6 @@
 
 	let profileOpen = $state(false);
 </script>
-
-{#snippet embedBadge(embed: AppBskyEmbeds)}
-	<span
-		class="rounded-full px-2.5 py-0.5 text-xs font-medium"
-		style="
-		background: color-mix(in srgb, {mini ? 'var(--nucleus-fg)' : color} 10%, transparent);
-		color: {mini ? 'var(--nucleus-fg)' : color};
-		"
-	>
-		{getEmbedText(embed.$type!)}
-	</span>
-{/snippet}
 
 {#snippet profileInline()}
 	<button
@@ -239,7 +204,7 @@
 				>
 					<span style="color: {color};">@{handle}</span>:
 					{#if record.embed}
-						{@render embedBadge(record.embed)}
+						<EmbedBadge embed={record.embed} />
 					{/if}
 					<span title={record.text}>{record.text}</span>
 				</div>
@@ -298,13 +263,22 @@
 				<p class="leading-normal text-wrap wrap-break-word">
 					<RichText text={record.text} facets={record.facets ?? []} />
 					{#if isOnPostComposer && record.embed}
-						{@render embedBadge(record.embed)}
+						<EmbedBadge embed={record.embed} {color} />
 					{/if}
 				</p>
 				{#if !isOnPostComposer && record.embed}
 					{@const embed = record.embed}
 					<div class="mt-2">
-						{@render postEmbed(embed)}
+						{#if embed.$type === 'app.bsky.embed.images' || embed.$type === 'app.bsky.embed.video'}
+							<EmbedMedia {did} {embed} />
+						{:else if embed.$type === 'app.bsky.embed.record'}
+							{@render embedPost(embed.record.uri)}
+						{:else if embed.$type === 'app.bsky.embed.recordWithMedia'}
+							<div class="space-y-1.5">
+								<EmbedMedia {did} embed={embed.media} />
+								{@render embedPost(embed.record.record.uri)}
+							</div>
+						{/if}
 					</div>
 				{/if}
 				{#if !isOnPostComposer}
@@ -319,78 +293,25 @@
 	{/await}
 {/if}
 
-{#snippet postEmbed(embed: AppBskyEmbeds)}
-	{#snippet embedMedia(
-		embed: AppBskyEmbedImages.Main | AppBskyEmbedVideo.Main | AppBskyEmbedExternal.Main
-	)}
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div oncontextmenu={(e) => e.stopPropagation()}>
-			{#if embed.$type === 'app.bsky.embed.images'}
-				{@const _images = embed.images.flatMap((img) =>
-					isBlob(img.image) ? [{ ...img, image: img.image }] : []
-				)}
-				{@const images = _images.map((i): GalleryItem => {
-					const sizeFactor = 200;
-					const size = {
-						width: (i.aspectRatio?.width ?? 4) * sizeFactor,
-						height: (i.aspectRatio?.height ?? 3) * sizeFactor
-					};
-					return {
-						...size,
-						src: img('feed_fullsize', did, i.image.ref.$link),
-						thumbnail: {
-							src: img('feed_thumbnail', did, i.image.ref.$link),
-							...size
-						}
-					};
-				})}
-				<PhotoSwipeGallery {images} />
-			{:else if embed.$type === 'app.bsky.embed.video'}
-				{#if isBlob(embed.video)}
-					{#await didDoc then didDoc}
-						{#if didDoc.ok}
-							<!-- svelte-ignore a11y_media_has_caption -->
-							<video
-								class="rounded-sm"
-								src={blob(didDoc.value.pds, did, embed.video.ref.$link)}
-								controls
-							></video>
-						{/if}
-					{/await}
-				{/if}
-			{/if}
-		</div>
-	{/snippet}
-	{#snippet embedPost(uri: ResourceUri)}
-		{#if quoteDepth < 2}
-			{@const parsedUri = expect(parseCanonicalResourceUri(uri))}
-			<!-- reject recursive quotes -->
-			{#if !(did === parsedUri.repo && rkey === parsedUri.rkey)}
-				<BskyPost
-					{client}
-					quoteDepth={quoteDepth + 1}
-					did={parsedUri.repo}
-					rkey={parsedUri.rkey}
-					{isOnPostComposer}
-					{onQuote}
-					{onReply}
-				/>
-			{:else}
-				<span>you think you're funny with that recursive quote but i'm onto you</span>
-			{/if}
+{#snippet embedPost(uri: ResourceUri)}
+	{#if quoteDepth < 2}
+		{@const parsedUri = expect(parseCanonicalResourceUri(uri))}
+		<!-- reject recursive quotes -->
+		{#if !(did === parsedUri.repo && rkey === parsedUri.rkey)}
+			<BskyPost
+				{client}
+				quoteDepth={quoteDepth + 1}
+				did={parsedUri.repo}
+				rkey={parsedUri.rkey}
+				{isOnPostComposer}
+				{onQuote}
+				{onReply}
+			/>
 		{:else}
-			{@render embedBadge(embed)}
+			<span>you think you're funny with that recursive quote but i'm onto you</span>
 		{/if}
-	{/snippet}
-	{#if embed.$type === 'app.bsky.embed.images' || embed.$type === 'app.bsky.embed.video'}
-		{@render embedMedia(embed)}
-	{:else if embed.$type === 'app.bsky.embed.record'}
-		{@render embedPost(embed.record.uri)}
-	{:else if embed.$type === 'app.bsky.embed.recordWithMedia'}
-		<div class="space-y-1.5">
-			{@render embedPost(embed.record.record.uri)}
-			{@render embedMedia(embed.media)}
-		</div>
+	{:else}
+		<EmbedBadge embed={{ $type: 'app.bsky.embed.record' } as AppBskyEmbedRecord.Main} />
 	{/if}
 {/snippet}
 
@@ -531,7 +452,7 @@
 			if (autoClose) actionsOpen = false;
 		}}
 	>
-		<span class="font-bold">{label}</span>
+		<span class="font-semibold opacity-85">{label}</span>
 		<Icon class="h-6 w-6" {icon} />
 	</button>
 {/snippet}
@@ -541,52 +462,5 @@
 
 	:global(.post-dropdown) {
 		@apply flex min-w-54 flex-col gap-1 rounded-sm border-2 p-1 shadow-2xl backdrop-blur-xl backdrop-brightness-60;
-	}
-
-	.image-grid {
-		display: grid;
-		gap: 2px;
-		border-radius: 0.375rem;
-		overflow: hidden;
-		max-height: 500px;
-	}
-
-	/* 1 image: full width */
-	.image-grid.count-1 {
-		grid-template-columns: 1fr;
-	}
-
-	/* 2 images: side by side */
-	.image-grid.count-2 {
-		grid-template-columns: repeat(2, 1fr);
-	}
-
-	/* 3 images: first spans left, two stack on right */
-	.image-grid.count-3 {
-		grid-template-columns: repeat(2, 1fr);
-		grid-template-rows: repeat(2, 1fr);
-	}
-	.image-grid.count-3 a:first-child {
-		grid-row: 1 / 3;
-	}
-
-	/* 4+ images: 2x2 grid */
-	.image-grid.count-4,
-	.image-grid.count-5 {
-		grid-template-columns: repeat(2, 1fr);
-		grid-template-rows: repeat(2, 1fr);
-	}
-
-	.image-item {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		display: block;
-		cursor: pointer;
-		transition: opacity 0.2s;
-	}
-
-	.image-item:hover {
-		opacity: 0.9;
 	}
 </style>

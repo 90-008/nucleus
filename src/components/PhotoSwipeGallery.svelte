@@ -100,7 +100,7 @@
 		gap: 2px;
 		border-radius: 4px;
 		overflow: hidden;
-		width: 100%;
+		width: fit-content;
 	}
 
 	.gallery.styling-twitter > a {
@@ -125,6 +125,7 @@
 	.gallery.styling-twitter[data-total='1'] {
 		display: block; /* Remove grid constraints */
 		height: auto;
+		width: fit-content;
 		aspect-ratio: auto; /* Remove 16:9 ratio */
 		border-radius: 0;
 	}
