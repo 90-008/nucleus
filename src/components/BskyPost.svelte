@@ -324,7 +324,8 @@
 		onClick,
 		isFull,
 		hasSolid,
-		canBeDisabled = true
+		canBeDisabled = true,
+		iconColor = color
 	}: {
 		name: string;
 		icon: string;
@@ -332,15 +333,16 @@
 		isFull?: boolean;
 		hasSolid?: boolean;
 		canBeDisabled?: boolean;
+		iconColor?: string;
 	})}
 		<button
 			class="
-			px-2 py-1.5 text-(--nucleus-fg)/90 transition-all
+			px-1.75 py-1.5 text-(--nucleus-fg)/90 transition-all
 			duration-100 not-disabled:hover:[backdrop-filter:brightness(120%)]
 			disabled:cursor-not-allowed!
 			"
 			onclick={(e) => onClick(e)}
-			style="color: {isFull ? color : 'color-mix(in srgb, var(--nucleus-fg) 90%, transparent)'}"
+			style="color: {isFull ? iconColor : 'color-mix(in srgb, var(--nucleus-fg) 90%, transparent)'}"
 			title={name}
 			disabled={canBeDisabled ? selectedDid === null : false}
 		>
@@ -410,25 +412,18 @@
 			{/if}
 
 			{#snippet trigger()}
-				<div
-					class="
-					w-fit items-center rounded-sm transition-opacity
-         			duration-100 ease-in-out group-hover:opacity-100
-         			{!actionsOpen && !Device.isMobile ? 'opacity-0' : ''}
-         			"
-					style="background: {color}1f;"
-				>
-					{@render control({
-						name: 'actions',
-						icon: 'heroicons:ellipsis-horizontal-16-solid',
-						onClick: (e: MouseEvent) => {
-							e.stopPropagation();
-							actionsOpen = !actionsOpen;
-							actionsPos = { x: 0, y: 0 };
-						},
-						canBeDisabled: false
-					})}
-				</div>
+				{@render control({
+					name: 'actions',
+					icon: 'heroicons:ellipsis-horizontal-16-solid',
+					onClick: (e: MouseEvent) => {
+						e.stopPropagation();
+						actionsOpen = !actionsOpen;
+						actionsPos = { x: 0, y: 0 };
+					},
+					canBeDisabled: false,
+					isFull: true,
+					iconColor: 'color-mix(in srgb, var(--nucleus-fg) 70%, transparent)'
+				})}
 			{/snippet}
 		</Dropdown>
 	</div>
