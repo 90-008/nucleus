@@ -5,7 +5,7 @@ import {
 	ComAtprotoRepoListRecords
 } from '@atcute/atproto';
 import { Client as AtcuteClient, simpleFetchHandler } from '@atcute/client';
-import { safeParse, type Handle, type InferOutput } from '@atcute/lexicons';
+import { safeParse, type Blob as AtpBlob, type Handle, type InferOutput } from '@atcute/lexicons';
 import {
 	isDid,
 	parseCanonicalResourceUri,
@@ -82,9 +82,46 @@ const cacheWithRecords = cacheWithDidDocs.define('fetchRecord', async (uri: Reso
 
 const cache = cacheWithRecords;
 
+const wrapBlobWithProgress = (
+	blob: Blob,
+	onProgress: (uploaded: number, total: number) => void
+): ReadableStream<Uint8Array> => {
+	const totalSize = blob.size;
+	let uploaded = 0;
+
+	return new ReadableStream({
+		start: async (controller) => {
+			const reader = blob.stream().getReader();
+
+			const push = async () => {
+				const { done, value } = await reader.read();
+
+				if (done) {
+					controller.close();
+					return;
+				}
+
+				uploaded += value.byteLength;
+				onProgress(uploaded, totalSize);
+
+				controller.enqueue(value);
+				await push();
+			};
+
+			await push();
+		}
+	});
+};
+
+export type UploadStatus =
+	| { stage: 'auth' }
+	| { stage: 'uploading'; progress?: number }
+	| { stage: 'processing'; progress?: number }
+	| { stage: 'complete' };
+
 export class AtpClient {
 	public atcute: AtcuteClient | null = null;
-	public user: { did: Did; handle: Handle } | null = null;
+	public user: MiniDoc | null = null;
 
 	async login(agent: OAuthUserAgent): Promise<Result<null, string>> {
 		try {
@@ -93,7 +130,9 @@ export class AtpClient {
 			if (!res.ok) throw res.data.error;
 			this.user = {
 				did: res.data.did,
-				handle: res.data.handle
+				handle: res.data.handle,
+				pds: agent.session.info.aud as `${string}:${string}`,
+				signing_key: ''
 			};
 			this.atcute = rpc;
 		} catch (error) {
@@ -253,6 +292,102 @@ export class AtpClient {
 
 		return results;
 	}
+
+	async uploadBlob(
+		blob: Blob,
+		onProgress?: (progress: number) => void
+	): Promise<Result<AtpBlob<string>, string>> {
+		if (!this.atcute) return err('not authenticated');
+		const input = wrapBlobWithProgress(blob, (uploaded, total) => onProgress?.(uploaded / total));
+		const res = await this.atcute.post('com.atproto.repo.uploadBlob', { input });
+		if (!res.ok) return err(`upload failed: ${res.data.error}`);
+		return ok(res.data.blob);
+	}
+
+	async uploadVideo(
+		blob: Blob,
+		onStatus?: (status: UploadStatus) => void
+	): Promise<Result<AtpBlob<string>, string>> {
+		if (!this.atcute || !this.user) return err('not authenticated');
+
+		onStatus?.({ stage: 'auth' });
+		const serviceAuthUrl = new URL(`${this.user.pds}/xrpc/com.atproto.server.getServiceAuth`);
+		serviceAuthUrl.searchParams.append('aud', this.user.pds.replace('https://', 'did:web:'));
+		serviceAuthUrl.searchParams.append('lxm', 'com.atproto.repo.uploadBlob');
+		serviceAuthUrl.searchParams.append('exp', (Math.floor(Date.now() / 1000) + 60 * 30).toString()); // 30 minutes
+
+		const serviceAuthResponse = await this.atcute.handler(
+			`${serviceAuthUrl.pathname}${serviceAuthUrl.search}`,
+			{
+				method: 'GET'
+			}
+		);
+		if (!serviceAuthResponse.ok) {
+			const error = await serviceAuthResponse.text();
+			return err(`failed to get service auth: ${error}`);
+		}
+
+		const serviceAuth = await serviceAuthResponse.json();
+		const token = serviceAuth.token;
+
+		onStatus?.({ stage: 'uploading' });
+		const uploadUrl = new URL('https://video.bsky.app/xrpc/app.bsky.video.uploadVideo');
+		uploadUrl.searchParams.append('did', this.user.did);
+		uploadUrl.searchParams.append('name', 'video.mp4');
+
+		const body = wrapBlobWithProgress(blob, (uploaded, total) =>
+			onStatus?.({ stage: 'uploading', progress: uploaded / total })
+		);
+		const uploadResponse = await fetch(uploadUrl.toString(), {
+			method: 'POST',
+			headers: {
+				Authorization: `Bearer ${token}`,
+				'Content-Type': 'video/mp4'
+			},
+			body
+		});
+		if (!uploadResponse.ok) {
+			const error = await uploadResponse.text();
+			return err(`failed to upload video: ${error}`);
+		}
+
+		const jobStatus = await uploadResponse.json();
+		let videoBlobRef: AtpBlob<string> = jobStatus.blob;
+
+		onStatus?.({ stage: 'processing' });
+		while (!videoBlobRef) {
+			await new Promise((resolve) => setTimeout(resolve, 1000));
+
+			const statusResponse = await fetch(
+				`https://video.bsky.app/xrpc/app.bsky.video.getJobStatus?jobId=${jobStatus.jobId}`
+			);
+
+			if (!statusResponse.ok) {
+				const error = await statusResponse.json();
+				// reuse blob
+				if (error.error === 'already_exists' && error.blob) {
+					videoBlobRef = error.blob;
+					break;
+				}
+				return err(`failed to get job status: ${error.message || error.error}`);
+			}
+
+			const status = await statusResponse.json();
+			if (status.jobStatus.blob) {
+				videoBlobRef = status.jobStatus.blob;
+			} else if (status.jobStatus.state === 'JOB_STATE_FAILED') {
+				return err(`video processing failed: ${status.jobStatus.error || 'unknown error'}`);
+			} else if (status.jobStatus.progress !== undefined) {
+				onStatus?.({
+					stage: 'processing',
+					progress: status.jobStatus.progress
+				});
+			}
+		}
+
+		onStatus?.({ stage: 'complete' });
+		return ok(videoBlobRef);
+	}
 }
 
 export const newPublicClient = async (ident: ActorIdentifier): Promise<AtpClient> => {
@@ -263,7 +398,7 @@ export const newPublicClient = async (ident: ActorIdentifier): Promise<AtpClient
 		return atp;
 	}
 	atp.atcute = new AtcuteClient({ handler: simpleFetchHandler({ service: didDoc.value.pds }) });
-	atp.user = { did: didDoc.value.did, handle: didDoc.value.handle };
+	atp.user = didDoc.value;
 	return atp;
 };
 
