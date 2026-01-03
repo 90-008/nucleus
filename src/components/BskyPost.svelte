@@ -27,7 +27,6 @@
 	import type { PostWithUri } from '$lib/at/fetch';
 	import { onMount, type Snippet } from 'svelte';
 	import { derived } from 'svelte/store';
-	import Device from 'svelte-device-info';
 	import Dropdown from './Dropdown.svelte';
 	import { settings } from '$lib/settings';
 	import RichText from './RichText.svelte';

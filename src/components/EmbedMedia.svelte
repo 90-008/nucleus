@@ -1,14 +1,14 @@
 <script lang="ts">
-	import { AppBskyEmbedExternal, AppBskyEmbedImages, AppBskyEmbedVideo } from '@atcute/bluesky';
 	import { isBlob } from '@atcute/lexicons/interfaces';
 	import PhotoSwipeGallery, { type GalleryItem } from './PhotoSwipeGallery.svelte';
 	import { blob, img } from '$lib/cdn';
 	import { type Did } from '@atcute/lexicons';
 	import { resolveDidDoc } from '$lib/at/client';
+	import type { AppBskyEmbedMedia } from '$lib/at/types';
 
 	interface Props {
 		did: Did;
-		embed: AppBskyEmbedImages.Main | AppBskyEmbedVideo.Main | AppBskyEmbedExternal.Main;
+		embed: AppBskyEmbedMedia;
 	}
 
 	let { did, embed }: Props = $props();

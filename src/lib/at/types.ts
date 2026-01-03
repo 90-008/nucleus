@@ -12,3 +12,8 @@ export type AppBskyEmbeds =
 	| AppBskyEmbedRecord.Main
 	| AppBskyEmbedRecordWithMedia.Main
 	| AppBskyEmbedVideo.Main;
+
+export type AppBskyEmbedMedia =
+	| AppBskyEmbedImages.Main
+	| AppBskyEmbedVideo.Main
+	| AppBskyEmbedExternal.Main;

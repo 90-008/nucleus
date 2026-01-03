@@ -1,16 +1,17 @@
 <script lang="ts">
 	import type { AtpClient } from '$lib/at/client';
 	import { ok, err, type Result, expect } from '$lib/result';
-	import type { AppBskyFeedPost } from '@atcute/bluesky';
+	import type { AppBskyEmbedRecordWithMedia, AppBskyFeedPost } from '@atcute/bluesky';
 	import { generateColorForDid } from '$lib/accounts';
 	import type { PostWithUri } from '$lib/at/fetch';
 	import BskyPost from './BskyPost.svelte';
-	import { parseCanonicalResourceUri } from '@atcute/lexicons';
+	import { parseCanonicalResourceUri, type Blob as AtpBlob } from '@atcute/lexicons';
 	import type { ComAtprotoRepoStrongRef } from '@atcute/atproto';
 	import { parseToRichText } from '$lib/richtext';
 	import { tokenize } from '$lib/richtext/parser';
 	import Icon from '@iconify/svelte';
 	import ProfilePicture from './ProfilePicture.svelte';
+	import type { AppBskyEmbedMedia } from '$lib/at/types';
 
 	export type FocusState = 'null' | 'focused';
 	export type State = {
@@ -18,6 +19,7 @@
 		text: string;
 		quoting?: PostWithUri;
 		replying?: PostWithUri;
+		attachedMedia?: AppBskyEmbedMedia;
 	};
 
 	interface Props {
@@ -43,6 +45,37 @@
 
 		const rt = await parseToRichText(text);
 
+		let media: AppBskyEmbedMedia | undefined = _state.attachedMedia;
+		if (_state.attachedMedia?.$type === 'app.bsky.embed.images') {
+			const images = _state.attachedMedia.images;
+			let uploadedImages: typeof images = [];
+			for (const image of images) {
+				const blobUrl = (image.image as AtpBlob<string>).ref.$link;
+				const blob = await (await fetch(blobUrl)).blob();
+				const result = await client.uploadBlob(blob);
+				if (!result.ok) return result;
+				uploadedImages.push({
+					...image,
+					image: result.value
+				});
+			}
+			media = {
+				..._state.attachedMedia,
+				$type: 'app.bsky.embed.images',
+				images: uploadedImages
+			};
+		} else if (_state.attachedMedia?.$type === 'app.bsky.embed.video') {
+			const blobUrl = (_state.attachedMedia.video as AtpBlob<string>).ref.$link;
+			const blob = await (await fetch(blobUrl)).blob();
+			const result = await client.uploadVideo(blob);
+			if (!result.ok) return result;
+			media = {
+				..._state.attachedMedia,
+				$type: 'app.bsky.embed.video',
+				video: result.value
+			};
+		}
+
 		const record: AppBskyFeedPost.Main = {
 			$type: 'app.bsky.feed.post',
 			text: rt.text,
@@ -56,11 +89,17 @@
 					: undefined,
 			embed:
 				_state.focus === 'focused' && _state.quoting
-					? {
-							$type: 'app.bsky.embed.record',
-							record: strongRef(_state.quoting)
-						}
-					: undefined,
+					? media
+						? {
+								$type: 'app.bsky.embed.recordWithMedia',
+								record: { record: strongRef(_state.quoting) },
+								media: media as AppBskyEmbedRecordWithMedia.Main['media']
+							}
+						: {
+								$type: 'app.bsky.embed.record',
+								record: strongRef(_state.quoting)
+							}
+					: (media as AppBskyFeedPost.Main['embed']),
 			createdAt: new Date().toISOString()
 		};
 
