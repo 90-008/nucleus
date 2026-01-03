@@ -29,19 +29,14 @@ import type {
 import * as v from '@atcute/lexicons/validations';
 import { MiniDocQuery, type MiniDoc } from './slingshot';
 import { BacklinksQuery, type Backlinks, type BacklinksSource } from './constellation';
-import type { Records } from '@atcute/lexicons/ambient';
+import type { Records, XRPCProcedures } from '@atcute/lexicons/ambient';
 import { cache as rawCache } from '$lib/cache';
 import { AppBskyActorProfile } from '@atcute/bluesky';
 import { WebSocket } from '@soffinal/websocket';
 import type { Notification } from './stardust';
-import { get } from 'svelte/store';
-import { settings } from '$lib/settings';
 import type { OAuthUserAgent } from '@atcute/oauth-browser-client';
 import { timestampFromCursor, toCanonicalUri, toResourceUri } from '$lib';
-
-export const slingshotUrl: URL = new URL(get(settings).endpoints.slingshot);
-export const spacedustUrl: URL = new URL(get(settings).endpoints.spacedust);
-export const constellationUrl: URL = new URL(get(settings).endpoints.constellation);
+import { constellationUrl, slingshotUrl, spacedustUrl } from '.';
 
 export type RecordOutput<Output> = { uri: ResourceUri; cid: Cid | undefined; record: Output };
 
@@ -82,34 +77,46 @@ const cacheWithRecords = cacheWithDidDocs.define('fetchRecord', async (uri: Reso
 
 const cache = cacheWithRecords;
 
-const wrapBlobWithProgress = (
-	blob: Blob,
-	onProgress: (uploaded: number, total: number) => void
-): ReadableStream<Uint8Array> => {
-	const totalSize = blob.size;
-	let uploaded = 0;
+export const xhrPost = (
+	url: string,
+	body: Blob | File,
+	headers: Record<string, string> = {},
+	onProgress?: (uploaded: number, total: number) => void
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Promise<Result<any, { error: string; message: string }>> => {
+	return new Promise((resolve) => {
+		const xhr = new XMLHttpRequest();
+		xhr.open('POST', url);
 
-	return new ReadableStream({
-		start: async (controller) => {
-			const reader = blob.stream().getReader();
-
-			const push = async () => {
-				const { done, value } = await reader.read();
-
-				if (done) {
-					controller.close();
-					return;
+		if (onProgress && xhr.upload) {
+			xhr.upload.onprogress = (event: ProgressEvent) => {
+				if (event.lengthComputable) {
+					onProgress(event.loaded, event.total);
 				}
-
-				uploaded += value.byteLength;
-				onProgress(uploaded, totalSize);
-
-				controller.enqueue(value);
-				await push();
 			};
-
-			await push();
 		}
+
+		Object.keys(headers).forEach((key) => {
+			xhr.setRequestHeader(key, headers[key]);
+		});
+
+		xhr.onload = () => {
+			if (xhr.status >= 200 && xhr.status < 300) {
+				resolve(ok(JSON.parse(xhr.responseText)));
+			} else {
+				resolve(err(JSON.parse(xhr.responseText)));
+			}
+		};
+
+		xhr.onerror = () => {
+			resolve(err({ error: 'xhr_error', message: 'network error' }));
+		};
+
+		xhr.onabort = () => {
+			resolve(err({ error: 'xhr_error', message: 'upload aborted' }));
+		};
+
+		xhr.send(body);
 	});
 };
 
@@ -293,28 +300,15 @@ export class AtpClient {
 		return results;
 	}
 
-	async uploadBlob(
-		blob: Blob,
-		onProgress?: (progress: number) => void
-	): Promise<Result<AtpBlob<string>, string>> {
-		if (!this.atcute) return err('not authenticated');
-		const input = wrapBlobWithProgress(blob, (uploaded, total) => onProgress?.(uploaded / total));
-		const res = await this.atcute.post('com.atproto.repo.uploadBlob', { input });
-		if (!res.ok) return err(`upload failed: ${res.data.error}`);
-		return ok(res.data.blob);
-	}
-
-	async uploadVideo(
-		blob: Blob,
-		onStatus?: (status: UploadStatus) => void
-	): Promise<Result<AtpBlob<string>, string>> {
+	async getServiceAuth(lxm: keyof XRPCProcedures, exp: number): Promise<Result<string, string>> {
 		if (!this.atcute || !this.user) return err('not authenticated');
-
-		onStatus?.({ stage: 'auth' });
-		const serviceAuthUrl = new URL(`${this.user.pds}/xrpc/com.atproto.server.getServiceAuth`);
-		serviceAuthUrl.searchParams.append('aud', this.user.pds.replace('https://', 'did:web:'));
+		const serviceAuthUrl = new URL(`${this.user.pds}xrpc/com.atproto.server.getServiceAuth`);
+		serviceAuthUrl.searchParams.append(
+			'aud',
+			this.user.pds.replace('https://', 'did:web:').slice(0, -1)
+		);
 		serviceAuthUrl.searchParams.append('lxm', 'com.atproto.repo.uploadBlob');
-		serviceAuthUrl.searchParams.append('exp', (Math.floor(Date.now() / 1000) + 60 * 30).toString()); // 30 minutes
+		serviceAuthUrl.searchParams.append('exp', exp.toString()); // 30 minutes
 
 		const serviceAuthResponse = await this.atcute.handler(
 			`${serviceAuthUrl.pathname}${serviceAuthUrl.search}`,
@@ -326,32 +320,60 @@ export class AtpClient {
 			const error = await serviceAuthResponse.text();
 			return err(`failed to get service auth: ${error}`);
 		}
-
 		const serviceAuth = await serviceAuthResponse.json();
-		const token = serviceAuth.token;
+		return ok(serviceAuth.token);
+	}
+
+	async uploadBlob(
+		blob: Blob,
+		onProgress?: (progress: number) => void
+	): Promise<Result<AtpBlob<string>, string>> {
+		if (!this.atcute || !this.user) return err('not authenticated');
+		const tokenResult = await this.getServiceAuth(
+			'com.atproto.repo.uploadBlob',
+			Math.floor(Date.now() / 1000) + 60
+		);
+		if (!tokenResult.ok) return tokenResult;
+		const result = await xhrPost(
+			`${this.user.pds}xrpc/com.atproto.repo.uploadBlob`,
+			blob,
+			{ authorization: `Bearer ${tokenResult.value}` },
+			(uploaded, total) => onProgress?.(uploaded / total)
+		);
+		if (!result.ok) return err(`upload failed: ${result.error.message}`);
+		return ok(result.value);
+	}
+
+	async uploadVideo(
+		blob: Blob,
+		mimeType: string,
+		onStatus?: (status: UploadStatus) => void
+	): Promise<Result<AtpBlob<string>, string>> {
+		if (!this.atcute || !this.user) return err('not authenticated');
+
+		onStatus?.({ stage: 'auth' });
+		const tokenResult = await this.getServiceAuth(
+			'com.atproto.repo.uploadBlob',
+			Math.floor(Date.now() / 1000) + 60 * 30
+		);
+		if (!tokenResult.ok) return tokenResult;
 
 		onStatus?.({ stage: 'uploading' });
 		const uploadUrl = new URL('https://video.bsky.app/xrpc/app.bsky.video.uploadVideo');
 		uploadUrl.searchParams.append('did', this.user.did);
-		uploadUrl.searchParams.append('name', 'video.mp4');
+		uploadUrl.searchParams.append('name', 'video');
 
-		const body = wrapBlobWithProgress(blob, (uploaded, total) =>
-			onStatus?.({ stage: 'uploading', progress: uploaded / total })
-		);
-		const uploadResponse = await fetch(uploadUrl.toString(), {
-			method: 'POST',
-			headers: {
-				Authorization: `Bearer ${token}`,
-				'Content-Type': 'video/mp4'
+		const uploadResult = await xhrPost(
+			uploadUrl.toString(),
+			blob,
+			{
+				Authorization: `Bearer ${tokenResult.value}`,
+				'Content-Type': mimeType
 			},
-			body
-		});
-		if (!uploadResponse.ok) {
-			const error = await uploadResponse.text();
-			return err(`failed to upload video: ${error}`);
-		}
-
-		const jobStatus = await uploadResponse.json();
+			(uploaded, total) => onStatus?.({ stage: 'uploading', progress: uploaded / total })
+		);
+		if (!uploadResult.ok) return err(`failed to upload video: ${uploadResult.error.message}`);
+		const jobStatus = uploadResult.value;
 		let videoBlobRef: AtpBlob<string> = jobStatus.blob;
 
 		onStatus?.({ stage: 'processing' });
@@ -380,7 +402,7 @@ export class AtpClient {
 			} else if (status.jobStatus.progress !== undefined) {
 				onStatus?.({
 					stage: 'processing',
-					progress: status.jobStatus.progress
+					progress: status.jobStatus.progress / 100
 				});
 			}
 		}

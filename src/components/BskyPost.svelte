@@ -161,7 +161,7 @@
 		rounded-sm pr-1 transition-colors duration-100 ease-in-out hover:bg-white/10
 		"
 		style="color: {color};"
-		onclick={() => router.navigate(`/profile/${did}`)}
+		onclick={() => ((profileOpen = false), router.navigate(`/profile/${did}`))}
 	>
 		<ProfilePicture {client} {did} size={8} />
 

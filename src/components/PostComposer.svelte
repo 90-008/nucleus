@@ -12,7 +12,13 @@
 	import Icon from '@iconify/svelte';
 	import ProfilePicture from './ProfilePicture.svelte';
 	import type { AppBskyEmbedMedia } from '$lib/at/types';
+	import { SvelteMap } from 'svelte/reactivity';
+	import { handles } from '$lib/state.svelte';
 
+	type UploadState =
+		| { state: 'uploading'; progress: number }
+		| { state: 'uploaded'; blob: AtpBlob<string> }
+		| { state: 'error'; message: string };
 	export type FocusState = 'null' | 'focused';
 	export type State = {
 		focus: FocusState;
@@ -20,6 +26,7 @@
 		quoting?: PostWithUri;
 		replying?: PostWithUri;
 		attachedMedia?: AppBskyEmbedMedia;
+		blobsState: SvelteMap<string, UploadState>;
 	};
 
 	interface Props {
@@ -28,13 +35,33 @@
 		_state: State;
 	}
 
-	let { client, onPostSent, _state = $bindable({ focus: 'null', text: '' }) }: Props = $props();
+	let { client, onPostSent, _state = $bindable() }: Props = $props();
 
 	const isFocused = $derived(_state.focus === 'focused');
 
 	const color = $derived(
 		client.user?.did ? generateColorForDid(client.user?.did) : 'var(--nucleus-accent2)'
 	);
+
+	const uploadVideo = async (blobUrl: string, mimeType: string) => {
+		const blob = await (await fetch(blobUrl)).blob();
+		return await client.uploadVideo(blob, mimeType, (status) => {
+			if (status.stage === 'uploading' && status.progress !== undefined) {
+				_state.blobsState.set(blobUrl, { state: 'uploading', progress: status.progress * 0.5 });
+			} else if (status.stage === 'processing' && status.progress !== undefined) {
+				_state.blobsState.set(blobUrl, {
+					state: 'uploading',
+					progress: 0.5 + status.progress * 0.5
+				});
+			}
+		});
+	};
+	const uploadImage = async (blobUrl: string) => {
+		const blob = await (await fetch(blobUrl)).blob();
+		return await client.uploadBlob(blob, (progress) => {
+			_state.blobsState.set(blobUrl, { state: 'uploading', progress });
+		});
+	};
 
 	const post = async (text: string): Promise<Result<PostWithUri, string>> => {
 		const strongRef = (p: PostWithUri): ComAtprotoRepoStrongRef.Main => ({
@@ -50,31 +77,31 @@
 			const images = _state.attachedMedia.images;
 			let uploadedImages: typeof images = [];
 			for (const image of images) {
-				const blobUrl = (image.image as AtpBlob<string>).ref.$link;
-				const blob = await (await fetch(blobUrl)).blob();
-				const result = await client.uploadBlob(blob);
-				if (!result.ok) return result;
+				const upload = _state.blobsState.get((image.image as AtpBlob<string>).ref.$link);
+				if (!upload || upload.state !== 'uploaded') continue;
 				uploadedImages.push({
 					...image,
-					image: result.value
+					image: upload.blob
 				});
 			}
-			media = {
-				..._state.attachedMedia,
-				$type: 'app.bsky.embed.images',
-				images: uploadedImages
-			};
+			if (uploadedImages.length > 0)
+				media = {
+					..._state.attachedMedia,
+					$type: 'app.bsky.embed.images',
+					images: uploadedImages
+				};
 		} else if (_state.attachedMedia?.$type === 'app.bsky.embed.video') {
-			const blobUrl = (_state.attachedMedia.video as AtpBlob<string>).ref.$link;
-			const blob = await (await fetch(blobUrl)).blob();
-			const result = await client.uploadVideo(blob);
-			if (!result.ok) return result;
-			media = {
-				..._state.attachedMedia,
-				$type: 'app.bsky.embed.video',
-				video: result.value
-			};
+			const upload = _state.blobsState.get(
+				(_state.attachedMedia.video as AtpBlob<string>).ref.$link
+			);
+			if (upload && upload.state === 'uploaded')
+				media = {
+					..._state.attachedMedia,
+					$type: 'app.bsky.embed.video',
+					video: upload.blob
+				};
 		}
+		console.log('media', media);
 
 		const record: AppBskyFeedPost.Main = {
 			$type: 'app.bsky.feed.post',
@@ -123,30 +150,140 @@
 		});
 	};
 
-	let info = $state('');
+	let posting = $state(false);
+	let postError = $state('');
 	let textareaEl: HTMLTextAreaElement | undefined = $state();
+	let fileInputEl: HTMLInputElement | undefined = $state();
+	let selectingFile = $state(false);
 
 	const unfocus = () => (_state.focus = 'null');
+
+	const handleFileSelect = (event: Event) => {
+		selectingFile = false;
+
+		const input = event.target as HTMLInputElement;
+		const files = input.files;
+		if (!files || files.length === 0) return;
+
+		const existingImages =
+			_state.attachedMedia?.$type === 'app.bsky.embed.images' ? _state.attachedMedia.images : [];
+
+		let newImages = [...existingImages];
+		let hasVideo = false;
+
+		for (let i = 0; i < files.length; i++) {
+			const file = files[i];
+			const isVideo = file.type.startsWith('video/');
+			const isImage = file.type.startsWith('image/');
+
+			if (!isVideo && !isImage) {
+				postError = 'unsupported file type';
+				continue;
+			}
+
+			if (isVideo) {
+				if (existingImages.length > 0 || newImages.length > 0) {
+					postError = 'cannot mix images and video';
+					continue;
+				}
+				const blobUrl = URL.createObjectURL(file);
+				_state.attachedMedia = {
+					$type: 'app.bsky.embed.video',
+					video: {
+						$type: 'blob',
+						ref: { $link: blobUrl },
+						mimeType: file.type,
+						size: file.size
+					}
+				};
+				hasVideo = true;
+				break;
+			} else if (isImage) {
+				if (newImages.length >= 4) {
+					postError = 'max 4 images allowed';
+					break;
+				}
+				const blobUrl = URL.createObjectURL(file);
+				newImages.push({
+					image: {
+						$type: 'blob',
+						ref: { $link: blobUrl },
+						mimeType: file.type,
+						size: file.size
+					},
+					alt: '',
+					aspectRatio: undefined
+				});
+			}
+		}
+
+		if (!hasVideo && newImages.length > 0) {
+			_state.attachedMedia = {
+				$type: 'app.bsky.embed.images',
+				images: newImages
+			};
+		}
+
+		const handleUpload = (blobUrl: string, blob: Result<AtpBlob<string>, string>) => {
+			if (blob.ok) _state.blobsState.set(blobUrl, { state: 'uploaded', blob: blob.value });
+			else _state.blobsState.set(blobUrl, { state: 'error', message: blob.error });
+		};
+
+		const media = _state.attachedMedia;
+		if (media?.$type == 'app.bsky.embed.images') {
+			for (const image of media.images) {
+				const blobUrl = (image.image as AtpBlob<string>).ref.$link;
+				uploadImage(blobUrl).then((r) => handleUpload(blobUrl, r));
+			}
+		} else if (media?.$type === 'app.bsky.embed.video') {
+			const blobUrl = (media.video as AtpBlob<string>).ref.$link;
+			uploadVideo(blobUrl, media.video.mimeType).then((r) => handleUpload(blobUrl, r));
+		}
+
+		input.value = '';
+	};
+
+	const removeMedia = () => {
+		if (_state.attachedMedia?.$type === 'app.bsky.embed.video') {
+			const blobUrl = (_state.attachedMedia.video as AtpBlob<string>).ref.$link;
+			_state.blobsState.delete(blobUrl);
+		}
+		_state.attachedMedia = undefined;
+	};
+
+	const removeMediaAtIndex = (index: number) => {
+		if (_state.attachedMedia?.$type !== 'app.bsky.embed.images') return;
+		const imageToRemove = _state.attachedMedia.images[index];
+		const blobUrl = (imageToRemove.image as AtpBlob<string>).ref.$link;
+		_state.blobsState.delete(blobUrl);
+
+		const images = _state.attachedMedia.images.filter((_, i) => i !== index);
+		_state.attachedMedia = images.length > 0 ? { ..._state.attachedMedia, images } : undefined;
+	};
 
 	const doPost = () => {
 		if (_state.text.length === 0 || _state.text.length > 300) return;
 
-		post(_state.text).then((res) => {
-			if (res.ok) {
-				onPostSent(res.value);
-				_state.text = '';
-				info = 'posted!';
-				unfocus();
-				setTimeout(() => (info = ''), 800);
-			} else {
-				info = res.error;
-				setTimeout(() => (info = ''), 3000);
-			}
-		});
+		postError = '';
+		posting = true;
+		post(_state.text)
+			.then((res) => {
+				if (res.ok) {
+					onPostSent(res.value);
+					_state.text = '';
+					_state.attachedMedia = undefined;
+					_state.blobsState.clear();
+					unfocus();
+				} else {
+					postError = res.error;
+				}
+			})
+			.finally(() => {
+				posting = false;
+			});
 	};
 
 	$effect(() => {
-		if (!client.atcute) info = 'not logged in';
 		document.documentElement.style.setProperty('--acc-color', color);
 		if (isFocused && textareaEl) textareaEl.focus();
 	});
@@ -169,6 +306,7 @@
 {#snippet attachmentIndicator(post: PostWithUri, type: 'quoting' | 'replying')}
 	{@const parsedUri = expect(parseCanonicalResourceUri(post.uri))}
 	{@const color = generateColorForDid(parsedUri.repo)}
+	{@const id = handles.get(parsedUri.repo) ?? parsedUri.repo}
 	<div
 		class="flex shrink-0 items-center gap-1.5 rounded-sm border py-0.5 pr-0.5 pl-1 text-xs font-bold transition-all"
 		style="
@@ -176,7 +314,7 @@
 			border-color: {color};
 			color: {color};
 		"
-		title={type === 'replying' ? `replying to @${parsedUri.repo}` : `quoting @${parsedUri.repo}`}
+		title={type === 'replying' ? `replying to ${id}` : `quoting ${id}`}
 	>
 		<span class="truncate text-sm font-normal opacity-90">
 			{type === 'replying' ? 'replying to' : 'quoting'}
@@ -201,11 +339,133 @@
 	{/if}
 {/snippet}
 
+{#snippet uploadControls(blobUrl: string, remove: () => void)}
+	{@const upload = _state.blobsState.get(blobUrl)}
+	{#if upload !== undefined && upload.state === 'uploading'}
+		<div
+			class="absolute top-2 right-2 z-10 flex items-center gap-2 rounded-sm bg-black/70 p-1.5 text-sm backdrop-blur-sm"
+		>
+			<div class="flex justify-center">
+				<div
+					class="h-5 w-5 animate-spin rounded-full border-4 border-t-transparent"
+					style="border-color: var(--nucleus-accent) var(--nucleus-accent) var(--nucleus-accent) transparent;"
+				></div>
+			</div>
+			<span class="font-medium">{Math.round(upload.progress * 100)}%</span>
+		</div>
+	{:else}
+		<div class="absolute top-2 right-2 z-10 flex items-center gap-1">
+			{#if upload !== undefined && upload.state === 'error'}
+				<span
+					class="rounded-sm bg-black/70 p-1.5 px-1 text-sm font-bold text-red-500 backdrop-blur-sm"
+					>{upload.message}</span
+				>
+			{/if}
+			<button
+				onclick={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					remove();
+				}}
+				onmousedown={(e) => e.preventDefault()}
+				class="rounded-sm bg-black/70 p-1.5 backdrop-blur-sm {upload?.state !== 'error'
+					? 'opacity-0 transition-opacity group-hover:opacity-100'
+					: ''}"
+			>
+				{#if upload?.state === 'error'}
+					<Icon
+						class="text-red-500 group-hover:hidden"
+						icon="heroicons:exclamation-circle-16-solid"
+						width={20}
+					/>
+				{/if}
+				<Icon
+					class={upload?.state === 'error' ? 'hidden group-hover:block' : ''}
+					icon="heroicons:x-mark-16-solid"
+					width={20}
+				/>
+			</button>
+		</div>
+	{/if}
+{/snippet}
+
+{#snippet mediaPreview(embed: AppBskyEmbedMedia)}
+	{#if embed.$type === 'app.bsky.embed.images'}
+		<div class="image-preview-grid" data-total={embed.images.length}>
+			{#each embed.images as image, idx (idx)}
+				{@const blobUrl = (image.image as AtpBlob<string>).ref.$link}
+				<div class="image-preview-item group">
+					<img src={blobUrl} alt="" />
+					{@render uploadControls(blobUrl, () => removeMediaAtIndex(idx))}
+				</div>
+			{/each}
+		</div>
+	{:else if embed.$type === 'app.bsky.embed.video'}
+		{@const blobUrl = (embed.video as AtpBlob<string>).ref.$link}
+		<div
+			class="group relative max-h-[30vh] overflow-hidden rounded-sm"
+			style="aspect-ratio: 16/10;"
+		>
+			<!-- svelte-ignore a11y_media_has_caption -->
+			<video src={blobUrl} controls class="h-full w-full"></video>
+			{@render uploadControls(blobUrl, removeMedia)}
+		</div>
+	{/if}
+{/snippet}
+
 {#snippet composer(replying?: PostWithUri, quoting?: PostWithUri)}
+	{@const hasIncompleteUpload = _state.blobsState
+		.values()
+		.some((s) => s.state === 'uploading' || s.state === 'error')}
 	<div class="flex items-center gap-2">
+		<input
+			bind:this={fileInputEl}
+			type="file"
+			accept="image/*,video/*"
+			multiple
+			onchange={handleFileSelect}
+			oncancel={() => (selectingFile = false)}
+			class="hidden"
+		/>
+		<button
+			onclick={(e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				selectingFile = true;
+				fileInputEl?.click();
+			}}
+			onmousedown={(e) => e.preventDefault()}
+			disabled={_state.attachedMedia?.$type === 'app.bsky.embed.video' ||
+				(_state.attachedMedia?.$type === 'app.bsky.embed.images' &&
+					_state.attachedMedia.images.length >= 4)}
+			class="rounded-sm p-1.5 transition-all duration-150 enabled:hover:scale-110 disabled:cursor-not-allowed disabled:opacity-50"
+			style="background: color-mix(in srgb, {color} 15%, transparent); color: {color};"
+			title="attach media"
+		>
+			<Icon icon="heroicons:photo-16-solid" width={20} />
+		</button>
+		{#if postError.length > 0}
+			<div class="group flex items-center gap-2 truncate rounded-sm bg-red-500 p-1.5">
+				<button onclick={() => (postError = '')}>
+					<Icon
+						class="group-hover:hidden"
+						icon="heroicons:exclamation-circle-16-solid"
+						width={20}
+					/>
+					<Icon class="hidden group-hover:block" icon="heroicons:x-mark-16-solid" width={20} />
+				</button>
+				<span title={postError} class="truncate text-sm font-bold">{postError}</span>
+			</div>
+		{/if}
 		<div class="grow"></div>
+		{#if posting}
+			<div
+				class="h-6 w-6 animate-spin rounded-full border-4 border-t-transparent"
+				style="border-color: var(--nucleus-accent) var(--nucleus-accent) var(--nucleus-accent) transparent;"
+			></div>
+		{/if}
 		<span
-			class="text-sm font-medium"
+			class="text-sm font-medium text-nowrap"
 			style="color: color-mix(in srgb, {_state.text.length > 300
 				? '#ef4444'
 				: 'var(--nucleus-fg)'} 53%, transparent);"
@@ -213,9 +473,12 @@
 			{_state.text.length} / 300
 		</span>
 		<button
+			onmousedown={(e) => e.preventDefault()}
 			onclick={doPost}
-			disabled={_state.text.length === 0 || _state.text.length > 300}
-			class="action-button border-none px-5 text-(--nucleus-fg)/94 disabled:cursor-not-allowed! disabled:opacity-50 disabled:hover:scale-100"
+			disabled={(!_state.attachedMedia && _state.text.length === 0) ||
+				_state.text.length > 300 ||
+				hasIncompleteUpload}
+			class="action-button border-none px-4 py-1.5 text-(--nucleus-fg)/94 disabled:cursor-not-allowed! disabled:opacity-50 disabled:hover:scale-100"
 			style="background: color-mix(in srgb, {color} 87%, transparent);"
 		>
 			post
@@ -238,7 +501,7 @@
 				bind:this={textareaEl}
 				bind:value={_state.text}
 				onfocus={() => (_state.focus = 'focused')}
-				onblur={unfocus}
+				onblur={() => (!selectingFile ? unfocus() : null)}
 				onkeydown={(event) => {
 					if (event.key === 'Escape') unfocus();
 					if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) doPost();
@@ -248,6 +511,9 @@
 				class="col-start-1 row-start-1 field-sizing-content min-h-[5lh] w-full resize-none overflow-hidden bg-transparent text-wrap break-all whitespace-pre-wrap text-transparent caret-(--nucleus-fg) placeholder:text-(--nucleus-fg)/45"
 			></textarea>
 		</div>
+		{#if _state.attachedMedia}
+			{@render mediaPreview(_state.attachedMedia)}
+		{/if}
 		{#if quoting}
 			{@render attachedPost(quoting, 'quoting')}
 		{/if}
@@ -274,15 +540,15 @@
 			border-color: color-mix(in srgb, {color} {isFocused ? '100' : '40'}%, transparent);"
 	>
 		<div class="w-full p-1 px-2">
-			{#if info.length > 0}
+			{#if !client.atcute}
 				<div
 					class="rounded-sm px-3 py-1.5 text-center font-medium text-nowrap overflow-ellipsis"
 					style="background: color-mix(in srgb, {color} 13%, transparent); color: {color};"
 				>
-					{info}
+					not logged in
 				</div>
 			{:else}
-				<div class="flex flex-col gap-2">
+				<div class="flex flex-col gap-1">
 					{#if _state.focus === 'focused'}
 						{@render composer(_state.replying, _state.quoting)}
 					{:else}
@@ -346,5 +612,76 @@
 
 	textarea:focus {
 		@apply border-none! [box-shadow:none]! outline-none!;
+	}
+
+	/* Image preview grid - based on PhotoSwipeGallery */
+	.image-preview-grid {
+		display: grid;
+		gap: 2px;
+		border-radius: 4px;
+		overflow: hidden;
+		width: 100%;
+		max-height: 30vh;
+	}
+
+	.image-preview-item {
+		width: 100%;
+		height: 100%;
+		display: block;
+		position: relative;
+		overflow: hidden;
+		border-radius: 4px;
+	}
+
+	.image-preview-item > img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	/* Single image: natural aspect ratio */
+	.image-preview-grid[data-total='1'] {
+		display: block;
+		height: auto;
+		width: 100%;
+		border-radius: 0;
+	}
+
+	.image-preview-grid[data-total='1'] .image-preview-item {
+		width: 100%;
+		height: auto;
+		display: block;
+		border-radius: 4px;
+	}
+
+	.image-preview-grid[data-total='1'] .image-preview-item > img {
+		width: 100%;
+		height: auto;
+		max-height: 60vh;
+		object-fit: contain;
+	}
+
+	/* 2 Images: Split vertically */
+	.image-preview-grid[data-total='2'] {
+		grid-template-columns: 1fr 1fr;
+		grid-template-rows: 1fr;
+		aspect-ratio: 16/9;
+	}
+
+	/* 3 Images: 1 Big (left), 2 Small (stacked right) */
+	.image-preview-grid[data-total='3'] {
+		grid-template-columns: 1fr 1fr;
+		grid-template-rows: 1fr 1fr;
+		aspect-ratio: 16/9;
+	}
+	.image-preview-grid[data-total='3'] .image-preview-item:first-child {
+		grid-row: span 2;
+	}
+
+	/* 4 Images: 2x2 Grid */
+	.image-preview-grid[data-total='4'] {
+		grid-template-columns: 1fr 1fr;
+		grid-template-rows: 1fr 1fr;
+		aspect-ratio: 16/9;
 	}
 </style>

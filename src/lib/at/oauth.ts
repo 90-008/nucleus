@@ -14,11 +14,11 @@ import {
 	WebDidDocumentResolver,
 	XrpcHandleResolver
 } from '@atcute/identity-resolver';
-import { slingshotUrl } from './client';
 import type { ActorIdentifier } from '@atcute/lexicons';
 import { err, ok, type Result } from '$lib/result';
 import type { AtprotoDid } from '@atcute/lexicons/syntax';
 import { clientId, oauthMetadata, redirectUri } from '$lib/oauth';
+import { slingshotUrl } from '.';
 
 configureOAuth({
 	metadata: {

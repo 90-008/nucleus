@@ -12,6 +12,7 @@ export const ok = <T>(value: T): Ok<T> => {
 	return { ok: true, value };
 };
 export const err = <E>(error: E): Err<E> => {
+	console.error(error);
 	return { ok: false, error };
 };
 export const expect = <T, E>(v: Result<T, E>, msg: string = 'expected result to not be error:') => {

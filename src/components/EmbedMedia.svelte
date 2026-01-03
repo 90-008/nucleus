@@ -27,32 +27,30 @@
 				height: (i.aspectRatio?.height ?? 3) * sizeFactor
 			};
 			const cid = i.image.ref.$link;
-			const isPreview = cid.startsWith('blob:');
 			return {
 				...size,
-				src: isPreview ? cid : img('feed_fullsize', did, cid),
+				src: img('feed_fullsize', did, cid),
 				thumbnail: {
-					src: isPreview ? cid : img('feed_thumbnail', did, cid),
+					src: img('feed_thumbnail', did, cid),
 					...size
 				}
 			};
 		})}
-		<PhotoSwipeGallery {images} />
+		{#if images.length > 0}
+			<PhotoSwipeGallery {images} />
+		{/if}
 	{:else if embed.$type === 'app.bsky.embed.video'}
 		{#if isBlob(embed.video)}
-			{@const cid = embed.video.ref.$link}
-			{@const isPreview = cid.startsWith('blob:')}
-			{#if isPreview}
-				<!-- svelte-ignore a11y_media_has_caption -->
-				<video class="rounded-sm" src={cid} controls></video>
-			{:else}
-				{#await resolveDidDoc(did) then didDoc}
-					{#if didDoc.ok}
-						<!-- svelte-ignore a11y_media_has_caption -->
-						<video class="rounded-sm" src={blob(didDoc.value.pds, did, cid)} controls></video>
-					{/if}
-				{/await}
-			{/if}
+			{#await resolveDidDoc(did) then didDoc}
+				{#if didDoc.ok}
+					<!-- svelte-ignore a11y_media_has_caption -->
+					<video
+						class="rounded-sm"
+						src={blob(didDoc.value.pds, did, embed.video.ref.$link)}
+						controls
+					></video>
+				{/if}
+			{/await}
 		{/if}
 	{/if}
 </div>

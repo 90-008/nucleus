@@ -1,4 +1,3 @@
-import { replaceState } from '$app/navigation';
 import { addAccount, loggingIn } from '$lib/accounts';
 import { AtpClient } from '$lib/at/client';
 import { flow, sessions } from '$lib/at/oauth';
@@ -24,7 +23,7 @@ const handleLogin = async (): Promise<Result<AtpClient | null, string>> => {
 	const currentUrl = new URL(window.location.href);
 	// scrub history so auth state cant be replayed
 	try {
-		replaceState('', '/');
+		history.replaceState(null, '', '/');
 	} catch {
 		// if router was unitialized then we probably dont need to scrub anyway
 		// so its fine

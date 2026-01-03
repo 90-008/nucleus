@@ -32,6 +32,7 @@
 	import { JetstreamSubscription } from '@atcute/jetstream';
 	import { settings } from '$lib/settings';
 	import type { Sort } from '$lib/following';
+	import { SvelteMap } from 'svelte/reactivity';
 
 	const { data: loadData }: PageProps = $props();
 
@@ -83,7 +84,11 @@
 		else animClass = 'animate-fade-in-scale';
 	});
 
-	let postComposerState = $state<PostComposerState>({ focus: 'null', text: '' });
+	let postComposerState = $state<PostComposerState>({
+		focus: 'null',
+		text: '',
+		blobsState: new SvelteMap()
+	});
 	let showScrollToTop = $state(false);
 	const handleScroll = () => {
 		if (currentRoute.path === '/' || currentRoute.path === '/profile/:actor')
