@@ -14,11 +14,11 @@ stdenv.mkDerivation {
     ];
   };
 
-  outputHash = "sha256-oZKRCeIxjkv8Iujo82FaumsEnpt8pSqoYDbibmPgmZA=";
+  outputHash = "sha256-1AkU6eV0uIUZohotHhd8E5eAwc4E4wwg2SjHVUdX8LE=";
   outputHashAlgo = "sha256";
   outputHashMode = "recursive";
 
-  nativeBuildInputs = [deno];
+  nativeBuildInputs = [ deno ];
 
   dontConfigure = true;
   dontCheck = true;
