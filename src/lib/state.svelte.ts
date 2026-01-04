@@ -32,29 +32,37 @@ export const jetstream = writable<JetstreamSubscription | null>(null);
 export const profiles = new SvelteMap<Did, AppBskyActorProfile.Main>();
 export const handles = new SvelteMap<Did, Handle>();
 
-export type BacklinksMap = SvelteMap<BacklinksSource, SvelteSet<Backlink>>;
-export const allBacklinks = new SvelteMap<ResourceUri, BacklinksMap>();
+// source -> subject -> did (who did the interaction) -> rkey
+export type BacklinksMap = SvelteMap<
+	BacklinksSource,
+	SvelteMap<ResourceUri, SvelteMap<Did, SvelteSet<RecordKey>>>
+>;
+export const allBacklinks: BacklinksMap = new SvelteMap();
 
 export const addBacklinks = (
 	subject: ResourceUri,
 	source: BacklinksSource,
 	links: Iterable<Backlink>
 ) => {
-	let postsMap = allBacklinks.get(subject);
-	if (!postsMap) {
-		postsMap = new SvelteMap();
-		allBacklinks.set(subject, postsMap);
+	let subjectMap = allBacklinks.get(source);
+	if (!subjectMap) {
+		subjectMap = new SvelteMap();
+		allBacklinks.set(source, subjectMap);
 	}
-	let backlinksSet = postsMap.get(source);
-	if (!backlinksSet) {
-		backlinksSet = new SvelteSet();
-		postsMap.set(source, backlinksSet);
+
+	let didMap = subjectMap.get(subject);
+	if (!didMap) {
+		didMap = new SvelteMap();
+		subjectMap.set(subject, didMap);
 	}
+
 	for (const link of links) {
-		backlinksSet.add(link);
-		// console.log(
-		// 	`added backlink at://${link.did}/${link.collection}/${link.rkey} to ${subject} from ${source}`
-		// );
+		let rkeys = didMap.get(link.did);
+		if (!rkeys) {
+			rkeys = new SvelteSet();
+			didMap.set(link.did, rkeys);
+		}
+		rkeys.add(link.rkey);
 	}
 };
 
@@ -63,23 +71,46 @@ export const removeBacklinks = (
 	source: BacklinksSource,
 	links: Iterable<Backlink>
 ) => {
-	const postsMap = allBacklinks.get(subject);
-	if (!postsMap) return;
-	const backlinksSet = postsMap.get(source);
-	if (!backlinksSet) return;
-	for (const link of links) backlinksSet.delete(link);
+	const didMap = allBacklinks.get(source)?.get(subject);
+	if (!didMap) return;
+
+	for (const link of links) {
+		const rkeys = didMap.get(link.did);
+		if (!rkeys) continue;
+		rkeys.delete(link.rkey);
+		if (rkeys.size === 0) didMap.delete(link.did);
+	}
 };
 
-export const findBacklinksBy = (
-	subject: ResourceUri,
-	source: BacklinksSource,
-	did: Did
-): Backlink[] => {
-	const postsMap = allBacklinks.get(subject);
-	if (!postsMap) return [];
-	const backlinksSet = postsMap.get(source);
-	if (!backlinksSet) return [];
-	return Array.from(backlinksSet.values().filter((link) => link.did === did));
+export const findBacklinksBy = (subject: ResourceUri, source: BacklinksSource, did: Did) => {
+	const rkeys = allBacklinks.get(source)?.get(subject)?.get(did) ?? [];
+	// reconstruct the collection from the source
+	const collection = source.split(':')[0] as Nsid;
+	return rkeys.values().map((rkey) => ({ did, collection, rkey }));
+};
+
+export const hasBacklink = (subject: ResourceUri, source: BacklinksSource, did: Did): boolean => {
+	return allBacklinks.get(source)?.get(subject)?.has(did) ?? false;
+};
+
+export const getAllBacklinksFor = (subject: ResourceUri, source: BacklinksSource): Backlink[] => {
+	const subjectMap = allBacklinks.get(source);
+	if (!subjectMap) return [];
+
+	const didMap = subjectMap.get(subject);
+	if (!didMap) return [];
+
+	const collection = source.split(':')[0] as Nsid;
+	const result: Backlink[] = [];
+
+	for (const [did, rkeys] of didMap)
+		for (const rkey of rkeys) result.push({ did, collection, rkey });
+
+	return result;
+};
+
+export const isBlockedBy = (subject: Did, blocker: Did): boolean => {
+	return hasBacklink(`at://${subject}`, 'app.bsky.graph.block:subject', blocker);
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -17,12 +17,12 @@
 		allPosts,
 		pulsingPostId,
 		currentTime,
-		findBacklinksBy,
 		deletePostBacklink,
 		createPostBacklink,
 		router,
 		profiles,
-		handles
+		handles,
+		hasBacklink
 	} from '$lib/state.svelte';
 	import type { PostWithUri } from '$lib/at/fetch';
 	import { onMount, type Snippet } from 'svelte';
@@ -315,8 +315,8 @@
 {/snippet}
 
 {#snippet postControls(post: PostWithUri)}
-	{@const myRepost = findBacklinksBy(post.uri, repostSource, selectedDid!).length > 0}
-	{@const myLike = findBacklinksBy(post.uri, likeSource, selectedDid!).length > 0}
+	{@const myRepost = hasBacklink(post.uri, repostSource, selectedDid!)}
+	{@const myLike = hasBacklink(post.uri, likeSource, selectedDid!)}
 	{#snippet control({
 		name,
 		icon,
