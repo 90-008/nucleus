@@ -9,7 +9,7 @@ export const BacklinkSchema = v.object({
 });
 export const BacklinksQuery = v.query('blue.microcosm.links.getBacklinks', {
 	params: v.object({
-		subject: v.resourceUriString(),
+		subject: v.string(),
 		source: v.string(),
 		did: v.optional(v.array(v.didString())),
 		limit: v.optional(v.integer())

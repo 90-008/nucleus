@@ -28,6 +28,8 @@ export const extractDidFromUri = (uri: string): Did | null => {
 export const likeSource: BacklinksSource = 'app.bsky.feed.like:subject.uri';
 export const repostSource: BacklinksSource = 'app.bsky.feed.repost:subject.uri';
 export const replySource: BacklinksSource = 'app.bsky.feed.post:reply.parent.uri';
+export const replyRootSource: BacklinksSource = 'app.bsky.feed.post:reply.root.uri';
+export const blockSource: BacklinksSource = 'app.bsky.graph.block:subject';
 
 export const timestampFromCursor = (cursor: string | undefined) => {
 	if (!cursor) return undefined;

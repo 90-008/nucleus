@@ -1,0 +1,13 @@
+{
+	"lsp": {
+		"vtsls": {
+			"settings": {
+				"typescript": {
+					"suggestionActions": {
+						"enabled": false
+					}
+				}
+			}
+		}
+	}
+}

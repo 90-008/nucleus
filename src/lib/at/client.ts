@@ -8,7 +8,6 @@ import { Client as AtcuteClient, simpleFetchHandler } from '@atcute/client';
 import { safeParse, type Blob as AtpBlob, type Handle, type InferOutput } from '@atcute/lexicons';
 import {
 	isDid,
-	parseCanonicalResourceUri,
 	parseResourceUri,
 	type ActorIdentifier,
 	type AtprotoDid,
@@ -36,7 +35,7 @@ import { WebSocket } from '@soffinal/websocket';
 import type { Notification } from './stardust';
 import type { OAuthUserAgent } from '@atcute/oauth-browser-client';
 import { timestampFromCursor, toCanonicalUri, toResourceUri } from '$lib';
-import { constellationUrl, slingshotUrl, spacedustUrl } from '.';
+import { constellationUrl, httpToDidWeb, slingshotUrl, spacedustUrl } from '.';
 
 export type RecordOutput<Output> = { uri: ResourceUri; cid: Cid | undefined; record: Output };
 
@@ -90,32 +89,19 @@ export const xhrPost = (
 
 		if (onProgress && xhr.upload) {
 			xhr.upload.onprogress = (event: ProgressEvent) => {
-				if (event.lengthComputable) {
-					onProgress(event.loaded, event.total);
-				}
+				if (event.lengthComputable) onProgress(event.loaded, event.total);
 			};
 		}
 
-		Object.keys(headers).forEach((key) => {
-			xhr.setRequestHeader(key, headers[key]);
-		});
+		Object.keys(headers).forEach((key) => xhr.setRequestHeader(key, headers[key]));
 
 		xhr.onload = () => {
-			if (xhr.status >= 200 && xhr.status < 300) {
-				resolve(ok(JSON.parse(xhr.responseText)));
-			} else {
-				resolve(err(JSON.parse(xhr.responseText)));
-			}
+			if (xhr.status >= 200 && xhr.status < 300) resolve(ok(JSON.parse(xhr.responseText)));
+			else resolve(err(JSON.parse(xhr.responseText)));
 		};
 
-		xhr.onerror = () => {
-			resolve(err({ error: 'xhr_error', message: 'network error' }));
-		};
-
-		xhr.onabort = () => {
-			resolve(err({ error: 'xhr_error', message: 'upload aborted' }));
-		};
-
+		xhr.onerror = () => resolve(err({ error: 'xhr_error', message: 'network error' }));
+		xhr.onabort = () => resolve(err({ error: 'xhr_error', message: 'upload aborted' }));
 		xhr.send(body);
 	});
 };
@@ -202,16 +188,23 @@ export class AtpClient {
 	}
 
 	async listRecords<Collection extends keyof Records>(
+		ident: ActorIdentifier,
 		collection: Collection,
 		cursor?: string,
 		limit: number = 100
 	): Promise<
 		Result<InferXRPCBodyOutput<(typeof ComAtprotoRepoListRecords.mainSchema)['output']>, string>
 	> {
-		if (!this.atcute || !this.user) return err('not authenticated');
-		const res = await this.atcute.get('com.atproto.repo.listRecords', {
+		if (!this.atcute) return err('not authenticated');
+		const docRes = await resolveDidDoc(ident);
+		if (!docRes.ok) return docRes;
+		const atp =
+			this.user?.did === docRes.value.did
+				? this.atcute
+				: new AtcuteClient({ handler: simpleFetchHandler({ service: docRes.value.pds }) });
+		const res = await atp.get('com.atproto.repo.listRecords', {
 			params: {
-				repo: this.user.did,
+				repo: docRes.value.did,
 				collection,
 				cursor,
 				limit,
@@ -227,6 +220,7 @@ export class AtpClient {
 	}
 
 	async listRecordsUntil<Collection extends keyof Records>(
+		ident: ActorIdentifier,
 		collection: Collection,
 		cursor?: string,
 		timestamp: number = -1
@@ -238,7 +232,7 @@ export class AtpClient {
 
 		let end = false;
 		while (!end) {
-			const res = await this.listRecords(collection, data.cursor);
+			const res = await this.listRecords(ident, collection, data.cursor);
 			if (!res.ok) return res;
 			data.cursor = res.value.cursor;
 			data.records.push(...res.value.records);
@@ -255,7 +249,7 @@ export class AtpClient {
 					end = true;
 				} else {
 					console.info(
-						`${this.user?.did}: continuing to fetch ${collection}, on ${cursorTimestamp} until ${timestamp}`
+						`${ident}: continuing to fetch ${collection}, on ${cursorTimestamp} until ${timestamp}`
 					);
 				}
 			}
@@ -264,34 +258,22 @@ export class AtpClient {
 		return ok(data);
 	}
 
-	async getBacklinksUri(
-		uri: ResourceUri,
-		source: BacklinksSource
-	): Promise<Result<Backlinks, string>> {
-		const parsedResourceUri = expect(parseCanonicalResourceUri(uri));
-		return await this.getBacklinks(
-			parsedResourceUri.repo,
-			parsedResourceUri.collection,
-			parsedResourceUri.rkey,
-			source
-		);
-	}
-
 	async getBacklinks(
-		repo: ActorIdentifier,
-		collection: Nsid,
-		rkey: RecordKey,
+		subject: ResourceUri,
 		source: BacklinksSource,
+		filterBy?: Did[],
 		limit?: number
 	): Promise<Result<Backlinks, string>> {
+		const { repo, collection, rkey } = expect(parseResourceUri(subject));
 		const did = await resolveHandle(repo);
 		if (!did.ok) return err(`cant resolve handle: ${did.error}`);
 
 		const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000));
 		const query = fetchMicrocosm(constellationUrl, BacklinksQuery, {
-			subject: toCanonicalUri({ did: did.value, collection, rkey }),
+			subject: collection ? toCanonicalUri({ did: did.value, collection, rkey: rkey! }) : did.value,
 			source,
-			limit: limit || 100
+			limit: limit || 100,
+			did: filterBy
 		});
 
 		const results = await Promise.race([query, timeout]);
@@ -303,10 +285,7 @@ export class AtpClient {
 	async getServiceAuth(lxm: keyof XRPCProcedures, exp: number): Promise<Result<string, string>> {
 		if (!this.atcute || !this.user) return err('not authenticated');
 		const serviceAuthUrl = new URL(`${this.user.pds}xrpc/com.atproto.server.getServiceAuth`);
-		serviceAuthUrl.searchParams.append(
-			'aud',
-			this.user.pds.replace('https://', 'did:web:').slice(0, -1)
-		);
+		serviceAuthUrl.searchParams.append('aud', httpToDidWeb(this.user.pds));
 		serviceAuthUrl.searchParams.append('lxm', 'com.atproto.repo.uploadBlob');
 		serviceAuthUrl.searchParams.append('exp', exp.toString()); // 30 minutes
 
@@ -412,41 +391,32 @@ export class AtpClient {
 	}
 }
 
-export const newPublicClient = async (ident: ActorIdentifier): Promise<AtpClient> => {
-	const atp = new AtpClient();
-	const didDoc = await resolveDidDoc(ident);
-	if (!didDoc.ok) {
-		console.error('failed to resolve did doc', didDoc.error);
-		return atp;
-	}
-	atp.atcute = new AtcuteClient({ handler: simpleFetchHandler({ service: didDoc.value.pds }) });
-	atp.user = didDoc.value;
-	return atp;
+// export const newPublicClient = async (ident: ActorIdentifier) => {
+// 	const atp = new AtpClient();
+// 	const didDoc = await resolveDidDoc(ident);
+// 	if (!didDoc.ok) {
+// 		console.error('failed to resolve did doc', didDoc.error);
+// 		return atp;
+// 	}
+// 	atp.atcute = new AtcuteClient({ handler: simpleFetchHandler({ service: didDoc.value.pds }) });
+// 	atp.user = didDoc.value;
+// 	return atp;
+// };
+
+export const resolveHandle = (identifier: ActorIdentifier) => {
+	if (isDid(identifier)) return Promise.resolve(ok(identifier as AtprotoDid));
+
+	return cache
+		.resolveHandle(identifier)
+		.then((did) => ok(did))
+		.catch((e) => err(String(e)));
 };
 
-// Wrappers that use the cache
-
-export const resolveHandle = async (
-	identifier: ActorIdentifier
-): Promise<Result<AtprotoDid, string>> => {
-	if (isDid(identifier)) return ok(identifier as AtprotoDid);
-
-	try {
-		const did = await cache.resolveHandle(identifier);
-		return ok(did);
-	} catch (e) {
-		return err(String(e));
-	}
-};
-
-export const resolveDidDoc = async (ident: ActorIdentifier): Promise<Result<MiniDoc, string>> => {
-	try {
-		const doc = await cache.resolveDidDoc(ident);
-		return ok(doc);
-	} catch (e) {
-		return err(String(e));
-	}
-};
+export const resolveDidDoc = (ident: ActorIdentifier) =>
+	cache
+		.resolveDidDoc(ident)
+		.then((doc) => ok(doc))
+		.catch((e) => err(String(e)));
 
 type NotificationsStreamEncoder = WebSocket.Encoder<undefined, Notification>;
 export type NotificationsStream = WebSocket<NotificationsStreamEncoder>;
@@ -485,7 +455,9 @@ const fetchMicrocosm = async <
 ): Promise<Result<Output, string>> => {
 	if (!schema.output || schema.output.type === 'blob') return err('schema must be blob');
 	api.pathname = `/xrpc/${schema.nsid}`;
-	api.search = params ? `?${new URLSearchParams(params)}` : '';
+	api.search = params
+		? `?${new URLSearchParams(Object.entries(params).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])))}`
+		: '';
 	try {
 		const body = await fetchJson(api, init);
 		if (!body.ok) return err(body.error);

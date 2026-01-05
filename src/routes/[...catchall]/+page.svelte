@@ -12,8 +12,6 @@
 	import {
 		clients,
 		postCursors,
-		fetchForInteractions,
-		fetchFollows,
 		follows,
 		notificationStream,
 		viewClient,
@@ -22,7 +20,8 @@
 		handleNotification,
 		addPosts,
 		addTimeline,
-		router
+		router,
+		fetchInitial
 	} from '$lib/state.svelte';
 	import { get } from 'svelte/store';
 	import Icon from '@iconify/svelte';
@@ -113,7 +112,8 @@
 					'app.bsky.feed.post:embed.record.uri',
 					'app.bsky.feed.repost:subject.uri',
 					'app.bsky.feed.like:subject.uri',
-					'app.bsky.graph.follow:subject'
+					'app.bsky.graph.follow:subject',
+					'app.bsky.graph.block:subject'
 				)
 			);
 		});
@@ -144,16 +144,7 @@
 			}
 			if (!$accounts.some((account) => account.did === selectedDid)) selectedDid = $accounts[0].did;
 			// console.log('onMount selectedDid', selectedDid);
-			Promise.all($accounts.map(loginAccount)).then(() => {
-				$accounts.forEach((account) => {
-					fetchFollows(account.did).then(() =>
-						follows
-							.get(account.did)
-							?.forEach((follow) => fetchForInteractions(follow.subject as AtprotoDid))
-					);
-					fetchForInteractions(account.did);
-				});
-			});
+			Promise.all($accounts.map(loginAccount)).then(() => $accounts.forEach(fetchInitial));
 		} else {
 			selectedDid = null;
 		}
@@ -163,11 +154,11 @@
 
 	$effect(() => {
 		const wantedDids: Did[] = ['did:web:guestbook.gaze.systems'];
-
-		for (const followMap of follows.values())
-			for (const follow of followMap.values()) wantedDids.push(follow.subject);
-		for (const account of $accounts) wantedDids.push(account.did);
-
+		const followDids = follows
+			.values()
+			.flatMap((followMap) => followMap.values().map((follow) => follow.subject));
+		const accountDids = $accounts.values().map((account) => account.did);
+		wantedDids.push(...followDids, ...accountDids);
 		// console.log('updating jetstream options:', wantedDids);
 		$jetstream?.updateOptions({ wantedDids });
 	});

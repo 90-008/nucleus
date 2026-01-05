@@ -11,7 +11,7 @@
 		fetchTimeline,
 		allPosts,
 		timelines,
-		fetchInteractionsUntil
+		fetchInteractionsToTimelineEnd
 	} from '$lib/state.svelte';
 	import Icon from '@iconify/svelte';
 	import { buildThreads, filterThreads, type ThreadPost } from '$lib/thread';
@@ -53,7 +53,6 @@
 	const loaderState = new LoaderState();
 	let scrollContainer = $state<HTMLDivElement>();
 	let loading = $state(false);
-	let fetchMoreInteractions: boolean | undefined = $state(false);
 	let loadError = $state('');
 
 	const loadMore = async () => {
@@ -63,9 +62,9 @@
 		loaderState.status = 'LOADING';
 
 		try {
-			await fetchTimeline(did as AtprotoDid, 7, showReplies);
-			// interaction fetching is done lazily so we dont block loading posts
-			fetchMoreInteractions = true;
+			await fetchTimeline(client, did as AtprotoDid, 7, showReplies);
+			// only fetch interactions if logged in (because if not who is the interactor)
+			if (client.user) await fetchInteractionsToTimelineEnd(client, did);
 			loaderState.loaded();
 		} catch (error) {
 			loadError = `${error}`;
@@ -87,11 +86,12 @@
 			const cursor = did ? postCursors.get(did as AtprotoDid) : undefined;
 			if (!cursor?.end) loadMore();
 		}
-		if (client && did && fetchMoreInteractions) {
-			// set to false so it doesnt attempt to fetch again while its already fetching
-			fetchMoreInteractions = false;
-			fetchInteractionsUntil(client, did).then(() => (fetchMoreInteractions = undefined));
-		}
+	});
+	// we want to load interactions when changing logged in user on timelines
+	// only on timelines that arent logged in users, because those are already
+	// loaded by loadMore
+	$effect(() => {
+		if (client && did && client.user?.did !== did) fetchInteractionsToTimelineEnd(client, did);
 	});
 </script>
 

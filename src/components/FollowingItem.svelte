@@ -1,5 +1,4 @@
 <script lang="ts" module>
-	// Cache for synchronous access during component recycling
 	const profileCache = new SvelteMap<string, { displayName?: string; handle: string }>();
 </script>
 
@@ -8,11 +7,11 @@
 	import { getRelativeTime } from '$lib/date';
 	import { generateColorForDid } from '$lib/accounts';
 	import type { Did } from '@atcute/lexicons';
-	import type { AtprotoDid } from '@atcute/lexicons/syntax';
 	import type { calculateFollowedUserStats, Sort } from '$lib/following';
-	import type { AtpClient } from '$lib/at/client';
+	import { resolveDidDoc, type AtpClient } from '$lib/at/client';
 	import { SvelteMap } from 'svelte/reactivity';
-	import { clients, getClient, router } from '$lib/state.svelte';
+	import { router } from '$lib/state.svelte';
+	import { map } from '$lib/result';
 
 	interface Props {
 		style: string;
@@ -35,48 +34,20 @@
 			const c = profileCache.get(targetDid)!;
 			displayName = c.displayName;
 			handle = c.handle;
-		} else {
-			const existingClient = clients.get(targetDid as AtprotoDid);
-			if (existingClient?.user?.handle) {
-				handle = existingClient.user.handle;
-			} else {
-				handle = 'handle.invalid';
-				displayName = undefined;
-			}
 		}
 
 		try {
-			// Optimization: Check clients map first to avoid async overhead if possible
-			// but we need to ensure we have the profile data, not just client existence.
-			const userClient = await getClient(targetDid as AtprotoDid);
-
-			// Check if the component has been recycled for a different user while we were awaiting
+			const [profileRes, handleRes] = await Promise.all([
+				client.getProfile(),
+				resolveDidDoc(targetDid).then((r) => map(r, (doc) => doc.handle))
+			]);
 			if (did !== targetDid) return;
+			if (profileRes.ok) displayName = profileRes.value.displayName;
+			if (handleRes.ok) handle = handleRes.value;
 
-			let newHandle = handle;
-			let newDisplayName = displayName;
-
-			if (userClient.user?.handle) {
-				newHandle = userClient.user.handle;
-				handle = newHandle;
-			} else {
-				newHandle = targetDid;
-				handle = newHandle;
-			}
-
-			const profileRes = await userClient.getProfile();
-
-			if (did !== targetDid) return;
-
-			if (profileRes.ok) {
-				newDisplayName = profileRes.value.displayName;
-				displayName = newDisplayName;
-			}
-
-			// Update cache
 			profileCache.set(targetDid, {
-				handle: newHandle,
-				displayName: newDisplayName
+				handle,
+				displayName
 			});
 		} catch (e) {
 			if (did !== targetDid) return;
@@ -85,7 +56,6 @@
 		}
 	};
 
-	// Re-run whenever `did` changes
 	$effect(() => {
 		loadProfile(did);
 	});

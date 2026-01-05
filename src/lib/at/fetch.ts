@@ -17,12 +17,13 @@ export type PostWithBacklinks = PostWithUri & {
 };
 
 export const fetchPosts = async (
+	subject: Did,
 	client: AtpClient,
 	cursor?: string,
 	limit?: number,
 	withBacklinks: boolean = true
 ): Promise<Result<{ posts: PostWithBacklinks[]; cursor?: string }, string>> => {
-	const recordsList = await client.listRecords('app.bsky.feed.post', cursor, limit);
+	const recordsList = await client.listRecords(subject, 'app.bsky.feed.post', cursor, limit);
 	if (!recordsList.ok) return err(`can't retrieve posts: ${recordsList.error}`);
 	cursor = recordsList.value.cursor;
 	const records = recordsList.value.records;
@@ -41,7 +42,7 @@ export const fetchPosts = async (
 	try {
 		const allBacklinks = await Promise.all(
 			records.map(async (r): Promise<PostWithBacklinks> => {
-				const result = await client.getBacklinksUri(r.uri, replySource);
+				const result = await client.getBacklinks(r.uri, replySource);
 				if (!result.ok) throw `cant fetch replies: ${result.error}`;
 				const replies = result.value;
 				return {
@@ -120,7 +121,7 @@ export const hydratePosts = async (
 			if (repo === postRepo) return;
 
 			// get chains that are the same author until we exhaust them
-			const backlinks = await client.getBacklinksUri(post.uri, replySource);
+			const backlinks = await client.getBacklinks(post.uri, replySource);
 			if (!backlinks.ok) return;
 
 			const promises = [];
