@@ -158,11 +158,7 @@
 
 	const unfocus = () => (_state.focus = 'null');
 
-	const handleFileSelect = (event: Event) => {
-		selectingFile = false;
-
-		const input = event.target as HTMLInputElement;
-		const files = input.files;
+	const handleFiles = (files: File[]) => {
 		if (!files || files.length === 0) return;
 
 		const existingImages =
@@ -239,6 +235,32 @@
 			const blobUrl = (media.video as AtpBlob<string>).ref.$link;
 			uploadVideo(blobUrl, media.video.mimeType).then((r) => handleUpload(blobUrl, r));
 		}
+	};
+
+	const handlePaste = (e: ClipboardEvent) => {
+		const files = Array.from(e.clipboardData?.items ?? [])
+			.filter((item) => item.kind === 'file')
+			.map((item) => item.getAsFile())
+			.filter((file): file is File => file !== null);
+
+		if (files.length > 0) {
+			e.preventDefault();
+			handleFiles(files);
+		}
+	};
+
+	const handleDrop = (e: DragEvent) => {
+		e.preventDefault();
+		const files = Array.from(e.dataTransfer?.files ?? []);
+		if (files.length > 0) handleFiles(files);
+	};
+
+	const handleFileSelect = (e: Event) => {
+		e.preventDefault();
+		selectingFile = false;
+
+		const input = e.target as HTMLInputElement;
+		if (input.files) handleFiles(Array.from(input.files));
 
 		input.value = '';
 	};
@@ -489,7 +511,13 @@
 	{#if replying}
 		{@render attachedPost(replying, 'replying')}
 	{/if}
-	<div class="composer space-y-2">
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div
+		class="composer space-y-2"
+		onpaste={handlePaste}
+		ondrop={handleDrop}
+		ondragover={(e) => e.preventDefault()}
+	>
 		<div class="relative grid">
 			<!-- todo: replace this with a proper rich text editor -->
 			<div
