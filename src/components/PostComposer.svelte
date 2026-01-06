@@ -44,8 +44,8 @@
 	);
 
 	const uploadVideo = async (blobUrl: string, mimeType: string) => {
-		const blob = await (await fetch(blobUrl)).blob();
-		return await client.uploadVideo(blob, mimeType, (status) => {
+		const file = await (await fetch(blobUrl)).blob();
+		return await client.uploadVideo(file, mimeType, (status) => {
 			if (status.stage === 'uploading' && status.progress !== undefined) {
 				_state.blobsState.set(blobUrl, { state: 'uploading', progress: status.progress * 0.5 });
 			} else if (status.stage === 'processing' && status.progress !== undefined) {
@@ -57,8 +57,8 @@
 		});
 	};
 	const uploadImage = async (blobUrl: string) => {
-		const blob = await (await fetch(blobUrl)).blob();
-		return await client.uploadBlob(blob, (progress) => {
+		const file = await (await fetch(blobUrl)).blob();
+		return await client.uploadBlob(file, (progress) => {
 			_state.blobsState.set(blobUrl, { state: 'uploading', progress });
 		});
 	};
@@ -101,7 +101,7 @@
 					video: upload.blob
 				};
 		}
-		console.log('media', media);
+		// console.log('media', media);
 
 		const record: AppBskyFeedPost.Main = {
 			$type: 'app.bsky.feed.post',
@@ -156,10 +156,18 @@
 	let fileInputEl: HTMLInputElement | undefined = $state();
 	let selectingFile = $state(false);
 
+	const canUpload = $derived(
+		!(
+			_state.attachedMedia?.$type === 'app.bsky.embed.video' ||
+			(_state.attachedMedia?.$type === 'app.bsky.embed.images' &&
+				_state.attachedMedia.images.length >= 4)
+		)
+	);
+
 	const unfocus = () => (_state.focus = 'null');
 
 	const handleFiles = (files: File[]) => {
-		if (!files || files.length === 0) return;
+		if (!canUpload || !files || files.length === 0) return;
 
 		const existingImages =
 			_state.attachedMedia?.$type === 'app.bsky.embed.images' ? _state.attachedMedia.images : [];
@@ -220,9 +228,9 @@
 			};
 		}
 
-		const handleUpload = (blobUrl: string, blob: Result<AtpBlob<string>, string>) => {
-			if (blob.ok) _state.blobsState.set(blobUrl, { state: 'uploaded', blob: blob.value });
-			else _state.blobsState.set(blobUrl, { state: 'error', message: blob.error });
+		const handleUpload = (blobUrl: string, res: Result<AtpBlob<string>, string>) => {
+			if (res.ok) _state.blobsState.set(blobUrl, { state: 'uploaded', blob: res.value });
+			else _state.blobsState.set(blobUrl, { state: 'error', message: res.error });
 		};
 
 		const media = _state.attachedMedia;
@@ -459,9 +467,7 @@
 				fileInputEl?.click();
 			}}
 			onmousedown={(e) => e.preventDefault()}
-			disabled={_state.attachedMedia?.$type === 'app.bsky.embed.video' ||
-				(_state.attachedMedia?.$type === 'app.bsky.embed.images' &&
-					_state.attachedMedia.images.length >= 4)}
+			disabled={!canUpload}
 			class="rounded-sm p-1.5 transition-all duration-150 enabled:hover:scale-110 disabled:cursor-not-allowed disabled:opacity-50"
 			style="background: color-mix(in srgb, {color} 15%, transparent); color: {color};"
 			title="attach media"

@@ -327,7 +327,7 @@ export class AtpClient {
 			(uploaded, total) => onProgress?.(uploaded / total)
 		);
 		if (!result.ok) return err(`upload failed: ${result.error.message}`);
-		return ok(result.value);
+		return ok(result.value.blob);
 	}
 
 	async uploadVideo(

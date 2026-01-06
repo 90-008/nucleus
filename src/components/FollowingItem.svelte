@@ -1,7 +1,3 @@
-<script lang="ts" module>
-	const profileCache = new SvelteMap<string, { displayName?: string; handle: string }>();
-</script>
-
 <script lang="ts">
 	import ProfilePicture from './ProfilePicture.svelte';
 	import BlockedUserIndicator from './BlockedUserIndicator.svelte';
@@ -10,8 +6,7 @@
 	import type { Did } from '@atcute/lexicons';
 	import type { calculateFollowedUserStats, Sort } from '$lib/following';
 	import { resolveDidDoc, type AtpClient } from '$lib/at/client.svelte';
-	import { SvelteMap } from 'svelte/reactivity';
-	import { router, getBlockRelationship } from '$lib/state.svelte';
+	import { router, getBlockRelationship, profiles, handles } from '$lib/state.svelte';
 	import { map } from '$lib/result';
 
 	interface Props {
@@ -31,14 +26,13 @@
 	);
 	const isBlocked = $derived(blockRel.userBlocked || blockRel.blockedByTarget);
 
-	const cached = $derived(profileCache.get(did));
-	const displayName = $derived(cached?.displayName);
-	const handle = $derived(cached?.handle ?? 'handle.invalid');
+	const displayName = $derived(profiles.get(did)?.displayName);
+	const handle = $derived(handles.get(did) ?? 'loading...');
 
 	let error = $state('');
 
 	const loadProfile = async (targetDid: Did) => {
-		if (profileCache.has(targetDid)) return;
+		if (profiles.has(targetDid) && handles.has(targetDid)) return;
 
 		try {
 			const [profileRes, handleRes] = await Promise.all([
@@ -47,10 +41,9 @@
 			]);
 			if (did !== targetDid) return;
 
-			profileCache.set(targetDid, {
-				handle: handleRes.ok ? handleRes.value : handle,
-				displayName: profileRes.ok ? profileRes.value.displayName : displayName
-			});
+			if (profileRes.ok) profiles.set(targetDid, profileRes.value);
+			if (handleRes.ok) handles.set(targetDid, handleRes.value);
+			else handles.set(targetDid, 'handle.invalid');
 		} catch (e) {
 			if (did !== targetDid) return;
 			console.error(`failed to load profile for ${targetDid}`, e);
