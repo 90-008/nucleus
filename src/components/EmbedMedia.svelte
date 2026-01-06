@@ -29,7 +29,8 @@
 				thumbnail: {
 					src: img('feed_thumbnail', did, cid),
 					...size
-				}
+				},
+				alt: i.alt
 			};
 		})}
 		{#if images.length > 0}

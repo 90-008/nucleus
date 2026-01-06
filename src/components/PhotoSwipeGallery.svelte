@@ -76,7 +76,13 @@
 			class:hidden-in-grid={isHidden}
 			class:overlay-container={isOverlay}
 		>
-			<img src={thumb.src} alt={img.alt ?? ''} width={thumb.width} height={thumb.height} />
+			<img
+				src={thumb.src}
+				title={img.alt ?? ''}
+				alt={img.alt ?? ''}
+				width={thumb.width}
+				height={thumb.height}
+			/>
 
 			{#if isOverlay}
 				<div class="more-overlay">
