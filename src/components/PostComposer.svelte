@@ -277,6 +277,7 @@
 		if (_state.attachedMedia?.$type === 'app.bsky.embed.video') {
 			const blobUrl = (_state.attachedMedia.video as AtpBlob<string>).ref.$link;
 			_state.blobsState.delete(blobUrl);
+			queueMicrotask(() => URL.revokeObjectURL(blobUrl));
 		}
 		_state.attachedMedia = undefined;
 	};
@@ -286,6 +287,7 @@
 		const imageToRemove = _state.attachedMedia.images[index];
 		const blobUrl = (imageToRemove.image as AtpBlob<string>).ref.$link;
 		_state.blobsState.delete(blobUrl);
+		queueMicrotask(() => URL.revokeObjectURL(blobUrl));
 
 		const images = _state.attachedMedia.images.filter((_, i) => i !== index);
 		_state.attachedMedia = images.length > 0 ? { ..._state.attachedMedia, images } : undefined;
@@ -303,6 +305,12 @@
 					_state.text = '';
 					_state.quoting = undefined;
 					_state.replying = undefined;
+					if (_state.attachedMedia?.$type === 'app.bsky.embed.video')
+						URL.revokeObjectURL((_state.attachedMedia.video as AtpBlob<string>).ref.$link);
+					else if (_state.attachedMedia?.$type === 'app.bsky.embed.images')
+						_state.attachedMedia.images.forEach((image) =>
+							URL.revokeObjectURL((image.image as AtpBlob<string>).ref.$link)
+						);
 					_state.attachedMedia = undefined;
 					_state.blobsState.clear();
 					unfocus();

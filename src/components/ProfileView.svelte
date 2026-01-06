@@ -150,19 +150,19 @@
 			</div>
 		{:else}
 			<!-- banner -->
-			<div class="relative h-32 w-full overflow-hidden bg-(--nucleus-fg)/5 md:h-48">
-				{#if bannerUrl}
+			{#if bannerUrl}
+				<div class="relative h-32 w-full overflow-hidden bg-(--nucleus-fg)/5 md:h-48">
 					<img src={bannerUrl} alt="banner" class="h-full w-full object-cover" />
-				{/if}
-				<div
-					class="absolute inset-0 bg-linear-to-b from-transparent to-(--nucleus-bg)"
-					style="opacity: 0.8;"
-				></div>
-			</div>
+					<div
+						class="absolute inset-0 bg-linear-to-b from-transparent to-(--nucleus-bg)"
+						style="opacity: 0.8;"
+					></div>
+				</div>
+			{/if}
 
 			{#if did}
 				<div class="px-4 pb-4">
-					<div class="relative z-10 -mt-12 mb-4">
+					<div class="relative z-10 {bannerUrl ? '-mt-12' : 'mt-4'} mb-4">
 						<ProfileInfo {client} {did} bind:profile />
 					</div>
 
