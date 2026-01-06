@@ -1,7 +1,7 @@
 <script lang="ts">
 	import BskyPost from './BskyPost.svelte';
 	import { type State as PostComposerState } from './PostComposer.svelte';
-	import { AtpClient } from '$lib/at/client';
+	import { AtpClient } from '$lib/at/client.svelte';
 	import { accounts } from '$lib/accounts';
 	import { type ResourceUri } from '@atcute/lexicons';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -39,7 +39,8 @@
 	let viewOwnPosts = $state(true);
 	const expandedThreads = new SvelteSet<ResourceUri>();
 
-	const did = $derived(targetDid ?? client?.user?.did);
+	const userDid = $derived(client?.user?.did);
+	const did = $derived(targetDid ?? userDid);
 
 	const threads = $derived(
 		// todo: apply showReplies here
@@ -64,7 +65,15 @@
 		try {
 			await fetchTimeline(client, did as AtprotoDid, 7, showReplies);
 			// only fetch interactions if logged in (because if not who is the interactor)
-			if (client.user) await fetchInteractionsToTimelineEnd(client, did);
+			if (client.user) {
+				if (!fetchingInteractions) {
+					scheduledFetchInteractions = false;
+					fetchingInteractions = true;
+					fetchInteractionsToTimelineEnd(client, did).finally(() => (fetchingInteractions = false));
+				} else {
+					scheduledFetchInteractions = true;
+				}
+			}
 			loaderState.loaded();
 		} catch (error) {
 			loadError = `${error}`;
@@ -79,7 +88,7 @@
 	};
 
 	$effect(() => {
-		if (threads.length === 0 && !loading && did) {
+		if (threads.length === 0 && !loading && userDid && did) {
 			// if we saw all posts dont try to load more.
 			// this only really happens if the user has no posts at all
 			// but we do have to handle it to not cause an infinite loop
@@ -87,11 +96,22 @@
 			if (!cursor?.end) loadMore();
 		}
 	});
+
+	let fetchingInteractions = $state(false);
+	let scheduledFetchInteractions = $state(false);
 	// we want to load interactions when changing logged in user on timelines
 	// only on timelines that arent logged in users, because those are already
 	// loaded by loadMore
 	$effect(() => {
-		if (client && did && client.user?.did !== did) fetchInteractionsToTimelineEnd(client, did);
+		if (client && did && scheduledFetchInteractions && userDid !== did) {
+			if (!fetchingInteractions) {
+				scheduledFetchInteractions = false;
+				fetchingInteractions = true;
+				fetchInteractionsToTimelineEnd(client, did).finally(() => (fetchingInteractions = false));
+			} else {
+				scheduledFetchInteractions = true;
+			}
+		}
 	});
 </script>
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { AtpClient } from '$lib/at/client';
+	import type { AtpClient } from '$lib/at/client.svelte';
 	import { ok, err, type Result, expect } from '$lib/result';
 	import type { AppBskyEmbedRecordWithMedia, AppBskyFeedPost } from '@atcute/bluesky';
 	import { generateColorForDid } from '$lib/accounts';
@@ -130,7 +130,7 @@
 			createdAt: new Date().toISOString()
 		};
 
-		const res = await client.atcute?.post('com.atproto.repo.createRecord', {
+		const res = await client.user?.atcute.post('com.atproto.repo.createRecord', {
 			input: {
 				collection: 'app.bsky.feed.post',
 				repo: client.user!.did,
@@ -271,6 +271,8 @@
 				if (res.ok) {
 					onPostSent(res.value);
 					_state.text = '';
+					_state.quoting = undefined;
+					_state.replying = undefined;
 					_state.attachedMedia = undefined;
 					_state.blobsState.clear();
 					unfocus();
@@ -539,8 +541,8 @@
 			: `color-mix(in srgb, color-mix(in srgb, var(--nucleus-bg) 85%, ${color}) 70%, transparent)`};
 			border-color: color-mix(in srgb, {color} {isFocused ? '100' : '40'}%, transparent);"
 	>
-		<div class="w-full p-1 px-2">
-			{#if !client.atcute}
+		<div class="w-full p-1">
+			{#if !client.user}
 				<div
 					class="rounded-sm px-3 py-1.5 text-center font-medium text-nowrap overflow-ellipsis"
 					style="background: color-mix(in srgb, {color} 13%, transparent); color: {color};"
@@ -586,7 +588,7 @@
 
 	input,
 	.composer {
-		@apply single-line-input bg-(--nucleus-bg)/35;
+		@apply single-line-input rounded-xs bg-(--nucleus-bg)/35;
 		border-color: color-mix(in srgb, var(--acc-color) 30%, transparent);
 	}
 

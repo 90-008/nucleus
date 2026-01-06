@@ -67,6 +67,7 @@
 		{@const isHidden = i > 3}
 		{@const isOverlay = i === 3 && images.length > 4}
 
+		<!-- eslint-disable svelte/no-navigation-without-resolve -->
 		<a
 			href={img.src}
 			data-pswp-width={img.width}

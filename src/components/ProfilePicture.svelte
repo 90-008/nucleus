@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { generateColorForDid } from '$lib/accounts';
-	import type { AtpClient } from '$lib/at/client';
+	import type { AtpClient } from '$lib/at/client.svelte';
 	import { isBlob } from '@atcute/lexicons/interfaces';
 	import PfpPlaceholder from './PfpPlaceholder.svelte';
 	import { img } from '$lib/cdn';

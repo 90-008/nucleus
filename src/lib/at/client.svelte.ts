@@ -1,3 +1,4 @@
+/* eslint-disable svelte/prefer-svelte-reactivity */
 import { err, expect, map, ok, type OkType, type Result } from '$lib/result';
 import {
 	ComAtprotoIdentityResolveHandle,
@@ -112,9 +113,12 @@ export type UploadStatus =
 	| { stage: 'processing'; progress?: number }
 	| { stage: 'complete' };
 
+export type Auth = {
+	atcute: AtcuteClient;
+} & MiniDoc;
+
 export class AtpClient {
-	public atcute: AtcuteClient | null = null;
-	public user: MiniDoc | null = null;
+	public user: Auth | null = $state(null);
 
 	async login(agent: OAuthUserAgent): Promise<Result<null, string>> {
 		try {
@@ -122,12 +126,12 @@ export class AtpClient {
 			const res = await rpc.get('com.atproto.server.getSession');
 			if (!res.ok) throw res.data.error;
 			this.user = {
+				atcute: rpc,
 				did: res.data.did,
 				handle: res.data.handle,
 				pds: agent.session.info.aud as `${string}:${string}`,
 				signing_key: ''
 			};
-			this.atcute = rpc;
 		} catch (error) {
 			return err(`failed to login: ${error}`);
 		}
@@ -195,12 +199,13 @@ export class AtpClient {
 	): Promise<
 		Result<InferXRPCBodyOutput<(typeof ComAtprotoRepoListRecords.mainSchema)['output']>, string>
 	> {
-		if (!this.atcute) return err('not authenticated');
+		const auth = this.user;
+		if (!auth) return err('not authenticated');
 		const docRes = await resolveDidDoc(ident);
 		if (!docRes.ok) return docRes;
 		const atp =
-			this.user?.did === docRes.value.did
-				? this.atcute
+			auth.did === docRes.value.did
+				? auth.atcute
 				: new AtcuteClient({ handler: simpleFetchHandler({ service: docRes.value.pds }) });
 		const res = await atp.get('com.atproto.repo.listRecords', {
 			params: {
@@ -283,13 +288,14 @@ export class AtpClient {
 	}
 
 	async getServiceAuth(lxm: keyof XRPCProcedures, exp: number): Promise<Result<string, string>> {
-		if (!this.atcute || !this.user) return err('not authenticated');
-		const serviceAuthUrl = new URL(`${this.user.pds}xrpc/com.atproto.server.getServiceAuth`);
-		serviceAuthUrl.searchParams.append('aud', httpToDidWeb(this.user.pds));
+		const auth = this.user;
+		if (!auth) return err('not authenticated');
+		const serviceAuthUrl = new URL(`${auth.pds}xrpc/com.atproto.server.getServiceAuth`);
+		serviceAuthUrl.searchParams.append('aud', httpToDidWeb(auth.pds));
 		serviceAuthUrl.searchParams.append('lxm', 'com.atproto.repo.uploadBlob');
 		serviceAuthUrl.searchParams.append('exp', exp.toString()); // 30 minutes
 
-		const serviceAuthResponse = await this.atcute.handler(
+		const serviceAuthResponse = await auth.atcute.handler(
 			`${serviceAuthUrl.pathname}${serviceAuthUrl.search}`,
 			{
 				method: 'GET'
@@ -307,14 +313,15 @@ export class AtpClient {
 		blob: Blob,
 		onProgress?: (progress: number) => void
 	): Promise<Result<AtpBlob<string>, string>> {
-		if (!this.atcute || !this.user) return err('not authenticated');
+		const auth = this.user;
+		if (!auth) return err('not authenticated');
 		const tokenResult = await this.getServiceAuth(
 			'com.atproto.repo.uploadBlob',
 			Math.floor(Date.now() / 1000) + 60
 		);
 		if (!tokenResult.ok) return tokenResult;
 		const result = await xhrPost(
-			`${this.user.pds}xrpc/com.atproto.repo.uploadBlob`,
+			`${auth.pds}xrpc/com.atproto.repo.uploadBlob`,
 			blob,
 			{ authorization: `Bearer ${tokenResult.value}` },
 			(uploaded, total) => onProgress?.(uploaded / total)
@@ -328,7 +335,8 @@ export class AtpClient {
 		mimeType: string,
 		onStatus?: (status: UploadStatus) => void
 	): Promise<Result<AtpBlob<string>, string>> {
-		if (!this.atcute || !this.user) return err('not authenticated');
+		const auth = this.user;
+		if (!auth) return err('not authenticated');
 
 		onStatus?.({ stage: 'auth' });
 		const tokenResult = await this.getServiceAuth(
@@ -339,7 +347,7 @@ export class AtpClient {
 
 		onStatus?.({ stage: 'uploading' });
 		const uploadUrl = new URL('https://video.bsky.app/xrpc/app.bsky.video.uploadVideo');
-		uploadUrl.searchParams.append('did', this.user.did);
+		uploadUrl.searchParams.append('did', auth.did);
 		uploadUrl.searchParams.append('name', 'video');
 
 		const uploadResult = await xhrPost(

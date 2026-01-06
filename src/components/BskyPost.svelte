@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { resolveDidDoc, type AtpClient } from '$lib/at/client';
+	import { resolveDidDoc, type AtpClient } from '$lib/at/client.svelte';
 	import { AppBskyActorProfile, AppBskyEmbedRecord, AppBskyFeedPost } from '@atcute/bluesky';
 	import {
 		parseCanonicalResourceUri,
@@ -22,7 +22,9 @@
 		router,
 		profiles,
 		handles,
-		hasBacklink
+		hasBacklink,
+		getBlockRelationship,
+		clients
 	} from '$lib/state.svelte';
 	import type { PostWithUri } from '$lib/at/fetch';
 	import { onMount, type Snippet } from 'svelte';
@@ -49,6 +51,7 @@
 		onQuote?: (quote: PostWithUri) => void;
 		onReply?: (reply: PostWithUri) => void;
 		cornerFragment?: Snippet;
+		isBlocked?: boolean;
 	}
 
 	const {
@@ -61,14 +64,25 @@
 		onQuote,
 		onReply,
 		isOnPostComposer = false /* replyBacklinks */,
-		cornerFragment
+		cornerFragment,
+		isBlocked = false
 	}: Props = $props();
 
-	const selectedDid = $derived(client.user?.did ?? null);
+	const user = $derived(client.user);
 	const isLoggedInUser = $derived($accounts.some((acc) => acc.did === did));
 
 	const aturi = $derived(toCanonicalUri({ did, collection: 'app.bsky.feed.post', rkey }));
 	const color = $derived(generateColorForDid(did));
+
+	let expandBlocked = $state(false);
+	const blockRel = $derived(
+		user && !isOnPostComposer
+			? getBlockRelationship(user.did, did)
+			: { userBlocked: false, blockedByTarget: false }
+	);
+	const showAsBlocked = $derived(
+		(isBlocked || blockRel.userBlocked || blockRel.blockedByTarget) && !expandBlocked
+	);
 
 	let handle: Handle = $state(handles.get(did) ?? 'handle.invalid');
 	onMount(() => {
@@ -135,8 +149,9 @@
 			return;
 		}
 
-		client?.atcute
-			?.post('com.atproto.repo.deleteRecord', {
+		clients
+			.get(did)
+			?.user?.atcute.post('com.atproto.repo.deleteRecord', {
 				input: {
 					collection: 'app.bsky.feed.post',
 					repo: did,
@@ -195,18 +210,27 @@
 		{:then post}
 			{#if post.ok}
 				{@const record = post.value.record}
-				<!-- svelte-ignore a11y_click_events_have_key_events -->
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					onclick={() => scrollToAndPulse(post.value.uri)}
-					class="select-none hover:cursor-pointer hover:underline"
-				>
-					<span style="color: {color};">@{handle}</span>:
-					{#if record.embed}
-						<EmbedBadge embed={record.embed} />
-					{/if}
-					<span title={record.text}>{record.text}</span>
-				</div>
+				{#if showAsBlocked}
+					<button
+						onclick={() => (expandBlocked = true)}
+						class="text-left hover:cursor-pointer hover:underline"
+					>
+						<span style="color: {color};">post from blocked user</span> (click to show)
+					</button>
+				{:else}
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div
+						onclick={() => scrollToAndPulse(post.value.uri)}
+						class="hover:cursor-pointer hover:underline"
+					>
+						<span style="color: {color};">@{handle}</span>:
+						{#if record.embed}
+							<EmbedBadge embed={record.embed} />
+						{/if}
+						<span title={record.text}>{record.text}</span>
+					</div>
+				{/if}
 			{:else}
 				{post.error}
 			{/if}
@@ -229,61 +253,77 @@
 	{:then post}
 		{#if post.ok}
 			{@const record = post.value.record}
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div
-				id="timeline-post-{post.value.uri}-{quoteDepth}"
-				oncontextmenu={handleRightClick}
-				class="
+			{#if showAsBlocked}
+				<button
+					onclick={() => (expandBlocked = true)}
+					class="
+				group w-full rounded-sm border-2 p-3 text-left shadow-lg
+				backdrop-blur-sm transition-all hover:border-(--nucleus-accent)
+				"
+					style="background: {color}18; border-color: {color}66;"
+				>
+					<div class="flex items-center gap-2">
+						<span class="opacity-80">post from blocked user</span>
+						<span class="text-sm opacity-60">(click to show)</span>
+					</div>
+				</button>
+			{:else}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					id="timeline-post-{post.value.uri}-{quoteDepth}"
+					oncontextmenu={handleRightClick}
+					class="
 				group rounded-sm border-2 p-2 shadow-lg backdrop-blur-sm transition-all
 				{$isPulsing ? 'animate-pulse-highlight' : ''}
 				{isOnPostComposer ? 'backdrop-brightness-20' : ''}
 				"
-				style="
+					style="
 				background: {color}{isOnPostComposer
-					? '36'
-					: Math.floor(24.0 * (quoteDepth * 0.5 + 1.0)).toString(16)};
+						? '36'
+						: Math.floor(24.0 * (quoteDepth * 0.5 + 1.0)).toString(16)};
 				border-color: {color}{isOnPostComposer ? '99' : '66'};
 				"
-			>
-				<div class="mb-3 flex max-w-full items-center justify-between">
-					<div class="flex items-center gap-1 rounded-sm pr-1" style="background: {color}33;">
-						{@render profilePopout()}
-						<span>·</span>
-						<span
-							title={new Date(record.createdAt).toLocaleString()}
-							class="pl-0.5 text-nowrap text-(--nucleus-fg)/67"
-						>
-							{getRelativeTime(new Date(record.createdAt), currentTime)}
-						</span>
+				>
+					<div class="mb-3 flex max-w-full items-center justify-between">
+						<div class="flex items-center gap-1 rounded-sm pr-1" style="background: {color}33;">
+							{@render profilePopout()}
+							<span>·</span>
+							<span
+								title={new Date(record.createdAt).toLocaleString()}
+								class="pl-0.5 text-nowrap text-(--nucleus-fg)/67"
+							>
+								{getRelativeTime(new Date(record.createdAt), currentTime)}
+							</span>
+						</div>
+						{@render cornerFragment?.()}
 					</div>
-					{@render cornerFragment?.()}
-				</div>
 
-				<p class="leading-normal text-wrap wrap-break-word">
-					<RichText text={record.text} facets={record.facets ?? []} />
-					{#if isOnPostComposer && record.embed}
-						<EmbedBadge embed={record.embed} {color} />
-					{/if}
-				</p>
-				{#if !isOnPostComposer && record.embed}
-					{@const embed = record.embed}
-					<div class="mt-2">
-						{#if embed.$type === 'app.bsky.embed.images' || embed.$type === 'app.bsky.embed.video'}
-							<EmbedMedia {did} {embed} />
-						{:else if embed.$type === 'app.bsky.embed.record'}
-							{@render embedPost(embed.record.uri)}
-						{:else if embed.$type === 'app.bsky.embed.recordWithMedia'}
-							<div class="space-y-1.5">
-								<EmbedMedia {did} embed={embed.media} />
-								{@render embedPost(embed.record.record.uri)}
-							</div>
+					<p class="leading-normal text-wrap wrap-break-word">
+						<RichText text={record.text} facets={record.facets ?? []} />
+						{#if isOnPostComposer && record.embed}
+							<EmbedBadge embed={record.embed} {color} />
 						{/if}
-					</div>
-				{/if}
-				{#if !isOnPostComposer}
-					{@render postControls(post.value)}
-				{/if}
-			</div>
+					</p>
+					{#if !isOnPostComposer && record.embed}
+						{@const embed = record.embed}
+						<div class="mt-2">
+							{#if embed.$type === 'app.bsky.embed.images' || embed.$type === 'app.bsky.embed.video'}
+								<EmbedMedia {did} {embed} />
+							{:else if embed.$type === 'app.bsky.embed.record'}
+								{@render embedPost(embed.record.uri)}
+							{:else if embed.$type === 'app.bsky.embed.recordWithMedia'}
+								<div class="space-y-1.5">
+									<EmbedMedia {did} embed={embed.media} />
+									{@render embedPost(embed.record.record.uri)}
+								</div>
+							{/if}
+						</div>
+					{/if}
+					{#if !isOnPostComposer}
+						{@render postControls(post.value)}
+					{/if}
+				</div>
+			{/if}
 		{:else}
 			<div class="error-disclaimer">
 				<p class="text-sm font-medium">error: {post.error}</p>
@@ -295,17 +335,34 @@
 {#snippet embedPost(uri: ResourceUri)}
 	{#if quoteDepth < 2}
 		{@const parsedUri = expect(parseCanonicalResourceUri(uri))}
+		{@const embedBlockRel =
+			user?.did && !isOnPostComposer
+				? getBlockRelationship(user.did, parsedUri.repo)
+				: { userBlocked: false, blockedByTarget: false }}
+		{@const embedIsBlocked = embedBlockRel.userBlocked || embedBlockRel.blockedByTarget}
+
 		<!-- reject recursive quotes -->
 		{#if !(did === parsedUri.repo && rkey === parsedUri.rkey)}
-			<BskyPost
-				{client}
-				quoteDepth={quoteDepth + 1}
-				did={parsedUri.repo}
-				rkey={parsedUri.rkey}
-				{isOnPostComposer}
-				{onQuote}
-				{onReply}
-			/>
+			{#if embedIsBlocked}
+				<div
+					class="rounded-sm border-2 p-2 text-sm opacity-70"
+					style="background: {generateColorForDid(
+						parsedUri.repo
+					)}11; border-color: {generateColorForDid(parsedUri.repo)}44;"
+				>
+					quoted post from blocked user
+				</div>
+			{:else}
+				<BskyPost
+					{client}
+					quoteDepth={quoteDepth + 1}
+					did={parsedUri.repo}
+					rkey={parsedUri.rkey}
+					{isOnPostComposer}
+					{onQuote}
+					{onReply}
+				/>
+			{/if}
 		{:else}
 			<span>you think you're funny with that recursive quote but i'm onto you</span>
 		{/if}
@@ -315,8 +372,8 @@
 {/snippet}
 
 {#snippet postControls(post: PostWithUri)}
-	{@const myRepost = hasBacklink(post.uri, repostSource, selectedDid!)}
-	{@const myLike = hasBacklink(post.uri, likeSource, selectedDid!)}
+	{@const myRepost = user ? hasBacklink(post.uri, repostSource, user.did) : false}
+	{@const myLike = user ? hasBacklink(post.uri, likeSource, user.did) : false}
 	{#snippet control({
 		name,
 		icon,
@@ -343,7 +400,7 @@
 			onclick={(e) => onClick(e)}
 			style="color: {isFull ? iconColor : 'color-mix(in srgb, var(--nucleus-fg) 90%, transparent)'}"
 			title={name}
-			disabled={canBeDisabled ? selectedDid === null : false}
+			disabled={canBeDisabled ? user?.did === undefined : false}
 		>
 			<Icon icon={hasSolid && isFull ? `${icon}-solid` : icon} width={20} />
 		</button>
@@ -360,7 +417,7 @@
 				name: 'repost',
 				icon: 'heroicons:arrow-path-rounded-square-20-solid',
 				onClick: () => {
-					if (!selectedDid) return;
+					if (!user?.did) return;
 					if (myRepost) deletePostBacklink(client, post, repostSource);
 					else createPostBacklink(client, post, repostSource);
 				},
@@ -375,7 +432,7 @@
 				name: 'like',
 				icon: 'heroicons:star',
 				onClick: () => {
-					if (!selectedDid) return;
+					if (!user?.did) return;
 					if (myLike) deletePostBacklink(client, post, likeSource);
 					else createPostBacklink(client, post, likeSource);
 				},
@@ -393,7 +450,7 @@
 			{@render dropdownItem('heroicons:link-20-solid', 'copy link to post', () =>
 				navigator.clipboard.writeText(`${$settings.socialAppUrl}/profile/${did}/post/${rkey}`)
 			)}
-			{@render dropdownItem('heroicons:link-20-solid', 'copy at uri', () =>
+			{@render dropdownItem(undefined, 'copy at uri', () =>
 				navigator.clipboard.writeText(post.uri)
 			)}
 			{@render dropdownItem('heroicons:clipboard-20-solid', 'copy post text', () =>
@@ -429,7 +486,7 @@
 {/snippet}
 
 {#snippet dropdownItem(
-	icon: string,
+	icon: string | undefined,
 	label: string,
 	onClick: () => void,
 	autoClose: boolean = true,
@@ -447,14 +504,8 @@
 		}}
 	>
 		<span class="font-semibold opacity-85">{label}</span>
-		<Icon class="h-6 w-6" {icon} />
+		{#if icon}
+			<Icon class="h-6 w-6" {icon} />
+		{/if}
 	</button>
 {/snippet}
-
-<style>
-	@reference "../app.css";
-
-	:global(.post-dropdown) {
-		@apply flex min-w-54 flex-col gap-1 rounded-sm border-2 p-1 shadow-2xl backdrop-blur-xl backdrop-brightness-60;
-	}
-</style>

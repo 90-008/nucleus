@@ -37,6 +37,7 @@
 		{@const { text, features: _features } = segment}
 		{@const features = _features ?? []}
 		{#if features.length > 0}
+			<!-- eslint-disable svelte/no-navigation-without-resolve -->
 			{#each features as feature, idx (idx)}
 				{#if feature.$type === 'app.bsky.richtext.facet#mention'}
 					<a

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { follows, allPosts, allBacklinks, currentTime, replyIndex } from '$lib/state.svelte';
 	import type { Did } from '@atcute/lexicons';
-	import { type AtpClient } from '$lib/at/client';
+	import { type AtpClient } from '$lib/at/client.svelte';
 	import VirtualList from '@tutorlatin/svelte-tiny-virtual-list';
 	import {
 		calculateFollowedUserStats,
@@ -139,7 +139,7 @@
 	</div>
 
 	<div class="min-h-0 flex-1" bind:this={listContainer}>
-		{#if !client}
+		{#if !client || !client.user}
 			<NotLoggedIn />
 		{:else if sortedFollowing.length === 0 || isLongCalculation}
 			<div class="flex justify-center py-8">

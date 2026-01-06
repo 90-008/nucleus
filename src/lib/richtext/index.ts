@@ -1,7 +1,7 @@
 import RichtextBuilder, { type BakedRichtext } from '@atcute/bluesky-richtext-builder';
 import { tokenize, type Token } from '$lib/richtext/parser';
 import type { Did, GenericUri, Handle } from '@atcute/lexicons';
-import { resolveHandle } from '$lib/at/client';
+import { resolveHandle } from '$lib/at/client.svelte';
 
 export const parseToRichText = (text: string): ReturnType<typeof processTokens> =>
 	processTokens(tokenize(text));

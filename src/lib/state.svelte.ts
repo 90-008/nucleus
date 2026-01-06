@@ -1,5 +1,9 @@
 import { writable } from 'svelte/store';
-import { AtpClient, type NotificationsStream, type NotificationsStreamEvent } from './at/client';
+import {
+	AtpClient,
+	type NotificationsStream,
+	type NotificationsStreamEvent
+} from './at/client.svelte';
 import { SvelteMap, SvelteDate, SvelteSet } from 'svelte/reactivity';
 import type { Did, Handle, Nsid, RecordKey, ResourceUri } from '@atcute/lexicons';
 import { fetchPosts, hydratePosts, type PostWithUri } from './at/fetch';
@@ -191,7 +195,7 @@ export const deletePostBacklink = async (
 	removeBacklinks(post.uri, source, links);
 	await Promise.allSettled(
 		links.map((link) =>
-			client.atcute?.post('com.atproto.repo.deleteRecord', {
+			client.user?.atcute.post('com.atproto.repo.deleteRecord', {
 				input: { repo: did, collection, rkey: link.rkey! }
 			})
 		)
@@ -223,7 +227,7 @@ export const createPostBacklink = async (
 	const subjectPath = subject.split('.');
 	setNestedValue(record, subjectPath, post.uri);
 	setNestedValue(record, [...subjectPath.slice(0, -1), 'cid'], post.cid);
-	await client.atcute?.post('com.atproto.repo.createRecord', {
+	await client.user?.atcute.post('com.atproto.repo.createRecord', {
 		input: {
 			repo: did,
 			collection,
@@ -293,8 +297,18 @@ export const blockFlags = new SvelteMap<Did, SvelteSet<Did>>();
 export const fetchBlocked = async (client: AtpClient, subject: Did, blocker: Did) => {
 	const subjectUri = `at://${subject}` as ResourceUri;
 	const res = await client.getBacklinks(subjectUri, blockSource, [blocker], 1);
-	if (!res.ok) return;
+	if (!res.ok) return false;
 	if (res.value.total > 0) addBacklinks(subjectUri, blockSource, res.value.records);
+
+	// mark as fetched
+	let flags = blockFlags.get(subject);
+	if (!flags) {
+		flags = new SvelteSet();
+		blockFlags.set(subject, flags);
+	}
+	flags.add(blocker);
+
+	return res.value.total > 0;
 };
 
 export const fetchBlocks = async (account: Account) => {
@@ -312,6 +326,82 @@ export const fetchBlocks = async (account: Account) => {
 			}
 		]);
 	}
+};
+
+export const createBlock = async (client: AtpClient, targetDid: Did) => {
+	const userDid = client.user?.did;
+	if (!userDid) return;
+
+	const rkey = tidNow();
+	const targetUri = `at://${targetDid}` as ResourceUri;
+
+	addBacklinks(targetUri, blockSource, [
+		{
+			did: userDid,
+			collection: 'app.bsky.graph.block',
+			rkey
+		}
+	]);
+
+	const record: AppBskyGraphBlock.Main = {
+		$type: 'app.bsky.graph.block',
+		subject: targetDid,
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		createdAt: new Date().toISOString()
+	};
+
+	await client.user?.atcute.post('com.atproto.repo.createRecord', {
+		input: {
+			repo: userDid,
+			collection: 'app.bsky.graph.block',
+			rkey,
+			record
+		}
+	});
+};
+
+export const deleteBlock = async (client: AtpClient, targetDid: Did) => {
+	const userDid = client.user?.did;
+	if (!userDid) return;
+
+	const targetUri = `at://${targetDid}` as ResourceUri;
+	const links = findBacklinksBy(targetUri, blockSource, userDid);
+
+	removeBacklinks(targetUri, blockSource, links);
+
+	await Promise.allSettled(
+		links.map((link) =>
+			client.user?.atcute.post('com.atproto.repo.deleteRecord', {
+				input: {
+					repo: userDid,
+					collection: 'app.bsky.graph.block',
+					rkey: link.rkey
+				}
+			})
+		)
+	);
+};
+
+export const isBlockedByUser = (targetDid: Did, userDid: Did): boolean => {
+	return isBlockedBy(targetDid, userDid);
+};
+
+export const isUserBlockedBy = (userDid: Did, targetDid: Did): boolean => {
+	return isBlockedBy(userDid, targetDid);
+};
+
+export const hasBlockRelationship = (did1: Did, did2: Did): boolean => {
+	return isBlockedBy(did1, did2) || isBlockedBy(did2, did1);
+};
+
+export const getBlockRelationship = (
+	userDid: Did,
+	targetDid: Did
+): { userBlocked: boolean; blockedByTarget: boolean } => {
+	return {
+		userBlocked: isBlockedBy(targetDid, userDid),
+		blockedByTarget: isBlockedBy(userDid, targetDid)
+	};
 };
 
 export const allPosts = new SvelteMap<Did, SvelteMap<ResourceUri, PostWithUri>>();

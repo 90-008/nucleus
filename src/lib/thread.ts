@@ -1,7 +1,10 @@
+// updated src/lib/thread.ts
+
 import { parseCanonicalResourceUri, type Did, type ResourceUri } from '@atcute/lexicons';
 import type { Account } from './accounts';
 import { expect } from './result';
 import type { PostWithUri } from './at/fetch';
+import { isBlockedBy } from './state.svelte';
 
 export type ThreadPost = {
 	data: PostWithUri;
@@ -11,6 +14,7 @@ export type ThreadPost = {
 	parentUri: ResourceUri | null;
 	depth: number;
 	newestTime: number;
+	isBlocked?: boolean;
 };
 
 export type Thread = {
@@ -43,7 +47,8 @@ export const buildThreads = (
 			rkey: parsedUri.rkey,
 			parentUri,
 			depth: 0,
-			newestTime: new Date(data.record.createdAt).getTime()
+			newestTime: new Date(data.record.createdAt).getTime(),
+			isBlocked: isBlockedBy(parsedUri.repo, account)
 		};
 
 		if (!threadMap.has(rootUri)) threadMap.set(rootUri, []);
@@ -150,8 +155,6 @@ export const buildThreads = (
 	}
 
 	threads.sort((a, b) => b.newestTime - a.newestTime);
-
-	// console.log(threads);
 
 	return threads;
 };

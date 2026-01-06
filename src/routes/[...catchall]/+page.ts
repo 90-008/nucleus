@@ -1,5 +1,5 @@
 import { addAccount, loggingIn } from '$lib/accounts';
-import { AtpClient } from '$lib/at/client';
+import { AtpClient } from '$lib/at/client.svelte';
 import { flow, sessions } from '$lib/at/oauth';
 import { err, ok, type Result } from '$lib/result';
 import type { PageLoad } from './$types';

@@ -1,11 +1,12 @@
 <script lang="ts">
-	import { AtpClient, resolveDidDoc } from '$lib/at/client';
+	import { AtpClient, resolveDidDoc } from '$lib/at/client.svelte';
 	import type { Did, Handle } from '@atcute/lexicons/syntax';
 	import type { AppBskyActorProfile } from '@atcute/bluesky';
 	import ProfilePicture from './ProfilePicture.svelte';
 	import RichText from './RichText.svelte';
 	import { onMount } from 'svelte';
-	import { handles, profiles } from '$lib/state.svelte';
+	import { getBlockRelationship, handles, profiles } from '$lib/state.svelte';
+	import BlockedUserIndicator from './BlockedUserIndicator.svelte';
 
 	interface Props {
 		client: AtpClient;
@@ -21,7 +22,16 @@
 		profile = $bindable(profiles.get(did) ?? null)
 	}: Props = $props();
 
+	const userDid = $derived(client.user?.did);
+	const blockRel = $derived(
+		userDid ? getBlockRelationship(userDid, did) : { userBlocked: false, blockedByTarget: false }
+	);
+	const isBlocked = $derived(blockRel.userBlocked || blockRel.blockedByTarget);
+
 	onMount(async () => {
+		// don't load profile info if blocked
+		if (isBlocked) return;
+
 		await Promise.all([
 			(async () => {
 				if (profile) return;
@@ -46,51 +56,61 @@
 	let showDid = $state(false);
 </script>
 
-<div class="flex flex-col gap-2">
-	<div class="flex items-center gap-2">
-		<ProfilePicture {client} {did} size={20} />
+{#if isBlocked}
+	<BlockedUserIndicator
+		{client}
+		{did}
+		reason={blockRel.userBlocked ? 'blocked' : 'blocks-you'}
+		size="normal"
+	/>
+{:else}
+	<div class="flex flex-col gap-2">
+		<div class="flex items-center gap-2">
+			<ProfilePicture {client} {did} size={20} />
 
-		<div class="flex min-w-0 flex-col items-start overflow-hidden overflow-ellipsis">
-			<span class="mb-1.5 min-w-0 overflow-hidden text-2xl text-nowrap overflow-ellipsis">
-				{profileDisplayName.length > 0 ? profileDisplayName : displayHandle}
-				{#if profile?.pronouns}
-					<span class="shrink-0 text-sm text-nowrap opacity-60">({profile.pronouns})</span>
-				{/if}
-			</span>
-			<button
-				oncontextmenu={(e) => {
-					e.stopPropagation();
-					const node = e.target as Node;
-					const selection = window.getSelection() ?? new Selection();
-					const range = document.createRange();
-					range.selectNodeContents(node);
-					selection.removeAllRanges();
-					selection.addRange(range);
-				}}
-				onmousedown={(e) => {
-					// disable double clicks to disable "double click to select text"
-					// since it doesnt work with us toggling did vs handle
-					if (e.detail > 1) e.preventDefault();
-				}}
-				onclick={() => (showDid = !showDid)}
-				class="mb-0.5 text-nowrap opacity-85 select-text hover:underline"
-			>
-				{showDid ? did : `@${displayHandle}`}
-			</button>
-			{#if profile?.website}
-				<a
-					target="_blank"
-					rel="noopener noreferrer"
-					href={profile.website}
-					class="text-sm text-nowrap opacity-60 hover:underline">{profile.website}</a
+			<div class="flex min-w-0 flex-col items-start overflow-hidden overflow-ellipsis">
+				<span class="mb-1.5 min-w-0 overflow-hidden text-2xl text-nowrap overflow-ellipsis">
+					{profileDisplayName.length > 0 ? profileDisplayName : displayHandle}
+					{#if profile?.pronouns}
+						<span class="shrink-0 text-sm text-nowrap opacity-60">({profile.pronouns})</span>
+					{/if}
+				</span>
+				<button
+					oncontextmenu={(e) => {
+						e.stopPropagation();
+						const node = e.target as Node;
+						const selection = window.getSelection() ?? new Selection();
+						const range = document.createRange();
+						range.selectNodeContents(node);
+						selection.removeAllRanges();
+						selection.addRange(range);
+					}}
+					onmousedown={(e) => {
+						// disable double clicks to disable "double click to select text"
+						// since it doesnt work with us toggling did vs handle
+						if (e.detail > 1) e.preventDefault();
+					}}
+					onclick={() => (showDid = !showDid)}
+					class="mb-0.5 text-nowrap opacity-85 select-text hover:underline"
 				>
-			{/if}
+					{showDid ? did : `@${displayHandle}`}
+				</button>
+				{#if profile?.website}
+					<!-- eslint-disable svelte/no-navigation-without-resolve -->
+					<a
+						target="_blank"
+						rel="noopener noreferrer"
+						href={profile.website}
+						class="text-sm text-nowrap opacity-60 hover:underline">{profile.website}</a
+					>
+				{/if}
+			</div>
 		</div>
-	</div>
 
-	{#if profileDesc.length > 0}
-		<div class="rounded-sm bg-black/25 p-1.5 text-wrap wrap-break-word">
-			<RichText text={profileDesc} />
-		</div>
-	{/if}
-</div>
+		{#if profileDesc.length > 0}
+			<div class="rounded-sm bg-black/25 p-1.5 text-wrap wrap-break-word">
+				<RichText text={profileDesc} />
+			</div>
+		{/if}
+	</div>
+{/if}

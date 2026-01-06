@@ -6,7 +6,7 @@
 	import FollowingView from '$components/FollowingView.svelte';
 	import TimelineView from '$components/TimelineView.svelte';
 	import ProfileView from '$components/ProfileView.svelte';
-	import { AtpClient, streamNotifications } from '$lib/at/client';
+	import { AtpClient, streamNotifications } from '$lib/at/client.svelte';
 	import { accounts, type Account } from '$lib/accounts';
 	import { onMount } from 'svelte';
 	import {
@@ -61,7 +61,7 @@
 	const handleAccountSelected = async (did: AtprotoDid) => {
 		selectedDid = did;
 		const account = $accounts.find((acc) => acc.did === did);
-		if (account && (!clients.has(account.did) || !clients.get(account.did)?.atcute))
+		if (account && (!clients.has(account.did) || !clients.get(account.did)?.user))
 			await loginAccount(account);
 	};
 	const handleLogout = async (did: AtprotoDid) => {
@@ -269,12 +269,12 @@
 		<div
 			class="
 			{['/', '/following', '/profile/:actor'].includes(router.current.path) ? '' : 'hidden'}
-			z-20 w-full max-w-2xl p-2.5 px-4 pb-1 transition-all
+			z-20 w-full max-w-2xl p-2.5 px-4 pb-1.25 transition-all
 			"
 		>
 			<!-- composer and error disclaimer (above thread list, not scrollable) -->
-			<div class="footer-border-bg rounded-sm px-0.5 py-0.5">
-				<div class="footer-bg flex gap-2 rounded-sm p-1.5 shadow-2xl">
+			<div class="footer-border-bg rounded-sm p-0.5">
+				<div class="footer-bg flex gap-2 rounded-sm p-1.5">
 					<AccountSelector
 						client={viewClient}
 						accounts={$accounts}
@@ -311,7 +311,7 @@
 
 		<div id="footer-portal" class="contents"></div>
 
-		<div class="footer-border-bg rounded-t-sm px-0.5 pt-0.5">
+		<div class="footer-border-bg rounded-t-sm px-0.75 pt-0.75">
 			<div class="footer-bg rounded-t-sm">
 				<div class="flex items-center gap-1.5 px-2 py-1">
 					<div class="mb-2">

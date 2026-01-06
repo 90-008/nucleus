@@ -4,7 +4,7 @@ import {
 	type Cid,
 	type ResourceUri
 } from '@atcute/lexicons';
-import { type AtpClient } from './client';
+import { type AtpClient } from './client.svelte';
 import { err, expect, ok, type Ok, type Result } from '$lib/result';
 import type { Backlinks } from './constellation';
 import { AppBskyFeedPost } from '@atcute/bluesky';

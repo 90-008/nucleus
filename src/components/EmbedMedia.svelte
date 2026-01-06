@@ -3,7 +3,7 @@
 	import PhotoSwipeGallery, { type GalleryItem } from './PhotoSwipeGallery.svelte';
 	import { blob, img } from '$lib/cdn';
 	import { type Did } from '@atcute/lexicons';
-	import { resolveDidDoc } from '$lib/at/client';
+	import { resolveDidDoc } from '$lib/at/client.svelte';
 	import type { AppBskyEmbedMedia } from '$lib/at/types';
 
 	interface Props {
