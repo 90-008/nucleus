@@ -495,16 +495,16 @@ export const fetchTimeline = async (
 	addPosts(hydrated.value.values());
 	addTimeline(subject, hydrated.value.keys());
 
-	// we only need to check blocks if the user is the subject (ie. logged in)
-	if (client.user?.did === subject) {
+	if (client.user?.did) {
+		const userDid = client.user.did;
 		// check if any of the post authors block the user
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		let distinctDids = new Set(hydrated.value.keys().map((uri) => extractDidFromUri(uri)!));
-		distinctDids.delete(subject); // dont need to check if user blocks themselves
-		const alreadyFetched = blockFlags.get(subject);
+		distinctDids.delete(userDid); // dont need to check if user blocks themselves
+		const alreadyFetched = blockFlags.get(userDid);
 		if (alreadyFetched) distinctDids = distinctDids.difference(alreadyFetched);
 		if (distinctDids.size > 0)
-			await Promise.all(distinctDids.values().map((did) => fetchBlocked(client, subject, did)));
+			await Promise.all(distinctDids.values().map((did) => fetchBlocked(client, userDid, did)));
 	}
 
 	console.log(`${subject}: fetchTimeline`, accPosts.value.cursor);
