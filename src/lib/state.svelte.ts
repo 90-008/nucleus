@@ -7,7 +7,7 @@ import {
 } from './at/client.svelte';
 import { SvelteMap, SvelteDate, SvelteSet } from 'svelte/reactivity';
 import type { Did, Handle, Nsid, RecordKey, ResourceUri } from '@atcute/lexicons';
-import { fetchPosts, hydratePosts, type PostWithUri } from './at/fetch';
+import { fetchPosts, hydratePosts, type HydrateOptions, type PostWithUri } from './at/fetch';
 import { parseCanonicalResourceUri, type AtprotoDid } from '@atcute/lexicons/syntax';
 import {
 	AppBskyActorProfile,
@@ -479,7 +479,8 @@ export const fetchTimeline = async (
 	client: AtpClient,
 	subject: Did,
 	limit: number = 6,
-	withBacklinks: boolean = true
+	withBacklinks: boolean = true,
+	hydrateOptions?: Partial<HydrateOptions>
 ) => {
 	const cursor = postCursors.get(subject);
 	if (cursor && cursor.end) return;
@@ -490,7 +491,13 @@ export const fetchTimeline = async (
 	// if the cursor is undefined, we've reached the end of the timeline
 	const newCursor = { value: accPosts.value.cursor, end: !accPosts.value.cursor };
 	postCursors.set(subject, newCursor);
-	const hydrated = await hydratePosts(client, subject, accPosts.value.posts, hydrateCacheFn);
+	const hydrated = await hydratePosts(
+		client,
+		subject,
+		accPosts.value.posts,
+		hydrateCacheFn,
+		hydrateOptions
+	);
 	if (!hydrated.ok) throw `cant hydrate posts ${subject}: ${hydrated.error}`;
 
 	addPosts(hydrated.value.values());

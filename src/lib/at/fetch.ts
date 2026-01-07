@@ -59,11 +59,16 @@ export const fetchPosts = async (
 	}
 };
 
+export type HydrateOptions = {
+	downwards: 'sameAuthor' | 'none';
+};
+
 export const hydratePosts = async (
 	client: AtpClient,
 	repo: Did,
 	data: PostWithBacklinks[],
-	cacheFn: (did: Did, rkey: RecordKey) => Ok<PostWithUri> | undefined
+	cacheFn: (did: Did, rkey: RecordKey) => Ok<PostWithUri> | undefined,
+	options?: Partial<HydrateOptions>
 ): Promise<Result<Map<ResourceUri, PostWithUri>, string>> => {
 	let posts: Map<ResourceUri, PostWithUri> = new Map();
 	try {
@@ -115,33 +120,35 @@ export const hydratePosts = async (
 	};
 	await Promise.all(posts.values().map(fetchUpwardsChain));
 
-	try {
-		const fetchDownwardsChain = async (post: PostWithUri) => {
-			const { repo: postRepo } = expect(parseCanonicalResourceUri(post.uri));
-			if (repo === postRepo) return;
+	if (options?.downwards !== 'none') {
+		try {
+			const fetchDownwardsChain = async (post: PostWithUri) => {
+				const { repo: postRepo } = expect(parseCanonicalResourceUri(post.uri));
+				if (repo === postRepo) return;
 
-			// get chains that are the same author until we exhaust them
-			const backlinks = await client.getBacklinks(post.uri, replySource);
-			if (!backlinks.ok) return;
+				// get chains that are the same author until we exhaust them
+				const backlinks = await client.getBacklinks(post.uri, replySource);
+				if (!backlinks.ok) return;
 
-			const promises = [];
-			for (const reply of backlinks.value.records) {
-				if (reply.did !== postRepo) continue;
-				// if we already have this reply, then we already fetched this chain / are fetching it
-				if (posts.has(toCanonicalUri(reply))) continue;
-				const record =
-					cacheFn(reply.did, reply.rkey) ??
-					(await client.getRecord(AppBskyFeedPost.mainSchema, reply.did, reply.rkey));
-				if (!record.ok) break; // TODO: this doesnt handle deleted posts in between
-				posts.set(record.value.uri, record.value);
-				promises.push(fetchDownwardsChain(record.value));
-			}
+				const promises = [];
+				for (const reply of backlinks.value.records) {
+					if (reply.did !== postRepo) continue;
+					// if we already have this reply, then we already fetched this chain / are fetching it
+					if (posts.has(toCanonicalUri(reply))) continue;
+					const record =
+						cacheFn(reply.did, reply.rkey) ??
+						(await client.getRecord(AppBskyFeedPost.mainSchema, reply.did, reply.rkey));
+					if (!record.ok) break; // TODO: this doesnt handle deleted posts in between
+					posts.set(record.value.uri, record.value);
+					promises.push(fetchDownwardsChain(record.value));
+				}
 
-			await Promise.all(promises);
-		};
-		await Promise.all(posts.values().map(fetchDownwardsChain));
-	} catch (error) {
-		return err(`cant fetch post reply chain: ${error}`);
+				await Promise.all(promises);
+			};
+			await Promise.all(posts.values().map(fetchDownwardsChain));
+		} catch (error) {
+			return err(`cant fetch post reply chain: ${error}`);
+		}
 	}
 
 	return ok(posts);

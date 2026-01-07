@@ -63,7 +63,9 @@
 		loaderState.status = 'LOADING';
 
 		try {
-			await fetchTimeline(client, did, 7, showReplies);
+			await fetchTimeline(client, did, 7, showReplies, {
+				downwards: userDid === did ? 'sameAuthor' : 'none'
+			});
 			// only fetch interactions if logged in (because if not who is the interactor)
 			if (client.user && userDid) {
 				if (!fetchingInteractions) {
