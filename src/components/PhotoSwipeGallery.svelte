@@ -3,12 +3,11 @@
 		src: string;
 		thumbnail?: {
 			src: string;
-			width: number;
-			height: number;
+			width?: number;
+			height?: number;
 		};
-		width: number;
-		height: number;
-		cropped?: boolean;
+		width?: number;
+		height?: number;
 		alt?: string;
 	}
 	export type GalleryData = Array<GalleryItem>;
@@ -23,6 +22,7 @@
 
 	export let images: GalleryData;
 	let element: HTMLDivElement;
+	let imageElements: { [key: number]: HTMLImageElement } = {};
 
 	const options = writable<Partial<PreparedPhotoSwipeOptions> | undefined>(undefined);
 	$: {
@@ -70,19 +70,13 @@
 		<!-- eslint-disable svelte/no-navigation-without-resolve -->
 		<a
 			href={img.src}
-			data-pswp-width={img.width}
-			data-pswp-height={img.height}
+			data-pswp-width={img.width ?? imageElements[i]?.width}
+			data-pswp-height={img.height ?? imageElements[i]?.height}
 			target="_blank"
 			class:hidden-in-grid={isHidden}
 			class:overlay-container={isOverlay}
 		>
-			<img
-				src={thumb.src}
-				title={img.alt ?? ''}
-				alt={img.alt ?? ''}
-				width={thumb.width}
-				height={thumb.height}
-			/>
+			<img bind:this={imageElements[i]} src={thumb.src} title={img.alt ?? ''} alt={img.alt ?? ''} />
 
 			{#if isOverlay}
 				<div class="more-overlay">

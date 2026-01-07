@@ -21,7 +21,7 @@
 			isBlob(img.image) ? [{ ...img, image: img.image }] : []
 		)}
 		{@const images = _images.map((i): GalleryItem => {
-			const size = i.aspectRatio ?? { width: 400, height: 300 };
+			const size = i.aspectRatio;
 			const cid = i.image.ref.$link;
 			return {
 				...size,
