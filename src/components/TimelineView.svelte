@@ -65,11 +65,12 @@
 		try {
 			await fetchTimeline(client, did, 7, showReplies);
 			// only fetch interactions if logged in (because if not who is the interactor)
-			if (client.user) {
+			if (client.user && userDid) {
 				if (!fetchingInteractions) {
 					scheduledFetchInteractions = false;
 					fetchingInteractions = true;
-					fetchInteractionsToTimelineEnd(client, did).finally(() => (fetchingInteractions = false));
+					await fetchInteractionsToTimelineEnd(client, userDid, did);
+					fetchingInteractions = false;
 				} else {
 					scheduledFetchInteractions = true;
 				}
@@ -99,15 +100,17 @@
 
 	let fetchingInteractions = $state(false);
 	let scheduledFetchInteractions = $state(false);
-	// we want to load interactions when changing logged in user on timelines
+	// we want to load interactions when changing logged in user
 	// only on timelines that arent logged in users, because those are already
 	// loaded by loadMore
 	$effect(() => {
-		if (client && did && scheduledFetchInteractions && userDid !== did) {
+		if (client && scheduledFetchInteractions && userDid && did && did !== userDid) {
 			if (!fetchingInteractions) {
 				scheduledFetchInteractions = false;
 				fetchingInteractions = true;
-				fetchInteractionsToTimelineEnd(client, did).finally(() => (fetchingInteractions = false));
+				fetchInteractionsToTimelineEnd(client, userDid, did).finally(
+					() => (fetchingInteractions = false)
+				);
 			} else {
 				scheduledFetchInteractions = true;
 			}

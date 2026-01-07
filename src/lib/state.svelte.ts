@@ -512,12 +512,16 @@ export const fetchTimeline = async (
 	return newCursor;
 };
 
-export const fetchInteractionsToTimelineEnd = async (client: AtpClient, did: Did) => {
-	const cursor = postCursors.get(did);
+export const fetchInteractionsToTimelineEnd = async (
+	client: AtpClient,
+	interactor: Did,
+	subject: Did
+) => {
+	const cursor = postCursors.get(subject);
 	if (!cursor) return;
 	const timestamp = timestampFromCursor(cursor.value);
 	await Promise.all(
-		[likeSource, repostSource].map((s) => fetchLinksUntil(did, client, s, timestamp))
+		[likeSource, repostSource].map((s) => fetchLinksUntil(interactor, client, s, timestamp))
 	);
 };
 
