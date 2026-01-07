@@ -1,12 +1,6 @@
 <script lang="ts">
-	import { AtpClient, resolveDidDoc, resolveHandle } from '$lib/at/client.svelte';
-	import {
-		isHandle,
-		type ActorIdentifier,
-		type AtprotoDid,
-		type Did,
-		type Handle
-	} from '@atcute/lexicons/syntax';
+	import { AtpClient, resolveDidDoc } from '$lib/at/client.svelte';
+	import { isDid, isHandle, type ActorIdentifier, type Did } from '@atcute/lexicons/syntax';
 	import TimelineView from './TimelineView.svelte';
 	import ProfileInfo from './ProfileInfo.svelte';
 	import type { State as PostComposerState } from './PostComposer.svelte';
@@ -14,7 +8,6 @@
 	import { accounts, generateColorForDid } from '$lib/accounts';
 	import { img } from '$lib/cdn';
 	import { isBlob } from '@atcute/lexicons/interfaces';
-	import type { AppBskyActorProfile } from '@atcute/bluesky';
 	import {
 		handles,
 		profiles,
@@ -34,12 +27,12 @@
 
 	let { client, actor, onBack, postComposerState = $bindable() }: Props = $props();
 
-	let profile = $state<AppBskyActorProfile.Main | null>(profiles.get(actor as Did) ?? null);
+	const profile = $derived(profiles.get(actor as Did));
 	const displayName = $derived(profile?.displayName ?? '');
+	const handle = $derived(isHandle(actor) ? actor : handles.get(actor as Did));
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let did = $state<AtprotoDid | null>(null);
-	let handle = $state<Handle | null>(handles.get(actor as Did) ?? null);
+	let did = $state(isDid(actor) ? actor : null);
 
 	let userBlocked = $state(false);
 	let blockedByTarget = $state(false);
@@ -47,25 +40,14 @@
 	const loadProfile = async (identifier: ActorIdentifier) => {
 		loading = true;
 		error = null;
-		profile = null;
-		handle = isHandle(identifier) ? identifier : null;
 
-		const resDid = await resolveHandle(identifier);
-		if (resDid.ok) did = resDid.value;
-		else {
-			error = resDid.error;
-			loading = false;
+		const docRes = await resolveDidDoc(identifier);
+		if (docRes.ok) {
+			did = docRes.value.did;
+			handles.set(did, docRes.value.handle);
+		} else {
+			error = docRes.error;
 			return;
-		}
-
-		if (!handle) handle = handles.get(did) ?? null;
-
-		if (!handle) {
-			const resHandle = await resolveDidDoc(did);
-			if (resHandle.ok) {
-				handle = resHandle.value.handle;
-				handles.set(did, resHandle.value.handle);
-			}
 		}
 
 		// check block relationship
@@ -73,10 +55,13 @@
 			let blockRel = getBlockRelationship(client.user.did, did);
 			blockRel = blockFlags.get(client.user.did)?.has(did)
 				? blockRel
-				: {
-						userBlocked: await fetchBlocked(client, did, client.user.did),
-						blockedByTarget: await fetchBlocked(client, client.user.did, did)
-					};
+				: await (async () => {
+						const [userBlocked, blockedByTarget] = await Promise.all([
+							await fetchBlocked(client, did, client.user!.did),
+							await fetchBlocked(client, client.user!.did, did)
+						]);
+						return { userBlocked, blockedByTarget };
+					})();
 			userBlocked = blockRel.userBlocked;
 			blockedByTarget = blockRel.blockedByTarget;
 		}
@@ -87,11 +72,9 @@
 			return;
 		}
 
-		const res = await client.getProfile(did);
-		if (res.ok) {
-			profile = res.value;
-			profiles.set(did, res.value);
-		} else error = res.error;
+		const res = await client.getProfile(did, true);
+		if (res.ok) profiles.set(did, res.value);
+		else error = res.error;
 
 		loading = false;
 	};
@@ -122,11 +105,7 @@
 			<Icon icon="heroicons:arrow-left-20-solid" width={24} />
 		</button>
 		<h2 class="text-xl font-bold">
-			{displayName.length > 0
-				? displayName
-				: loading
-					? 'loading...'
-					: (handle ?? actor ?? 'profile')}
+			{displayName.length > 0 ? displayName : loading ? 'loading...' : (handle ?? 'handle.invalid')}
 		</h2>
 		<div class="grow"></div>
 		{#if did && client.user && client.user.did !== did}
@@ -163,7 +142,7 @@
 			{#if did}
 				<div class="px-4 pb-4">
 					<div class="relative z-10 {bannerUrl ? '-mt-12' : 'mt-4'} mb-4">
-						<ProfileInfo {client} {did} bind:profile />
+						<ProfileInfo {client} {did} {profile} />
 					</div>
 
 					<TimelineView

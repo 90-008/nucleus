@@ -210,6 +210,8 @@ class IDBStorage {
 	}
 }
 
+export const ttl = 60 * 60 * 3; // 3 hours
+
 export const cache = createCache({
 	storage: {
 		type: 'custom',
@@ -217,6 +219,6 @@ export const cache = createCache({
 			storage: new IDBStorage()
 		}
 	},
-	ttl: 60 * 60 * 24, // 24 hours
+	ttl,
 	onError: (err) => console.error(err)
 });

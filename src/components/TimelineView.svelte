@@ -15,12 +15,12 @@
 	} from '$lib/state.svelte';
 	import Icon from '@iconify/svelte';
 	import { buildThreads, filterThreads, type ThreadPost } from '$lib/thread';
-	import type { AtprotoDid } from '@atcute/lexicons/syntax';
+	import type { Did } from '@atcute/lexicons/syntax';
 	import NotLoggedIn from './NotLoggedIn.svelte';
 
 	interface Props {
 		client?: AtpClient | null;
-		targetDid?: AtprotoDid;
+		targetDid?: Did;
 		postComposerState: PostComposerState;
 		class?: string;
 		// whether to show replies that are not the user's own posts
@@ -63,7 +63,7 @@
 		loaderState.status = 'LOADING';
 
 		try {
-			await fetchTimeline(client, did as AtprotoDid, 7, showReplies);
+			await fetchTimeline(client, did, 7, showReplies);
 			// only fetch interactions if logged in (because if not who is the interactor)
 			if (client.user) {
 				if (!fetchingInteractions) {
@@ -83,7 +83,7 @@
 		}
 
 		loading = false;
-		const cursor = postCursors.get(did as AtprotoDid);
+		const cursor = postCursors.get(did);
 		if (cursor && cursor.end) loaderState.complete();
 	};
 
@@ -92,7 +92,7 @@
 			// if we saw all posts dont try to load more.
 			// this only really happens if the user has no posts at all
 			// but we do have to handle it to not cause an infinite loop
-			const cursor = did ? postCursors.get(did as AtprotoDid) : undefined;
+			const cursor = did ? postCursors.get(did) : undefined;
 			if (!cursor?.end) loadMore();
 		}
 	});

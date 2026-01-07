@@ -1,6 +1,7 @@
 import { writable } from 'svelte/store';
 import {
 	AtpClient,
+	setRecordCache,
 	type NotificationsStream,
 	type NotificationsStreamEvent
 } from './at/client.svelte';
@@ -476,7 +477,7 @@ export const addTimeline = (did: Did, uris: Iterable<ResourceUri>) => {
 
 export const fetchTimeline = async (
 	client: AtpClient,
-	subject: AtprotoDid,
+	subject: Did,
 	limit: number = 6,
 	withBacklinks: boolean = true
 ) => {
@@ -545,6 +546,7 @@ export const handleJetstreamEvent = async (event: JetstreamEvent) => {
 					cid: commit.cid
 				}
 			];
+			await setRecordCache(uri, commit.record);
 			const client = clients.get(did) ?? viewClient;
 			const hydrated = await hydratePosts(client, did, posts, hydrateCacheFn);
 			if (!hydrated.ok) {

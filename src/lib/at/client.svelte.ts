@@ -30,7 +30,7 @@ import * as v from '@atcute/lexicons/validations';
 import { MiniDocQuery, type MiniDoc } from './slingshot';
 import { BacklinksQuery, type Backlinks, type BacklinksSource } from './constellation';
 import type { Records, XRPCProcedures } from '@atcute/lexicons/ambient';
-import { cache as rawCache } from '$lib/cache';
+import { cache as rawCache, ttl } from '$lib/cache';
 import { AppBskyActorProfile } from '@atcute/bluesky';
 import { WebSocket } from '@soffinal/websocket';
 import type { Notification } from './stardust';
@@ -77,6 +77,13 @@ const cacheWithRecords = cacheWithDidDocs.define('fetchRecord', async (uri: Reso
 
 const cache = cacheWithRecords;
 
+export const invalidateRecordCache = async (uri: ResourceUri) => {
+	console.log(`invalidating cached for ${uri}`);
+	await cache.invalidate('fetchRecord', `fetchRecord~${uri}`);
+};
+export const setRecordCache = (uri: ResourceUri, record: unknown) =>
+	cache.set('fetchRecord', `fetchRecord~${uri}`, record, ttl);
+
 export const xhrPost = (
 	url: string,
 	body: Blob | File,
@@ -88,11 +95,10 @@ export const xhrPost = (
 		const xhr = new XMLHttpRequest();
 		xhr.open('POST', url);
 
-		if (onProgress && xhr.upload) {
+		if (onProgress && xhr.upload)
 			xhr.upload.onprogress = (event: ProgressEvent) => {
 				if (event.lengthComputable) onProgress(event.loaded, event.total);
 			};
-		}
 
 		Object.keys(headers).forEach((key) => xhr.setRequestHeader(key, headers[key]));
 
@@ -145,13 +151,17 @@ export class AtpClient {
 		TKey extends RecordKeySchema,
 		Schema extends RecordSchema<TObject, TKey>,
 		Output extends InferInput<Schema>
-	>(schema: Schema, uri: ResourceUri): Promise<Result<RecordOutput<Output>, string>> {
+	>(
+		schema: Schema,
+		uri: ResourceUri,
+		noCache?: boolean
+	): Promise<Result<RecordOutput<Output>, string>> {
 		const parsedUri = expect(parseResourceUri(uri));
 		if (parsedUri.collection !== schema.object.shape.$type.expected)
 			return err(
 				`collections don't match: ${parsedUri.collection} != ${schema.object.shape.$type.expected}`
 			);
-		return await this.getRecord(schema, parsedUri.repo!, parsedUri.rkey!);
+		return await this.getRecord(schema, parsedUri.repo!, parsedUri.rkey!, noCache);
 	}
 
 	async getRecord<
@@ -163,14 +173,15 @@ export class AtpClient {
 	>(
 		schema: Schema,
 		repo: ActorIdentifier,
-		rkey: RecordKey
+		rkey: RecordKey,
+		noCache?: boolean
 	): Promise<Result<RecordOutput<Output>, string>> {
 		const collection = schema.object.shape.$type.expected;
 
 		try {
-			const rawValue = await cache.fetchRecord(
-				toResourceUri({ repo, collection, rkey, fragment: undefined })
-			);
+			const uri = toResourceUri({ repo, collection, rkey, fragment: undefined });
+			if (noCache) await invalidateRecordCache(uri);
+			const rawValue = await cache.fetchRecord(uri);
 
 			const parsed = safeParse(schema, rawValue.value);
 			if (!parsed.ok) return err(parsed.message);
@@ -185,10 +196,16 @@ export class AtpClient {
 		}
 	}
 
-	async getProfile(repo?: ActorIdentifier): Promise<Result<AppBskyActorProfile.Main, string>> {
+	async getProfile(
+		repo?: ActorIdentifier,
+		noCache?: boolean
+	): Promise<Result<AppBskyActorProfile.Main, string>> {
 		repo = repo ?? this.user?.did;
 		if (!repo) return err('not authenticated');
-		return map(await this.getRecord(AppBskyActorProfile.mainSchema, repo, 'self'), (d) => d.record);
+		return map(
+			await this.getRecord(AppBskyActorProfile.mainSchema, repo, 'self', noCache),
+			(d) => d.record
+		);
 	}
 
 	async listRecords<Collection extends keyof Records>(
@@ -218,8 +235,7 @@ export class AtpClient {
 		});
 		if (!res.ok) return err(`${res.data.error}: ${res.data.message ?? 'no details'}`);
 
-		for (const record of res.data.records)
-			await cache.set('fetchRecord', `fetchRecord~${record.uri}`, record, 60 * 60 * 24);
+		for (const record of res.data.records) setRecordCache(record.uri, record);
 
 		return ok(res.data);
 	}
