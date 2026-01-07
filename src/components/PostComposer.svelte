@@ -43,6 +43,18 @@
 		client.user?.did ? generateColorForDid(client.user?.did) : 'var(--nucleus-accent2)'
 	);
 
+	const getVideoDimensions = (
+		blobUrl: string
+	): Promise<Result<{ width: number; height: number }, string>> =>
+		new Promise((resolve) => {
+			const video = document.createElement('video');
+			video.onloadedmetadata = () => {
+				resolve(ok({ width: video.videoWidth, height: video.videoHeight }));
+			};
+			video.onerror = (e) => resolve(err(String(e)));
+			video.src = blobUrl;
+		});
+
 	const uploadVideo = async (blobUrl: string, mimeType: string) => {
 		const file = await (await fetch(blobUrl)).blob();
 		return await client.uploadVideo(file, mimeType, (status) => {
@@ -56,6 +68,17 @@
 			}
 		});
 	};
+
+	const getImageDimensions = (
+		blobUrl: string
+	): Promise<Result<{ width: number; height: number }, string>> =>
+		new Promise((resolve) => {
+			const img = new Image();
+			img.onload = () => resolve(ok({ width: img.width, height: img.height }));
+			img.onerror = (e) => resolve(err(String(e)));
+			img.src = blobUrl;
+		});
+
 	const uploadImage = async (blobUrl: string) => {
 		const file = await (await fetch(blobUrl)).blob();
 		return await client.uploadBlob(file, (progress) => {
@@ -77,8 +100,11 @@
 			const images = _state.attachedMedia.images;
 			let uploadedImages: typeof images = [];
 			for (const image of images) {
-				const upload = _state.blobsState.get((image.image as AtpBlob<string>).ref.$link);
+				const blobUrl = (image.image as AtpBlob<string>).ref.$link;
+				const upload = _state.blobsState.get(blobUrl);
 				if (!upload || upload.state !== 'uploaded') continue;
+				const size = await getImageDimensions(blobUrl);
+				if (size.ok) image.aspectRatio = size.value;
 				uploadedImages.push({
 					...image,
 					image: upload.blob
@@ -91,15 +117,17 @@
 					images: uploadedImages
 				};
 		} else if (_state.attachedMedia?.$type === 'app.bsky.embed.video') {
-			const upload = _state.blobsState.get(
-				(_state.attachedMedia.video as AtpBlob<string>).ref.$link
-			);
-			if (upload && upload.state === 'uploaded')
+			const blobUrl = (_state.attachedMedia.video as AtpBlob<string>).ref.$link;
+			const upload = _state.blobsState.get(blobUrl);
+			if (upload && upload.state === 'uploaded') {
+				const size = await getVideoDimensions(blobUrl);
+				if (size.ok) _state.attachedMedia.aspectRatio = size.value;
 				media = {
 					..._state.attachedMedia,
 					$type: 'app.bsky.embed.video',
 					video: upload.blob
 				};
+			}
 		}
 		// console.log('media', media);
 

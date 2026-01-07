@@ -359,7 +359,7 @@ export class AtpClient {
 			},
 			(uploaded, total) => onStatus?.({ stage: 'uploading', progress: uploaded / total })
 		);
-		if (!uploadResult.ok) return err(`failed to upload video: ${uploadResult.error.message}`);
+		if (!uploadResult.ok) return err(`failed to upload video: ${uploadResult.error}`);
 		const jobStatus = uploadResult.value;
 		let videoBlobRef: AtpBlob<string> = jobStatus.blob;
 
