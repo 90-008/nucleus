@@ -406,6 +406,8 @@ export const getBlockRelationship = (
 };
 
 export const allPosts = new SvelteMap<Did, SvelteMap<ResourceUri, PostWithUri>>();
+export type DeletedPostInfo = { reply?: PostWithUri['record']['reply'] };
+export const deletedPosts = new SvelteMap<ResourceUri, DeletedPostInfo>();
 // did -> post uris that are replies to that did
 export const replyIndex = new SvelteMap<Did, SvelteSet<ResourceUri>>();
 
@@ -446,6 +448,17 @@ export const addPosts = (newPosts: Iterable<PostWithUri>) => {
 			}
 		}
 	}
+};
+
+export const deletePost = (uri: ResourceUri) => {
+	const did = extractDidFromUri(uri)!;
+	const post = allPosts.get(did)?.get(uri);
+	if (!post) return;
+	allPosts.get(did)?.delete(uri);
+	// remove reply from index
+	const subjectDid = extractDidFromUri(post.record.reply?.parent.uri ?? '');
+	if (subjectDid) replyIndex.get(subjectDid)?.delete(uri);
+	deletedPosts.set(uri, { reply: post.record.reply });
 };
 
 export const timelines = new SvelteMap<Did, SvelteSet<ResourceUri>>();
@@ -550,14 +563,15 @@ export const handleJetstreamEvent = async (event: JetstreamEvent) => {
 	const uri: ResourceUri = toCanonicalUri({ did, ...commit });
 	if (commit.collection === 'app.bsky.feed.post') {
 		if (commit.operation === 'create') {
+			const record = commit.record as AppBskyFeedPost.Main;
 			const posts = [
 				{
-					record: commit.record as AppBskyFeedPost.Main,
+					record,
 					uri,
 					cid: commit.cid
 				}
 			];
-			await setRecordCache(uri, commit.record);
+			await setRecordCache(uri, record);
 			const client = clients.get(did) ?? viewClient;
 			const hydrated = await hydratePosts(client, did, posts, hydrateCacheFn);
 			if (!hydrated.ok) {
@@ -566,16 +580,14 @@ export const handleJetstreamEvent = async (event: JetstreamEvent) => {
 			}
 			addPosts(hydrated.value.values());
 			addTimeline(did, hydrated.value.keys());
-		} else if (commit.operation === 'delete') {
-			const post = allPosts.get(did)?.get(uri);
-			if (post) {
-				allPosts.get(did)?.delete(uri);
-				// remove from timeline
-				timelines.get(did)?.delete(uri);
-				// remove reply from index
-				const subjectDid = extractDidFromUri(post.record.reply?.parent.uri ?? '');
-				if (subjectDid) replyIndex.get(subjectDid)?.delete(uri);
+			if (record.reply) {
+				const parentDid = extractDidFromUri(record.reply.parent.uri)!;
+				addTimeline(parentDid, [uri]);
+				// const rootDid = extractDidFromUri(record.reply.root.uri)!;
+				// addTimeline(rootDid, [uri]);
 			}
+		} else if (commit.operation === 'delete') {
+			deletePost(uri);
 		}
 	}
 };

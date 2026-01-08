@@ -146,7 +146,6 @@
 					</div>
 
 					<TimelineView
-						hydrateOptions={{ downwards: 'none' }}
 						showReplies={false}
 						{client}
 						targetDid={did}
