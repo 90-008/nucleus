@@ -1,8 +1,9 @@
+import { httpToDidWeb, pocketUrl } from './index';
 import type { Did } from '@atcute/lexicons/syntax';
 import type { AtpClient } from './client.svelte';
 import { err, ok, type Result } from '$lib/result';
 
-const POCKET_PROXY = 'did:web:pocket.at-app.net#pocket_prefs';
+const POCKET_PROXY = `${httpToDidWeb(pocketUrl.toString())}#pocket_prefs`;
 
 export type Preferences = {
     mutes?: Did[];

@@ -7,7 +7,10 @@ export type ApiEndpoints = Record<string, string> & {
 	spacedust: string;
 	constellation: string;
 	jetstream: string;
+	pocket: string;
+	cdn: string;
 };
+
 export type SavedFeed = {
 	feed: FeedGenerator,
 	pinned: boolean,
@@ -25,7 +28,9 @@ export const defaultSettings: Settings = {
 		slingshot: 'https://slingshot.microcosm.blue',
 		spacedust: 'https://spacedust.microcosm.blue',
 		constellation: 'https://constellation.microcosm.blue',
-		jetstream: 'wss://jetstream2.fr.hose.cam'
+		jetstream: 'wss://jetstream2.fr.hose.cam',
+		pocket: 'https://pocket.at-app.net',
+		cdn: 'https://cdn.bsky.app'
 	},
 	theme: defaultTheme,
 	socialAppUrl: 'https://bsky.app',
@@ -91,6 +96,9 @@ export const needsReload = (current: Settings, other: Settings): boolean => {
 		current.endpoints.slingshot !== other.endpoints.slingshot ||
 		current.endpoints.spacedust !== other.endpoints.spacedust ||
 		current.endpoints.constellation !== other.endpoints.constellation ||
-		current.endpoints.jetstream !== other.endpoints.jetstream
+		current.endpoints.jetstream !== other.endpoints.jetstream ||
+		current.endpoints.pocket !== other.endpoints.pocket ||
+		current.endpoints.cdn !== other.endpoints.cdn
 	);
 };
+

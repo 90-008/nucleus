@@ -1,6 +1,7 @@
 import type { Did } from '@atcute/lexicons';
+import { cdnUrl } from '$lib/at';
 
-export const cdn = `https://cdn.bsky.app`;
+export const cdn = cdnUrl.origin;
 
 export type ImageKind = 'avatar_thumbnail' | 'avatar' | 'feed_thumbnail' | 'feed_fullsize';
 export type ImageFormat = 'webp' | 'png' | 'jpg';

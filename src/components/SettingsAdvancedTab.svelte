@@ -38,6 +38,8 @@
 			{@render _input('spacedust', 'spacedust url (for notifications)')}
 			{@render _input('constellation', 'constellation url (for backlinks)')}
 			{@render _input('jetstream', 'jetstream url (for real-time updates)')}
+			{@render _input('pocket', 'pocket url (for preferences)')}
+			{@render _input('cdn', 'cdn url (for media)')}
 		</div>
 	</div>
 
