@@ -1,28 +1,29 @@
 <script lang="ts">
 	import MutedAccountItem from './MutedAccountItem.svelte';
 	import VirtualList from '@tutorlatin/svelte-tiny-virtual-list';
-	import type { Did } from '@atcute/lexicons';
-	import type { Preferences } from '$lib/at/pocket';
+	import type { ActorIdentifier, Did } from '@atcute/lexicons';
 	import { allBacklinks, createBlock, deleteBlock, clients } from '$lib/state.svelte';
 	import { blockSource } from '$lib';
+	import { isActorIdentifier } from '@atcute/lexicons/syntax';
+	import { resolveHandle } from '$lib/at/client.svelte';
 
 	interface Props {
 		mutes: Did[];
-		currentPrefs: Preferences | null;
 		onAddMute: (did: Did) => void;
 		onRemoveMute: (did: Did) => void;
 		selectedAccount: Did | null;
 	}
 
-	let { mutes, currentPrefs, onAddMute, onRemoveMute, selectedAccount }: Props = $props();
+	let { mutes, onAddMute, onRemoveMute, selectedAccount }: Props = $props();
 
 	let newMuteInput = $state('');
 	let newBlockInput = $state('');
 
-	const handleAddMute = () => {
+	const handleAddMute = async () => {
 		if (!newMuteInput.trim()) return;
-		const did = newMuteInput.trim() as Did;
-		onAddMute(did);
+		const did = await resolveHandle(newMuteInput.trim() as ActorIdentifier);
+		if (!did.ok) return;
+		onAddMute(did.value);
 		newMuteInput = '';
 	};
 
@@ -44,8 +45,9 @@
 		if (!newBlockInput.trim() || !selectedAccount) return;
 		const client = clients.get(selectedAccount);
 		if (!client) return;
-		const did = newBlockInput.trim() as Did;
-		await createBlock(client, did);
+		const did = await resolveHandle(newBlockInput.trim() as ActorIdentifier);
+		if (!did.ok) return;
+		await createBlock(client, did.value);
 		newBlockInput = '';
 	};
 
@@ -65,10 +67,14 @@
 				<input
 					type="text"
 					bind:value={newMuteInput}
-					placeholder="did:plc:..."
+					placeholder="enter identifier"
 					class="single-line-input flex-1"
 				/>
-				<button onclick={handleAddMute} class="action-button">add</button>
+				<button
+					disabled={!isActorIdentifier(newMuteInput)}
+					onclick={handleAddMute}
+					class="action-button">add</button
+				>
 			</div>
 			{#if mutes.length > 0}
 				<div class="h-fit">
@@ -99,10 +105,14 @@
 				<input
 					type="text"
 					bind:value={newBlockInput}
-					placeholder="did:plc:..."
+					placeholder="enter identifier"
 					class="single-line-input flex-1"
 				/>
-				<button onclick={handleAddBlock} class="action-button">add</button>
+				<button
+					disabled={!isActorIdentifier(newBlockInput)}
+					onclick={handleAddBlock}
+					class="action-button">add</button
+				>
 			</div>
 			{#if blocks.length > 0}
 				<div class="h-fit">

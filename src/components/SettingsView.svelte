@@ -160,7 +160,6 @@
 		{:else if tab === 'moderation'}
 			<SettingsModerationTab
 				{mutes}
-				{currentPrefs}
 				onAddMute={handleAddMute}
 				onRemoveMute={handleRemoveMute}
 				{selectedAccount}

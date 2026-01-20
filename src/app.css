@@ -8,6 +8,7 @@
 			opacity: 0;
 			transform: scale(0.95);
 		}
+
 		100% {
 			opacity: 1;
 			transform: scale(1);
@@ -25,18 +26,28 @@
 
 @utility single-line-input {
 	@apply w-full rounded-sm border-2 border-(--nucleus-accent)/40 bg-(--nucleus-accent)/3 px-3 py-2 font-medium transition-all;
+
 	&:focus {
 		@apply scale-[1.02] border-(--nucleus-accent)/80 bg-(--nucleus-accent)/10 [box-shadow:none] outline-none;
 	}
 }
 
 @utility action-button {
-	@apply rounded-sm border-2 border-(--nucleus-accent) px-3 py-2 font-semibold text-(--nucleus-accent) transition-all hover:scale-105 hover:bg-(--nucleus-accent)/20;
+	@apply rounded-sm border-2 border-(--nucleus-accent) px-3 py-2 font-semibold text-(--nucleus-accent) transition-all;
+
+	&:enabled {
+		@apply hover:scale-105 hover:bg-(--nucleus-accent)/20;
+	}
+
+	&:disabled {
+		@apply opacity-60 hover:scale-100;
+	}
 }
 
 @utility error-disclaimer {
 	@apply rounded-sm border-2 border-red-500 p-2;
 	background-color: color-mix(in srgb, var(--color-red-500) 15%, var(--nucleus-bg));
+
 	p {
 		@apply text-base text-wrap wrap-break-word text-red-500;
 	}
@@ -49,6 +60,10 @@
 
 button {
 	@apply hover:cursor-pointer;
+
+	&:disabled {
+		@apply cursor-not-allowed;
+	}
 }
 
 a {
@@ -87,10 +102,12 @@ a {
 }
 
 @keyframes pulse-highlight {
+
 	0%,
 	100% {
 		box-shadow: 0 0 0 0 var(--nucleus-selected-post);
 	}
+
 	50% {
 		box-shadow: 0 0 20px 5px var(--nucleus-selected-post);
 	}
@@ -101,6 +118,7 @@ a {
 		transform: translateX(144px);
 		opacity: 0;
 	}
+
 	to {
 		transform: translateX(0);
 		opacity: 1;
@@ -112,6 +130,7 @@ a {
 		transform: translateX(-144px);
 		opacity: 0;
 	}
+
 	to {
 		transform: translateX(0);
 		opacity: 1;
