@@ -208,15 +208,14 @@
 
 <div class="mx-auto flex min-h-dvh max-w-2xl flex-col">
 	<div class="flex-1">
-		<!-- timeline -->
-		<TimelineView
-			class={currentRoute.path === '/' ? `${animClass}` : 'hidden'}
-			client={selectedClient}
-			showReplies={true}
-			bind:postComposerState
-		/>
-
-		{#if currentRoute.path === '/settings/:tab'}
+		{#if currentRoute.path === '/'}
+			<TimelineView
+				class={animClass}
+				client={selectedClient}
+				showReplies={true}
+				bind:postComposerState
+			/>
+		{:else if currentRoute.path === '/settings/:tab'}
 			<div class={animClass}>
 				<SettingsView tab={currentRoute.params.tab} />
 			</div>

@@ -1,6 +1,6 @@
 {
   inputs.parts.url = "github:hercules-ci/flake-parts";
-  inputs.nixpkgs.url = "github:nixos/nixpkgs";
+  inputs.nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
   inputs.naked-shell.url = "github:90-008/mk-naked-shell";
 
   outputs = inp:
