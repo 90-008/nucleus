@@ -49,7 +49,7 @@
 			onclick={() => (isOpen = !isOpen)}
 			class="flex action-button items-center gap-1.5 text-sm hover:scale-102!"
 		>
-			<Icon icon="heroicons:list-bullet" width="16" />
+			<Icon icon="heroicons:list-bullet" width="20" />
 			<span>{selectedName}</span>
 			<span class="opacity-50">▾</span>
 		</button>
