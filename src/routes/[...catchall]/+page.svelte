@@ -91,7 +91,11 @@
 		text: '',
 		blobsState: new SvelteMap()
 	});
-	let selectedFeed = $state<string | null>(null);
+	let selectedFeed = $state<string | null>(localStorage.getItem('selectedFeed') ?? null);
+	$effect(() => {
+		if (selectedFeed) localStorage.setItem('selectedFeed', selectedFeed);
+		else localStorage.removeItem('selectedFeed');
+	});
 	let timelineView: { clearFeed: () => void } | undefined = $state();
 	let showScrollToTop = $state(false);
 	const handleScroll = () => {
