@@ -163,6 +163,7 @@
 				{currentPrefs}
 				onAddMute={handleAddMute}
 				onRemoveMute={handleRemoveMute}
+				{selectedAccount}
 			/>
 		{:else if tab === 'style'}
 			<SettingsStyleTab bind:localSettings />

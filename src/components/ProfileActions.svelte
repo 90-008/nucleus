@@ -135,7 +135,7 @@
 	bind:position={actionsPos}
 	placement="bottom-end"
 >
-	{#if !blockedByTarget}
+	{#if !blockedByTarget && !userBlocked}
 		{@render dropdownItem(
 			follow ? 'heroicons:user-minus-20-solid' : 'heroicons:user-plus-20-solid',
 			follow ? 'unfollow' : 'follow',
