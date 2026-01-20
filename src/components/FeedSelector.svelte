@@ -10,7 +10,7 @@
 		onSelect: (feedUri: string | null) => void;
 	}
 
-	let { selectedFeed, onSelect }: Props = $props();
+	let { selectedFeed = $bindable(), onSelect }: Props = $props();
 
 	let isOpen = $state(false);
 
@@ -67,6 +67,19 @@
 		>
 			<Icon icon="heroicons:chat-bubble-left-ellipsis-16-solid" width="20" />
 			<span>replies</span>
+		</button>
+		<button
+			onclick={() => {
+				onSelect('following');
+				isOpen = false;
+			}}
+			class="my-0.5 flex items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors hover:bg-(--nucleus-fg)/10 {selectedFeed ===
+			'following'
+				? 'bg-(--nucleus-accent)/20'
+				: ''}"
+		>
+			<Icon icon="heroicons:users-solid" width="20" />
+			<span>following</span>
 		</button>
 		{#each sortedFeeds as savedFeed (savedFeed.feed.uri)}
 			<button

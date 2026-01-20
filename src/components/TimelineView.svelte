@@ -4,6 +4,7 @@
 	import type { Did } from '@atcute/lexicons/syntax';
 	import FeedTimelineView from './FeedTimelineView.svelte';
 	import ReplyTimelineView from './ReplyTimelineView.svelte';
+	import FollowingTimelineView from './FollowingTimelineView.svelte';
 
 	interface Props {
 		client?: AtpClient | null;
@@ -30,7 +31,14 @@
 	};
 </script>
 
-{#if selectedFeed}
+{#if selectedFeed === 'following'}
+	<FollowingTimelineView
+		{client}
+		bind:postComposerState
+		class={className}
+		targetDid={targetDid ?? undefined}
+	/>
+{:else if selectedFeed}
 	<FeedTimelineView
 		{client}
 		{selectedFeed}

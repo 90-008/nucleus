@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import {
 	AtpClient,
 	setRecordCache,
@@ -31,7 +31,7 @@ import {
 	toCanonicalUri
 } from '$lib';
 import { Router } from './router.svelte';
-import type { Account } from './accounts';
+import { accounts, type Account } from './accounts';
 import {
 	getPreferences,
 	putPreferences,
@@ -381,8 +381,12 @@ export const fetchFollows = async (
 
 // this fetches up to three days of posts and interactions for using in following list
 export const fetchForInteractions = async (client: AtpClient, subject: Did) => {
+	const userDid = client.user?.did;
+	if (!userDid) return;
+
 	const threeDaysAgo = (Date.now() - 3 * 24 * 60 * 60 * 1000) * 1000;
 
+	// fetch only 1 item to prompt the cursor
 	const res = await client.listRecordsUntil(subject, 'app.bsky.feed.post', undefined, threeDaysAgo);
 	if (!res.ok) return;
 	const postsWithUri = res.value.records.map(
@@ -391,10 +395,166 @@ export const fetchForInteractions = async (client: AtpClient, subject: Did) => {
 	);
 	addPosts(postsWithUri);
 
+	// add to following buffer (not feed directly)
+	let buffer = followingBuffer.get(userDid);
+	if (!buffer) {
+		buffer = new SvelteSet();
+		followingBuffer.set(userDid, buffer);
+	}
+	for (const post of postsWithUri) buffer.add(post.uri);
+
+	if (res.value.cursor) {
+		let userCursors = followingCursors.get(userDid);
+		if (!userCursors) {
+			userCursors = new SvelteMap();
+			followingCursors.set(userDid, userCursors);
+		}
+		userCursors.set(subject, res.value.cursor);
+	}
+
 	const cursorTimestamp = timestampFromCursor(res.value.cursor) ?? -1;
 	const timestamp = Math.min(cursorTimestamp, threeDaysAgo);
 	console.log(`${subject}: fetchForInteractions`, res.value.cursor, timestamp);
 	await Promise.all([repostSource].map((s) => fetchLinksUntil(subject, client, s, timestamp)));
+};
+
+export const fetchFollowingTimeline = async (client: AtpClient, targetDid?: Did, limit: number = 10) => {
+	// 1. Identify candidates (active follows + self)
+	const userDid = targetDid ?? client.user?.did;
+	if (!userDid) return;
+
+	let buffer = followingBuffer.get(userDid);
+	if (!buffer) {
+		buffer = new SvelteSet();
+		followingBuffer.set(userDid, buffer);
+	}
+
+	let userFeed = followingFeed.get(userDid);
+	if (!userFeed) {
+		userFeed = new SvelteSet();
+		followingFeed.set(userDid, userFeed);
+	}
+
+	let userCursors = followingCursors.get(userDid);
+	if (!userCursors) {
+		userCursors = new SvelteMap();
+		followingCursors.set(userDid, userCursors);
+	}
+
+	// 0. Drain buffer first
+	if (buffer.size > 0) {
+		const sorted = Array.from(buffer).sort((a, b) => {
+			const postA = getPostFromUri(a);
+			const postB = getPostFromUri(b);
+			return (
+				new Date(postB?.record.createdAt ?? 0).getTime() -
+				new Date(postA?.record.createdAt ?? 0).getTime()
+			);
+		});
+
+		const toAdd = sorted.slice(0, limit);
+		for (const uri of toAdd) {
+			userFeed.add(uri);
+			buffer.delete(uri);
+		}
+
+		// If we had enough in buffer, return. If we exhausted buffer but needed more?
+		// For simplicity, just return. The UI will call loadMore again if needed/short.
+		return;
+	}
+
+	const followsMap = follows.get(userDid);
+	const subjects = new Set<Did>();
+	if (followsMap) {
+		for (const follow of followsMap.values()) subjects.add(follow.subject);
+	}
+	subjects.add(userDid);
+
+	// 2. Find the "newest" cursor(s)
+	let maxCursor: string | undefined = undefined;
+	let candidates: Did[] = [];
+
+	for (const subject of subjects) {
+		const cursor = userCursors.get(subject);
+
+		// null means exhausted
+		if (cursor === null) continue;
+
+		// if we haven't fetched this user yet (undefined cursor), they are a candidate (newest)
+		if (cursor === undefined) {
+			if (maxCursor !== undefined) {
+				maxCursor = undefined;
+				candidates = [subject];
+			} else {
+				candidates.push(subject);
+			}
+			continue;
+		}
+
+		// If maxCursor is undefined (meaning we have some 'now' candidates), skip checked cursors
+		if (maxCursor === undefined && candidates.length > 0) continue;
+
+		if (maxCursor === undefined || cursor > maxCursor) {
+			maxCursor = cursor;
+			candidates = [subject];
+		} else if (cursor === maxCursor) {
+			candidates.push(subject);
+		}
+	}
+
+	if (candidates.length === 0) return; // Everyone exhausted?
+
+	// 3. Fetch from candidates
+	console.log('fetching following timeline from', candidates, maxCursor);
+	const results = await Promise.all(
+		candidates.map(async (did) => {
+			const cursor = userCursors!.get(did) ?? undefined;
+			// fetch limit is 4th argument, cursor is 3rd
+			const res = await client.listRecords(did, 'app.bsky.feed.post', cursor, limit);
+			if (!res.ok) {
+				console.error(`fetchFollowingTimeline failed for ${did}:`, res.error);
+				return null;
+			}
+			return { did, res: res.value };
+		})
+	);
+
+	// 4. Update state
+	const newPosts: ResourceUri[] = [];
+	for (const result of results) {
+		if (!result) continue;
+		const { did, res } = result;
+
+		// update cursor
+		if (res.cursor) userCursors!.set(did, res.cursor);
+		else userCursors!.set(did, null); // null = exhausted
+
+		for (const record of res.records) {
+			newPosts.push(record.uri);
+		}
+	}
+
+	if (newPosts.length === 0) return;
+
+	// fetch each post record
+	const posts = await Promise.all(
+		newPosts.map(async (uri) => {
+			const result = await client.getRecordUri(AppBskyFeedPost.mainSchema, uri);
+			if (!result.ok) return null;
+			return { uri: result.value.uri, cid: result.value.cid, record: result.value.record };
+		})
+	);
+
+	const validPosts = posts.filter((p): p is PostWithUri => p !== null);
+	addPosts(validPosts);
+
+	for (const post of validPosts) userFeed.add(post.uri);
+
+	// check if any of the post authors block the user
+	await fetchBlocksForPosts(
+		client,
+		validPosts.map((p) => p.uri)
+	);
 };
 
 // if did is in set, we have fetched blocks for them already (against logged in users)
@@ -532,6 +692,12 @@ export const replyIndex = new SvelteMap<Did, SvelteSet<ResourceUri>>();
 
 export const getPost = (did: Did, rkey: RecordKey) =>
 	allPosts.get(did)?.get(toCanonicalUri({ did, collection: 'app.bsky.feed.post', rkey }));
+
+export const getPostFromUri = (uri: ResourceUri) => {
+	const did = extractDidFromUri(uri);
+	return did ? allPosts.get(did)?.get(uri) : undefined;
+};
+
 const hydrateCacheFn: Parameters<typeof hydratePosts>[3] = (did, rkey) => {
 	const cached = getPost(did, rkey);
 	return cached ? ok(cached) : undefined;
@@ -586,6 +752,10 @@ export const postCursors = new SvelteMap<Did, { value?: string; end: boolean }>(
 // feed state: Did -> feedUri -> post URIs
 export const feedTimelines = new SvelteMap<Did, SvelteMap<string, ResourceUri[]>>();
 export const feedCursors = new SvelteMap<Did, SvelteMap<string, { value?: string; end: boolean }>>();
+
+export const followingFeed = new SvelteMap<Did, SvelteSet<ResourceUri>>(); // merged timeline: UserDid -> Set<Uri>
+export const followingBuffer = new SvelteMap<Did, SvelteSet<ResourceUri>>(); // buffer: UserDid -> Set<Uri>
+export const followingCursors = new SvelteMap<Did, SvelteMap<Did, string | null>>(); // cursors: UserDid -> SubjectDid -> Cursor
 
 export const fetchFeed = async (
 	client: AtpClient,
@@ -741,6 +911,64 @@ export const fetchInteractionsToTimelineEnd = async (
 	);
 };
 
+export const fetchInteractionsToFollowingTimelineEnd = async (
+	client: AtpClient,
+	userDid: Did
+) => {
+	const userCursors = followingCursors.get(userDid);
+	if (!userCursors) return;
+
+	const feed = followingFeed.get(userDid);
+	if (!feed || feed.size === 0) return;
+
+	let minTimestamp = Date.now() * 1000;
+	let found = false;
+
+	for (const uri of feed) {
+		const post = getPostFromUri(uri);
+		if (post) {
+			const ts = new Date(post.record.createdAt).getTime() * 1000;
+			if (ts < minTimestamp) minTimestamp = ts;
+			found = true;
+		}
+	}
+
+	if (!found) return;
+
+	await Promise.all(
+		[likeSource, repostSource].map((s) => fetchLinksUntil(userDid, client, s, minTimestamp))
+	);
+};
+
+export const fetchInteractionsToFeedTimelineEnd = async (
+	client: AtpClient,
+	userDid: Did,
+	feedUri: string
+) => {
+	const userFeedTimelines = feedTimelines.get(userDid);
+	if (!userFeedTimelines) return;
+	const posts = userFeedTimelines.get(feedUri);
+	if (!posts || posts.length === 0) return;
+
+	let minTimestamp = Date.now() * 1000;
+	let found = false;
+
+	for (const uri of posts) {
+		const post = getPostFromUri(uri);
+		if (post) {
+			const ts = new Date(post.record.createdAt).getTime() * 1000;
+			if (ts < minTimestamp) minTimestamp = ts;
+			found = true;
+		}
+	}
+
+	if (!found) return;
+
+	await Promise.all(
+		[likeSource, repostSource].map((s) => fetchLinksUntil(userDid, client, s, minTimestamp))
+	);
+};
+
 export const fetchInitial = async (account: Account) => {
 	const client = clients.get(account.did)!;
 	await Promise.all([
@@ -776,11 +1004,34 @@ export const handleJetstreamEvent = async (event: JetstreamEvent) => {
 			}
 			addPosts(hydrated.value.values());
 			addTimeline(did, hydrated.value.keys());
+
+			// Broadcast to following feeds of local accounts
+			for (const account of get(accounts)) {
+				// does this account follow the author?
+				let isFollowing = account.did === did;
+				if (!isFollowing) {
+					const accountFollows = follows.get(account.did);
+					if (accountFollows) {
+						for (const follow of accountFollows.values()) {
+							if (follow.subject === did) {
+								isFollowing = true;
+								break;
+							}
+						}
+					}
+				}
+
+				if (isFollowing) {
+					const feed = followingFeed.get(account.did);
+					if (feed) {
+						for (const uri of hydrated.value.keys()) feed.add(uri);
+					}
+				}
+			}
+
 			if (record.reply) {
 				const parentDid = extractDidFromUri(record.reply.parent.uri)!;
 				addTimeline(parentDid, [uri]);
-				// const rootDid = extractDidFromUri(record.reply.root.uri)!;
-				// addTimeline(rootDid, [uri]);
 			}
 		} else if (commit.operation === 'delete') {
 			deletePost(uri);

@@ -244,7 +244,8 @@ export class AtpClient {
 		ident: ActorIdentifier,
 		collection: Collection,
 		cursor?: string,
-		timestamp: number = -1
+		timestamp: number = -1,
+		limit: number = 100
 	): Promise<ReturnType<typeof this.listRecords>> {
 		const data: OkType<Awaited<ReturnType<typeof this.listRecords>>> = {
 			records: [],
@@ -253,7 +254,7 @@ export class AtpClient {
 
 		let end = false;
 		while (!end) {
-			const res = await this.listRecords(ident, collection, data.cursor);
+			const res = await this.listRecords(ident, collection, data.cursor, limit);
 			if (!res.ok) return res;
 			data.cursor = res.value.cursor;
 			data.records.push(...res.value.records);

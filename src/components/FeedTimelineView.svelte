@@ -13,7 +13,8 @@
 		feedCursors,
 		fetchFeed,
 		resetFeed,
-		checkForNewPosts
+		checkForNewPosts,
+		fetchInteractionsToFeedTimelineEnd
 	} from '$lib/state.svelte';
 	import Icon from '@iconify/svelte';
 	import NotLoggedIn from './NotLoggedIn.svelte';
@@ -70,6 +71,9 @@
 	let loading = $state(false);
 	let loadError = $state('');
 
+	let fetchingInteractions = $state(false);
+	let scheduledFetchInteractions = $state(false);
+
 	export const clearFeed = () => {
 		if (!userDid) return;
 		scrollContainer?.scrollTo({ top: 0, behavior: 'smooth' });
@@ -98,6 +102,18 @@
 
 		try {
 			const result = await fetchFeed(client, selectedFeed, feedServiceDid);
+
+			if (client.user && userDid) {
+				if (!fetchingInteractions) {
+					scheduledFetchInteractions = false;
+					fetchingInteractions = true;
+					await fetchInteractionsToFeedTimelineEnd(client, userDid, selectedFeed);
+					fetchingInteractions = false;
+				} else {
+					scheduledFetchInteractions = true;
+				}
+			}
+
 			loaderState.loaded();
 			if (result?.end) loaderState.complete();
 		} catch (error) {

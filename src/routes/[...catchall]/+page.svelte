@@ -333,7 +333,7 @@
 				<div class="flex items-center gap-1.5 px-2 py-1">
 					<div class="flex items-center gap-1.5">
 						<FeedSelector {selectedFeed} onSelect={(uri) => (selectedFeed = uri)} />
-						{#if selectedFeed}
+						{#if selectedFeed && selectedFeed !== 'following'}
 							<button
 								onclick={() => {
 									if (timelineView) timelineView.clearFeed();
