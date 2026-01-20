@@ -606,7 +606,7 @@ export const fetchFeed = async (
 	if (cursor?.end) return;
 
 	const skeleton = await import('./at/feeds').then((m) =>
-		m.fetchFeedSkeleton(client, feedUri, feedServiceDid, cursor?.value)
+		m.fetchFeedSkeleton(client, feedUri, feedServiceDid, cursor?.value, limit)
 	);
 	if (!skeleton) throw `failed to fetch feed skeleton for ${feedUri}`;
 
@@ -643,6 +643,25 @@ export const fetchFeed = async (
 	);
 
 	return newCursor;
+};
+
+export const checkForNewPosts = async (client: AtpClient, feedUri: string, feedServiceDid: string) => {
+	const userDid = client.user?.did;
+	if (!userDid) return false;
+
+	const currentFeed = feedTimelines.get(userDid)?.get(feedUri);
+	if (!currentFeed || currentFeed.length === 0) return false;
+
+	const skeleton = await import('./at/feeds').then((m) =>
+		m.fetchFeedSkeleton(client, feedUri, feedServiceDid, undefined, 1)
+	);
+
+	if (skeleton && skeleton.feed.length > 0) {
+		const latestPost = skeleton.feed[0].post;
+		return latestPost !== currentFeed[0];
+	}
+
+	return false;
 };
 
 export const resetFeed = (did: Did, feedUri: string) => {

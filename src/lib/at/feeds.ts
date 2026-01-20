@@ -63,13 +63,14 @@ export async function fetchFeedSkeleton(
     client: AtpClient,
     feedUri: string,
     feedServiceDid: string,
-    cursor?: string
+    cursor?: string,
+    limit: number = 25
 ): Promise<FeedSkeleton | null> {
     const auth = client.user;
     if (!auth) return null;
 
     const cursorParam = cursor ? `&cursor=${encodeURIComponent(cursor)}` : '';
-    const url = `/xrpc/app.bsky.feed.getFeedSkeleton?feed=${encodeURIComponent(feedUri)}${cursorParam}`;
+    const url = `/xrpc/app.bsky.feed.getFeedSkeleton?feed=${encodeURIComponent(feedUri)}&limit=${limit}${cursorParam}`;
 
     try {
         const response = await auth.atcute.handler(url, {
