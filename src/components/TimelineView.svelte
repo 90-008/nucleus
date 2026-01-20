@@ -11,21 +11,27 @@
 		fetchTimeline,
 		allPosts,
 		timelines,
+		viewClient,
 		fetchInteractionsToTimelineEnd,
-		accountPreferences
+		accountPreferences,
+		feedTimelines,
+		feedCursors,
+		fetchFeed,
+		resetFeed
 	} from '$lib/state.svelte';
 	import Icon from '@iconify/svelte';
 	import { buildThreads, filterThreads, type ThreadPost } from '$lib/thread';
-	import type { Did } from '@atcute/lexicons/syntax';
+	import type { Did, RecordKey } from '@atcute/lexicons/syntax';
 	import NotLoggedIn from './NotLoggedIn.svelte';
+	import { fetchFeedGenerator } from '$lib/at/feeds';
 
 	interface Props {
 		client?: AtpClient | null;
 		targetDid?: Did;
 		postComposerState: PostComposerState;
 		class?: string;
-		// whether to show replies that are not the user's own posts
 		showReplies?: boolean;
+		selectedFeed?: string | null;
 	}
 
 	let {
@@ -33,6 +39,7 @@
 		targetDid = undefined,
 		showReplies = true,
 		postComposerState = $bindable(),
+		selectedFeed = $bindable(null),
 		class: className = ''
 	}: Props = $props();
 
@@ -46,8 +53,26 @@
 	const currentPrefs = $derived(userDid ? accountPreferences.get(userDid) : null);
 	const mutes = $derived(currentPrefs?.mutes ?? []);
 
+	let feedServiceDid = $state<string | null>(null);
+
+	$effect(() => {
+		if (selectedFeed) {
+			fetchFeedGenerator(client ?? viewClient, selectedFeed).then((meta) => {
+				feedServiceDid = meta?.did ?? null;
+			});
+		} else {
+			feedServiceDid = null;
+		}
+	});
+
+	export const clearFeed = () => {
+		if (!selectedFeed || !userDid) return;
+		resetFeed(userDid, selectedFeed);
+		loaderState.reset();
+		loadMore();
+	};
+
 	const threads = $derived(
-		// todo: apply showReplies here
 		filterThreads(
 			did && timelines.has(did) ? buildThreads(did, timelines.get(did)!, allPosts, mutes) : [],
 			$accounts,
@@ -55,33 +80,51 @@
 		)
 	);
 
+	const feedPosts = $derived.by(() => {
+		if (!selectedFeed || !userDid) return [];
+		const uris = feedTimelines.get(userDid)?.get(selectedFeed) ?? [];
+		return uris
+			.map((uri) => {
+				const did = uri.split('/')[2] as Did;
+				return allPosts.get(did)?.get(uri);
+			})
+			.filter((p): p is NonNullable<typeof p> => p !== undefined);
+	});
+
 	const loaderState = new LoaderState();
 	let scrollContainer = $state<HTMLDivElement>();
 	let loading = $state(false);
 	let loadError = $state('');
 
 	const loadMore = async () => {
-		if (loading || !client || !did) return;
+		if (loading || !client || !userDid) return;
 
 		loading = true;
 		loaderState.status = 'LOADING';
 
 		try {
-			await fetchTimeline(client, did, 7, showReplies, {
-				downwards: userDid === did ? 'sameAuthor' : 'none'
-			});
-			// only fetch interactions if logged in (because if not who is the interactor)
-			if (client.user && userDid) {
-				if (!fetchingInteractions) {
-					scheduledFetchInteractions = false;
-					fetchingInteractions = true;
-					await fetchInteractionsToTimelineEnd(client, userDid, did);
-					fetchingInteractions = false;
-				} else {
-					scheduledFetchInteractions = true;
+			if (selectedFeed && feedServiceDid) {
+				const result = await fetchFeed(client, selectedFeed, feedServiceDid);
+				loaderState.loaded();
+				if (result?.end) loaderState.complete();
+			} else if (did) {
+				await fetchTimeline(client, did, 7, showReplies, {
+					downwards: userDid === did ? 'sameAuthor' : 'none'
+				});
+				if (client.user && userDid) {
+					if (!fetchingInteractions) {
+						scheduledFetchInteractions = false;
+						fetchingInteractions = true;
+						await fetchInteractionsToTimelineEnd(client, userDid, did);
+						fetchingInteractions = false;
+					} else {
+						scheduledFetchInteractions = true;
+					}
 				}
+				loaderState.loaded();
+				const cursor = postCursors.get(did);
+				if (cursor?.end) loaderState.complete();
 			}
-			loaderState.loaded();
 		} catch (error) {
 			loadError = `${error}`;
 			loaderState.error();
@@ -90,17 +133,18 @@
 		}
 
 		loading = false;
-		const cursor = postCursors.get(did);
-		if (cursor && cursor.end) loaderState.complete();
 	};
 
 	$effect(() => {
-		if (threads.length === 0 && !loading && userDid && did) {
-			// if we saw all posts dont try to load more.
-			// this only really happens if the user has no posts at all
-			// but we do have to handle it to not cause an infinite loop
-			const cursor = did ? postCursors.get(did) : undefined;
-			if (!cursor?.end) loadMore();
+		const isEmpty = selectedFeed ? feedPosts.length === 0 : threads.length === 0;
+		if (isEmpty && !loading && userDid) {
+			if (selectedFeed) {
+				const cursor = feedCursors.get(userDid)?.get(selectedFeed);
+				if (!cursor?.end) loadMore();
+			} else if (did) {
+				const cursor = postCursors.get(did);
+				if (!cursor?.end) loadMore();
+			}
 		}
 	});
 
@@ -191,18 +235,46 @@
 	{/each}
 {/snippet}
 
+{#snippet feedPostsView()}
+	{#each feedPosts as post, i (post.uri)}
+		{@const uriParts = post.uri.split('/')}
+		{@const postDid = uriParts[2] as Did}
+		{@const postRkey = uriParts[4] as RecordKey}
+		<div class="mb-1.5">
+			<BskyPost
+				client={client!}
+				did={postDid}
+				rkey={postRkey}
+				data={post}
+				onQuote={(p) => {
+					postComposerState.focus = 'focused';
+					postComposerState.quoting = p;
+				}}
+				onReply={(p) => {
+					postComposerState.focus = 'focused';
+					postComposerState.replying = p;
+				}}
+			/>
+		</div>
+		{#if i < feedPosts.length - 1}
+			<div
+				class="mx-8 mt-3 mb-4 h-px bg-linear-to-r from-(--nucleus-accent)/30 to-(--nucleus-accent2)/30"
+			></div>
+		{/if}
+	{/each}
+{/snippet}
+
 <div
 	class="min-h-full p-2 [scrollbar-color:var(--nucleus-accent)_transparent] {className}"
 	bind:this={scrollContainer}
 >
 	{#if targetDid || $accounts.length > 0}
-		<InfiniteLoader
-			{loaderState}
-			triggerLoad={loadMore}
-			loopDetectionTimeout={0}
-			intersectionOptions={{ root: scrollContainer }}
-		>
-			{@render threadsView()}
+		<InfiniteLoader {loaderState} triggerLoad={loadMore} loopDetectionTimeout={0}>
+			{#if selectedFeed}
+				{@render feedPostsView()}
+			{:else}
+				{@render threadsView()}
+			{/if}
 			{#snippet noData()}
 				<div class="flex justify-center py-4">
 					<p class="text-xl opacity-80">

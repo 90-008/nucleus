@@ -1,6 +1,7 @@
 /* eslint-disable svelte/no-navigation-without-resolve */
 import { pushState, replaceState } from '$app/navigation';
 import { SvelteMap } from 'svelte/reactivity';
+import { tick } from 'svelte';
 
 export const routes = [
 	{ path: '/', order: 0 },
@@ -16,11 +17,11 @@ export type RoutePath = RouteConfig['path'];
 type ExtractParams<Path extends string> =
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	Path extends `${infer Start}/:${infer Param}/${infer Rest}`
-		? { [K in Param | keyof ExtractParams<`/${Rest}`>]: string }
-		: // eslint-disable-next-line @typescript-eslint/no-unused-vars
-			Path extends `${infer Start}/:${infer Param}`
-			? { [K in Param]: string }
-			: Record<string, never>;
+	? { [K in Param | keyof ExtractParams<`/${Rest}`>]: string }
+	: // eslint-disable-next-line @typescript-eslint/no-unused-vars
+	Path extends `${infer Start}/:${infer Param}`
+	? { [K in Param]: string }
+	: Record<string, never>;
 
 export type Route<K extends RoutePath = RoutePath> = {
 	[T in K]: {
@@ -82,6 +83,11 @@ export class Router {
 		this._updateState(window.location.pathname);
 		// update state on browser navigation
 		window.addEventListener('popstate', () => this._updateState(window.location.pathname));
+
+		// disable browser scroll restoration
+		if ('scrollRestoration' in history) {
+			history.scrollRestoration = 'manual';
+		}
 	}
 
 	match(urlPath: string): Route | undefined {
@@ -118,7 +124,7 @@ export class Router {
 		else this.direction = 'left';
 	}
 
-	private _updateState(url: string) {
+	private async _updateState(url: string) {
 		const target = this.match(url);
 		if (!target) return;
 
@@ -129,10 +135,9 @@ export class Router {
 		this.current = target;
 
 		if (typeof window !== 'undefined') {
-			setTimeout(() => {
-				const savedScroll = this.scrollPositions.get(target.url) ?? 0;
-				window.scrollTo({ top: savedScroll, behavior: 'auto' });
-			}, 0);
+			await tick();
+			const savedScroll = this.scrollPositions.get(target.url) ?? 0;
+			window.scrollTo({ top: savedScroll, behavior: 'instant' });
 		}
 	}
 

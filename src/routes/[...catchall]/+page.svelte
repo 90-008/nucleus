@@ -22,7 +22,8 @@
 		addTimeline,
 		router,
 		fetchInitial,
-		loadAccountPreferences
+		loadAccountPreferences,
+		resetFeed
 	} from '$lib/state.svelte';
 	import { get } from 'svelte/store';
 	import Icon from '@iconify/svelte';
@@ -33,6 +34,7 @@
 	import { settings } from '$lib/settings';
 	import type { Sort } from '$lib/following';
 	import { SvelteMap } from 'svelte/reactivity';
+	import FeedSelector from '$components/FeedSelector.svelte';
 
 	const { data: loadData }: PageProps = $props();
 
@@ -89,6 +91,8 @@
 		text: '',
 		blobsState: new SvelteMap()
 	});
+	let selectedFeed = $state<string | null>(null);
+	let timelineView: { clearFeed: () => void } | undefined = $state();
 	let showScrollToTop = $state(false);
 	const handleScroll = () => {
 		if (currentRoute.path === '/' || currentRoute.path === '/profile/:actor')
@@ -213,12 +217,22 @@
 <div class="mx-auto flex min-h-dvh max-w-2xl flex-col">
 	<div class="flex-1">
 		{#if currentRoute.path === '/'}
-			<TimelineView
-				class={animClass}
-				client={selectedClient}
-				showReplies={true}
-				bind:postComposerState
-			/>
+			<div class={animClass}>
+				<div class="p-4">
+					<h1 class="text-3xl font-bold tracking-tight">nucleus</h1>
+					<div class="mt-1 flex gap-2">
+						<div class="h-1 w-11 rounded-full bg-(--nucleus-accent)"></div>
+						<div class="h-1 w-8 rounded-full bg-(--nucleus-accent2)"></div>
+					</div>
+				</div>
+				<TimelineView
+					client={selectedClient}
+					showReplies={true}
+					bind:postComposerState
+					bind:selectedFeed
+					bind:this={timelineView}
+				/>
+			</div>
 		{:else if currentRoute.path === '/settings/:tab'}
 			<div class={animClass}>
 				<SettingsView tab={currentRoute.params.tab} />
@@ -317,12 +331,20 @@
 		<div class="footer-border-bg rounded-t-sm px-0.75 pt-0.75">
 			<div class="footer-bg rounded-t-sm">
 				<div class="flex items-center gap-1.5 px-2 py-1">
-					<div class="mb-2">
-						<h1 class="text-3xl font-bold tracking-tight">nucleus</h1>
-						<div class="mt-1 flex gap-2">
-							<div class="h-1 w-11 rounded-full bg-(--nucleus-accent)"></div>
-							<div class="h-1 w-8 rounded-full bg-(--nucleus-accent2)"></div>
-						</div>
+					<div class="flex items-center gap-1.5">
+						<FeedSelector {selectedFeed} onSelect={(uri) => (selectedFeed = uri)} />
+						{#if selectedFeed}
+							<button
+								onclick={() => {
+									if (timelineView) timelineView.clearFeed();
+									else if (selectedDid && selectedFeed) resetFeed(selectedDid, selectedFeed);
+								}}
+								class="action-button p-2"
+								title="refresh feed"
+							>
+								<Icon icon="heroicons:arrow-path" width={20} />
+							</button>
+						{/if}
 					</div>
 					<div class="grow"></div>
 					{@render routeButton({ route: '/', icon: 'heroicons:home' })}

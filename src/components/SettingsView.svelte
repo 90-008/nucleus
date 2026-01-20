@@ -17,9 +17,11 @@
 	import SettingsAdvancedTab from './SettingsAdvancedTab.svelte';
 	import SettingsStyleTab from './SettingsStyleTab.svelte';
 	import SettingsModerationTab from './SettingsModerationTab.svelte';
+	import SettingsFeedsTab from './SettingsFeedsTab.svelte';
 	import type { Did } from '@atcute/lexicons';
 	import type { AtprotoDid } from '@atcute/lexicons/syntax';
 	import Icon from '@iconify/svelte';
+	import type { FeedGenerator } from '$lib/at/feeds';
 
 	interface Props {
 		tab: string;
@@ -97,6 +99,25 @@
 		syncStatus = 'synced';
 		setTimeout(() => (syncStatus = null), 2000);
 	};
+
+	const feeds = $derived(localSettings.feeds);
+
+	const handleAddFeed = (feed: FeedGenerator) => {
+		localSettings.feeds = [...localSettings.feeds, { feed, pinned: false }];
+		settings.set(localSettings);
+	};
+
+	const handleRemoveFeed = (uri: string) => {
+		localSettings.feeds = localSettings.feeds.filter((f) => f.feed.uri !== uri);
+		settings.set(localSettings);
+	};
+
+	const handleTogglePin = (uri: string) => {
+		localSettings.feeds = localSettings.feeds.map((f) =>
+			f.feed.uri === uri ? { ...f, pinned: !f.pinned } : f
+		);
+		settings.set(localSettings);
+	};
 </script>
 
 <div class="flex flex-col">
@@ -166,6 +187,13 @@
 			/>
 		{:else if tab === 'style'}
 			<SettingsStyleTab bind:localSettings />
+		{:else if tab === 'feeds'}
+			<SettingsFeedsTab
+				{feeds}
+				onAddFeed={handleAddFeed}
+				onRemoveFeed={handleRemoveFeed}
+				onTogglePin={handleTogglePin}
+			/>
 		{/if}
 	</div>
 
@@ -175,6 +203,6 @@
 		z-20 w-full max-w-2xl bg-(--nucleus-bg) p-4 pt-2 pb-1 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)]
 		"
 	>
-		<Tabs tabs={['moderation', 'style', 'advanced']} activeTab={tab} {onTabChange} />
+		<Tabs tabs={['feeds', 'moderation', 'style', 'advanced']} activeTab={tab} {onTabChange} />
 	</div>
 </div>

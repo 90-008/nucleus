@@ -58,6 +58,12 @@
 	scrollbar-color: var(--nucleus-accent) var(--nucleus-bg);
 }
 
+html,
+body {
+	background-color: var(--nucleus-bg);
+	color: var(--nucleus-fg);
+}
+
 button {
 	@apply hover:cursor-pointer;
 

@@ -417,6 +417,20 @@ export const fetchBlocked = async (client: AtpClient, subject: Did, blocker: Did
 	return res.value.total > 0;
 };
 
+export const fetchBlocksForPosts = async (client: AtpClient, postUris: Iterable<ResourceUri>) => {
+	const userDid = client.user?.did;
+	if (!userDid) return;
+
+	// check if any of the post authors block the user
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity
+	let distinctDids = new Set(Array.from(postUris).map((uri) => extractDidFromUri(uri)!));
+	distinctDids.delete(userDid); // dont need to check if user blocks themselves
+	const alreadyFetched = blockFlags.get(userDid);
+	if (alreadyFetched) distinctDids = distinctDids.difference(alreadyFetched);
+	if (distinctDids.size > 0)
+		await Promise.all(distinctDids.values().map((did) => fetchBlocked(client, userDid, did)));
+};
+
 export const fetchBlocks = async (account: Account) => {
 	const client = clients.get(account.did)!;
 	const res = await client.listRecordsUntil(account.did, 'app.bsky.graph.block');
@@ -569,6 +583,74 @@ export const deletePost = (uri: ResourceUri) => {
 export const timelines = new SvelteMap<Did, SvelteSet<ResourceUri>>();
 export const postCursors = new SvelteMap<Did, { value?: string; end: boolean }>();
 
+// feed state: Did -> feedUri -> post URIs
+export const feedTimelines = new SvelteMap<Did, SvelteMap<string, ResourceUri[]>>();
+export const feedCursors = new SvelteMap<Did, SvelteMap<string, { value?: string; end: boolean }>>();
+
+export const fetchFeed = async (
+	client: AtpClient,
+	feedUri: string,
+	feedServiceDid: string,
+	limit: number = 25
+) => {
+	const userDid = client.user?.did;
+	if (!userDid) return;
+
+	let userFeedCursors = feedCursors.get(userDid);
+	if (!userFeedCursors) {
+		userFeedCursors = new SvelteMap();
+		feedCursors.set(userDid, userFeedCursors);
+	}
+
+	const cursor = userFeedCursors.get(feedUri);
+	if (cursor?.end) return;
+
+	const skeleton = await import('./at/feeds').then((m) =>
+		m.fetchFeedSkeleton(client, feedUri, feedServiceDid, cursor?.value)
+	);
+	if (!skeleton) throw `failed to fetch feed skeleton for ${feedUri}`;
+
+	const newCursor = { value: skeleton.cursor, end: !skeleton.cursor };
+	userFeedCursors.set(feedUri, newCursor);
+
+	const uris = skeleton.feed.slice(0, limit).map((item) => item.post as ResourceUri);
+
+	let userFeedTimelines = feedTimelines.get(userDid);
+	if (!userFeedTimelines) {
+		userFeedTimelines = new SvelteMap();
+		feedTimelines.set(userDid, userFeedTimelines);
+	}
+
+	const existing = userFeedTimelines.get(feedUri) ?? [];
+	userFeedTimelines.set(feedUri, [...existing, ...uris]);
+
+	// fetch each post record
+	const posts = await Promise.all(
+		uris.map(async (uri) => {
+			const result = await client.getRecordUri(AppBskyFeedPost.mainSchema, uri);
+			if (!result.ok) return null;
+			return { uri: result.value.uri, cid: result.value.cid, record: result.value.record };
+		})
+	);
+
+	const validPosts = posts.filter((p): p is PostWithUri => p !== null);
+	addPosts(validPosts);
+
+	// check if any of the post authors block the user
+	await fetchBlocksForPosts(
+		client,
+		validPosts.map((p) => p.uri)
+	);
+
+	return newCursor;
+};
+
+export const resetFeed = (did: Did, feedUri: string) => {
+	feedTimelines.get(did)?.delete(feedUri);
+	feedCursors.get(did)?.delete(feedUri);
+};
+
+
 const traversePostChain = (post: PostWithUri) => {
 	const result = [post.uri];
 	const parentUri = post.record.reply?.parent.uri;
@@ -621,17 +703,7 @@ export const fetchTimeline = async (
 	addPosts(hydrated.value.values());
 	addTimeline(subject, hydrated.value.keys());
 
-	if (client.user?.did) {
-		const userDid = client.user.did;
-		// check if any of the post authors block the user
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
-		let distinctDids = new Set(hydrated.value.keys().map((uri) => extractDidFromUri(uri)!));
-		distinctDids.delete(userDid); // dont need to check if user blocks themselves
-		const alreadyFetched = blockFlags.get(userDid);
-		if (alreadyFetched) distinctDids = distinctDids.difference(alreadyFetched);
-		if (distinctDids.size > 0)
-			await Promise.all(distinctDids.values().map((did) => fetchBlocked(client, userDid, did)));
-	}
+	await fetchBlocksForPosts(client, hydrated.value.keys());
 
 	console.log(`${subject}: fetchTimeline`, accPosts.value.cursor);
 	return newCursor;

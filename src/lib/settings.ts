@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { defaultTheme, type Theme } from './theme';
+import type { FeedGenerator } from './at/feeds';
 
 export type ApiEndpoints = Record<string, string> & {
 	slingshot: string;
@@ -7,10 +8,16 @@ export type ApiEndpoints = Record<string, string> & {
 	constellation: string;
 	jetstream: string;
 };
+export type SavedFeed = {
+	feed: FeedGenerator,
+	pinned: boolean,
+};
+
 export type Settings = {
 	endpoints: ApiEndpoints;
 	theme: Theme;
 	socialAppUrl: string;
+	feeds: SavedFeed[];
 };
 
 export const defaultSettings: Settings = {
@@ -21,7 +28,8 @@ export const defaultSettings: Settings = {
 		jetstream: 'wss://jetstream2.fr.hose.cam'
 	},
 	theme: defaultTheme,
-	socialAppUrl: 'https://bsky.app'
+	socialAppUrl: 'https://bsky.app',
+	feeds: []
 };
 
 const createSettingsStore = () => {
@@ -32,6 +40,7 @@ const createSettingsStore = () => {
 	initial.endpoints = { ...defaultSettings.endpoints, ...initial.endpoints };
 	initial.theme = { ...defaultSettings.theme, ...initial.theme };
 	initial.socialAppUrl = initial.socialAppUrl ?? defaultSettings.socialAppUrl;
+	initial.feeds = initial.feeds ?? defaultSettings.feeds;
 
 	const { subscribe, set, update } = writable<Settings>(initial as Settings);
 
