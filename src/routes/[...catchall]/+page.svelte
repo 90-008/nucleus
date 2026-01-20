@@ -1,6 +1,6 @@
 <script lang="ts">
 	import PostComposer, { type State as PostComposerState } from '$components/PostComposer.svelte';
-	import AccountSelector from '$components/AccountSelector.svelte';
+	import AccountSwitcher from '$components/AccountSwitcher.svelte';
 	import SettingsView from '$components/SettingsView.svelte';
 	import NotificationsView from '$components/NotificationsView.svelte';
 	import FollowingView from '$components/FollowingView.svelte';
@@ -21,7 +21,8 @@
 		addPosts,
 		addTimeline,
 		router,
-		fetchInitial
+		fetchInitial,
+		loadAccountPreferences
 	} from '$lib/state.svelte';
 	import { get } from 'svelte/store';
 	import Icon from '@iconify/svelte';
@@ -144,7 +145,10 @@
 			}
 			if (!$accounts.some((account) => account.did === selectedDid)) selectedDid = $accounts[0].did;
 			// console.log('onMount selectedDid', selectedDid);
-			Promise.all($accounts.map(loginAccount)).then(() => $accounts.forEach(fetchInitial));
+			Promise.all($accounts.map(loginAccount)).then(() => {
+				$accounts.forEach(loadAccountPreferences);
+				$accounts.forEach(fetchInitial);
+			});
 		} else {
 			selectedDid = null;
 		}
@@ -274,7 +278,7 @@
 			<!-- composer and error disclaimer (above thread list, not scrollable) -->
 			<div class="footer-border-bg rounded-sm p-0.5">
 				<div class="footer-bg flex gap-2 rounded-sm p-1.5">
-					<AccountSelector
+					<AccountSwitcher
 						client={viewClient}
 						accounts={$accounts}
 						bind:selectedDid

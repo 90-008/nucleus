@@ -52,6 +52,7 @@
 		onReply?: (reply: PostWithUri) => void;
 		cornerFragment?: Snippet;
 		isBlocked?: boolean;
+		isMuted?: boolean;
 	}
 
 	const {
@@ -65,7 +66,8 @@
 		onReply,
 		isOnPostComposer = false /* replyBacklinks */,
 		cornerFragment,
-		isBlocked = false
+		isBlocked = false,
+		isMuted = false
 	}: Props = $props();
 
 	const user = $derived(client.user);
@@ -74,15 +76,16 @@
 	const aturi = $derived(toCanonicalUri({ did, collection: 'app.bsky.feed.post', rkey }));
 	const color = $derived(generateColorForDid(did));
 
-	let expandBlocked = $state(false);
+	let expandDisallowed = $state(false);
 	const blockRel = $derived(
 		user && !isOnPostComposer
 			? getBlockRelationship(user.did, did)
 			: { userBlocked: false, blockedByTarget: false }
 	);
 	const showAsBlocked = $derived(
-		(isBlocked || blockRel.userBlocked || blockRel.blockedByTarget) && !expandBlocked
+		(isBlocked || blockRel.userBlocked || blockRel.blockedByTarget) && !expandDisallowed
 	);
+	const showAsMuted = $derived(isMuted && !expandDisallowed);
 
 	let handle: Handle = $state(handles.get(did) ?? 'handle.invalid');
 	onMount(() => {
@@ -210,12 +213,13 @@
 		{:then post}
 			{#if post.ok}
 				{@const record = post.value.record}
-				{#if showAsBlocked}
+				{#if showAsBlocked || showAsMuted}
 					<button
-						onclick={() => (expandBlocked = true)}
+						onclick={() => (expandDisallowed = true)}
 						class="text-left hover:cursor-pointer hover:underline"
 					>
-						<span style="color: {color};">post from blocked user</span> (click to show)
+						<span style="color: {color};">post from {showAsBlocked ? 'blocked' : 'muted'} user</span
+						> (click to show)
 					</button>
 				{:else}
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -253,9 +257,9 @@
 	{:then post}
 		{#if post.ok}
 			{@const record = post.value.record}
-			{#if showAsBlocked}
+			{#if showAsBlocked || showAsMuted}
 				<button
-					onclick={() => (expandBlocked = true)}
+					onclick={() => (expandDisallowed = true)}
 					class="
 				group w-full rounded-sm border-2 p-3 text-left shadow-lg
 				backdrop-blur-sm transition-all hover:border-(--nucleus-accent)
@@ -263,7 +267,7 @@
 					style="background: {color}18; border-color: {color}66;"
 				>
 					<div class="flex items-center gap-2">
-						<span class="opacity-80">post from blocked user</span>
+						<span class="opacity-80">post from {showAsBlocked ? 'blocked' : 'muted'} user</span>
 						<span class="text-sm opacity-60">(click to show)</span>
 					</div>
 				</button>

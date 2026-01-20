@@ -11,7 +11,8 @@
 		fetchTimeline,
 		allPosts,
 		timelines,
-		fetchInteractionsToTimelineEnd
+		fetchInteractionsToTimelineEnd,
+		accountPreferences
 	} from '$lib/state.svelte';
 	import Icon from '@iconify/svelte';
 	import { buildThreads, filterThreads, type ThreadPost } from '$lib/thread';
@@ -42,10 +43,13 @@
 	const userDid = $derived(client?.user?.did);
 	const did = $derived(targetDid ?? userDid);
 
+	const currentPrefs = $derived(userDid ? accountPreferences.get(userDid) : null);
+	const mutes = $derived(currentPrefs?.mutes ?? []);
+
 	const threads = $derived(
 		// todo: apply showReplies here
 		filterThreads(
-			did && timelines.has(did) ? buildThreads(did, timelines.get(did)!, allPosts) : [],
+			did && timelines.has(did) ? buildThreads(did, timelines.get(did)!, allPosts, mutes) : [],
 			$accounts,
 			{ viewOwnPosts }
 		)

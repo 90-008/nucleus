@@ -3,7 +3,14 @@
 	import { parseCanonicalResourceUri, type Did } from '@atcute/lexicons';
 	import Dropdown from './Dropdown.svelte';
 	import Icon from '@iconify/svelte';
-	import { createBlock, deleteBlock, follows } from '$lib/state.svelte';
+	import {
+		accountPreferences,
+		createBlock,
+		deleteBlock,
+		follows,
+		setAccountPreferences,
+		updateAccountPreferences
+	} from '$lib/state.svelte';
 	import { generateColorForDid } from '$lib/accounts';
 	import { now as tidNow } from '@atcute/tid';
 	import type { AppBskyGraphFollow } from '@atcute/bluesky';
@@ -31,6 +38,18 @@
 			? Array.from(followsMap.entries()).find(([, follow]) => follow.subject === targetDid)
 			: undefined
 	);
+
+	const currentPrefs = $derived(userDid ? accountPreferences.get(userDid) : null);
+	const mutes = $derived(currentPrefs?.mutes ?? []);
+	const muted = $derived(mutes.includes(targetDid));
+
+	const handleMute = async () => {
+		if (!userDid || !client.user) return;
+
+		if (muted)
+			await updateAccountPreferences(userDid, { mutes: mutes.filter((m) => m !== targetDid) });
+		else await updateAccountPreferences(userDid, { mutes: [...mutes, targetDid] });
+	};
 
 	const handleFollow = async () => {
 		if (!userDid || !client.user) return;
@@ -127,6 +146,11 @@
 		userBlocked ? 'heroicons:eye-20-solid' : 'heroicons:eye-slash-20-solid',
 		userBlocked ? 'unblock' : 'block',
 		handleBlock
+	)}
+	{@render dropdownItem(
+		muted ? 'heroicons:speaker-wave-20-solid' : 'heroicons:speaker-x-mark-20-solid',
+		muted ? 'unmute' : 'mute',
+		handleMute
 	)}
 
 	{#snippet trigger()}

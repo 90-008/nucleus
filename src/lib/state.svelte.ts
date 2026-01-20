@@ -32,6 +32,11 @@ import {
 } from '$lib';
 import { Router } from './router.svelte';
 import type { Account } from './accounts';
+import {
+	getPreferences,
+	putPreferences,
+	type Preferences
+} from './at/pocket';
 
 export const notificationStream = writable<NotificationsStream | null>(null);
 export const jetstream = writable<JetstreamSubscription | null>(null);
@@ -242,6 +247,106 @@ export const pulsingPostId = writable<string | null>(null);
 
 export const viewClient = new AtpClient();
 export const clients = new SvelteMap<Did, AtpClient>();
+
+export const accountPreferences = new SvelteMap<Did, Preferences>();
+
+const PREFS_STORAGE_KEY = 'accountPreferences';
+
+const loadLocalPreferences = (): Map<Did, Preferences> => {
+	if (typeof localStorage === 'undefined') return new Map();
+	try {
+		const stored = localStorage.getItem(PREFS_STORAGE_KEY);
+		if (!stored) return new Map();
+		return new Map(Object.entries(JSON.parse(stored))) as Map<Did, Preferences>;
+	} catch {
+		return new Map();
+	}
+};
+
+const saveLocalPreferences = () => {
+	if (typeof localStorage === 'undefined') return;
+	const obj = Object.fromEntries(accountPreferences.entries());
+	localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(obj));
+};
+
+export const loadAccountPreferences = async (account: Account) => {
+	const client = clients.get(account.did);
+	if (!client) return;
+
+	const localPrefs = loadLocalPreferences().get(account.did);
+	const remoteResult = await getPreferences(client);
+
+	if (!remoteResult.ok) {
+		console.error('failed to load preferences from pocket:', remoteResult.error);
+		if (localPrefs) accountPreferences.set(account.did, localPrefs);
+		return;
+	}
+
+	const remotePrefs = remoteResult.value;
+
+	if (!remotePrefs && !localPrefs) {
+		return;
+	}
+
+	if (!remotePrefs && localPrefs) {
+		accountPreferences.set(account.did, localPrefs);
+		await putPreferences(client, localPrefs);
+		return;
+	}
+
+	if (remotePrefs && !localPrefs) {
+		accountPreferences.set(account.did, remotePrefs);
+		saveLocalPreferences();
+		return;
+	}
+
+	// both exist - last modified wins
+	const localTime = new Date(localPrefs!.updatedAt).getTime();
+	const remoteTime = new Date(remotePrefs!.updatedAt).getTime();
+
+	if (localTime > remoteTime) {
+		accountPreferences.set(account.did, localPrefs!);
+		await putPreferences(client, localPrefs!);
+	} else {
+		accountPreferences.set(account.did, remotePrefs!);
+		saveLocalPreferences();
+	}
+};
+
+export const setAccountPreferences = (
+	did: Did,
+	partial: Partial<Omit<Preferences, 'updatedAt'>>
+) => {
+	const existing = accountPreferences.get(did) ?? { updatedAt: '' };
+	const updated: Preferences = {
+		...existing,
+		...partial,
+		updatedAt: new Date().toISOString()
+	};
+
+	accountPreferences.set(did, updated);
+	saveLocalPreferences();
+	return updated;
+};
+
+export const syncAccountPreferences = async (did: Did) => {
+	const prefs = accountPreferences.get(did);
+	if (!prefs) return;
+
+	const client = clients.get(did);
+	if (client) {
+		const result = await putPreferences(client, prefs);
+		if (!result.ok) console.error('failed to sync preferences to pocket:', result.error);
+	}
+};
+
+export const updateAccountPreferences = async (
+	did: Did,
+	partial: Partial<Omit<Preferences, 'updatedAt'>>
+) => {
+	setAccountPreferences(did, partial);
+	await syncAccountPreferences(did);
+};
 
 export const follows = new SvelteMap<Did, SvelteMap<ResourceUri, AppBskyGraphFollow.Main>>();
 

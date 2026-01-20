@@ -8,7 +8,7 @@ export const oauthMetadata = {
 	logo_uri: `${domain}/favicon.png`,
 	redirect_uris: [`${domain}/`],
 	scope:
-		'atproto repo:*?action=create&action=update&action=delete rpc:com.atproto.repo.uploadBlob?aud=* blob:*/*',
+		'atproto repo:*?action=create&action=update&action=delete rpc:com.atproto.repo.uploadBlob?aud=* rpc:net.at-app.pet.ptr.nucleus.getPreferences?aud=* rpc:net.at-app.pet.ptr.nucleus.putPreferences?aud=* blob:*/*',
 	grant_types: ['authorization_code', 'refresh_token'],
 	response_types: ['code'],
 	token_endpoint_auth_method: 'none',
@@ -19,6 +19,6 @@ export const oauthMetadata = {
 export const redirectUri = `${domain}/`;
 export const clientId = dev
 	? `http://localhost` +
-		`?redirect_uri=${encodeURIComponent(redirectUri)}` +
-		`&scope=${encodeURIComponent(oauthMetadata.scope)}`
+	`?redirect_uri=${encodeURIComponent(redirectUri)}` +
+	`&scope=${encodeURIComponent(oauthMetadata.scope)}`
 	: oauthMetadata.client_id;

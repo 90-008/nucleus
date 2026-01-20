@@ -15,6 +15,7 @@ export type ThreadPost = {
 	depth: number;
 	newestTime: number;
 	isBlocked?: boolean;
+	isMuted?: boolean;
 };
 
 export type Thread = {
@@ -27,7 +28,8 @@ export type Thread = {
 export const buildThreads = (
 	account: Did,
 	timeline: Set<ResourceUri>,
-	posts: Map<Did, Map<ResourceUri, PostWithUri>>
+	posts: Map<Did, Map<ResourceUri, PostWithUri>>,
+	mutes: Did[],
 ): Thread[] => {
 	const threadMap = new Map<ResourceUri, ThreadPost[]>();
 
@@ -48,7 +50,8 @@ export const buildThreads = (
 			parentUri,
 			depth: 0,
 			newestTime: new Date(data.record.createdAt).getTime(),
-			isBlocked: isBlockedBy(parsedUri.repo, account)
+			isBlocked: isBlockedBy(parsedUri.repo, account),
+			isMuted: mutes.includes(parsedUri.repo),
 		};
 
 		if (!threadMap.has(rootUri)) threadMap.set(rootUri, []);

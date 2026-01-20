@@ -5,7 +5,22 @@
 	import Tabs from './Tabs.svelte';
 	import { portal } from 'svelte-portal';
 	import { cache } from '$lib/cache';
-	import { router } from '$lib/state.svelte';
+	import {
+		router,
+		clients,
+		accountPreferences,
+		setAccountPreferences,
+		syncAccountPreferences,
+		loadAccountPreferences
+	} from '$lib/state.svelte';
+	import { accounts as accountsStore, generateColorForDid } from '$lib/accounts';
+	import AccountSelector from './AccountSelector.svelte';
+	import Dropdown from './Dropdown.svelte';
+	import MutedAccountItem from './MutedAccountItem.svelte';
+	import VirtualList from '@tutorlatin/svelte-tiny-virtual-list';
+	import type { Did } from '@atcute/lexicons';
+	import type { AtprotoDid } from '@atcute/lexicons/syntax';
+	import Icon from '@iconify/svelte';
 
 	interface Props {
 		tab: string;
@@ -38,6 +53,57 @@
 	};
 
 	const onTabChange = (tab: string) => router.replace(`/settings/${tab}`);
+
+	let selectedAccount: AtprotoDid | null = $state(null);
+	let newMuteInput = $state('');
+	let syncStatus = $state<'syncing' | 'synced' | null>(null);
+	let isAccountDropdownOpen = $state(false);
+
+	const accounts = $derived($accountsStore.filter((a) => clients.has(a.did)));
+	const selectedAccountData = $derived(accounts.find((a) => a.did === selectedAccount));
+	const currentPrefs = $derived(selectedAccount ? accountPreferences.get(selectedAccount) : null);
+	const mutes = $derived(currentPrefs?.mutes ?? []);
+
+	$effect(() => {
+		if (accounts.length > 0 && !selectedAccount) {
+			selectedAccount = accounts[0].did;
+		}
+	});
+
+	let syncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	const SYNC_DEBOUNCE_MS = 1000;
+
+	const scheduleSyncFor = (did: AtprotoDid) => {
+		if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
+		syncDebounceTimer = setTimeout(async () => {
+			syncStatus = 'syncing';
+			await syncAccountPreferences(did);
+			syncStatus = 'synced';
+			setTimeout(() => (syncStatus = null), 2000);
+		}, SYNC_DEBOUNCE_MS);
+	};
+
+	const handleAddMute = () => {
+		if (!selectedAccount || !newMuteInput.trim()) return;
+		const did = newMuteInput.trim() as Did;
+		setAccountPreferences(selectedAccount, { mutes: [...mutes, did] });
+		scheduleSyncFor(selectedAccount);
+		newMuteInput = '';
+	};
+
+	const handleRemoveMute = (did: Did) => {
+		if (!selectedAccount) return;
+		setAccountPreferences(selectedAccount, { mutes: mutes.filter((m) => m !== did) });
+		scheduleSyncFor(selectedAccount);
+	};
+
+	const handleReload = async () => {
+		if (!selectedAccount) return;
+		syncStatus = 'syncing';
+		await loadAccountPreferences({ did: selectedAccount, handle: null });
+		syncStatus = 'synced';
+		setTimeout(() => (syncStatus = null), 2000);
+	};
 </script>
 
 {#snippet advancedTab()}
@@ -136,24 +202,95 @@
 				<div class="h-1 w-9.5 rounded-full bg-(--nucleus-accent2)"></div>
 			</div>
 		</div>
-		{#if hasReloadChanges}
-			<button onclick={handleSave} class="action-button animate-pulse shadow-lg">
-				save & reload
-			</button>
-		{/if}
+		<div class="flex items-center gap-2">
+			{#if tab === 'moderation'}
+				{#if syncStatus}
+					<span class="text-xs opacity-70">{syncStatus}</span>
+				{/if}
+				<Dropdown
+					class="min-w-48 rounded-sm border-2 border-(--nucleus-accent) bg-(--nucleus-bg) shadow-2xl"
+					bind:isOpen={isAccountDropdownOpen}
+					placement="bottom-end"
+				>
+					{#snippet trigger()}
+						<button
+							onclick={() => (isAccountDropdownOpen = !isAccountDropdownOpen)}
+							class="flex action-button items-center gap-1.5 text-sm"
+							style="color: {selectedAccountData
+								? generateColorForDid(selectedAccountData.did)
+								: 'inherit'}"
+						>
+							<span>@{selectedAccountData?.handle ?? selectedAccount?.slice(0, 12)}</span>
+							<span class="opacity-50">▾</span>
+						</button>
+					{/snippet}
+					<AccountSelector
+						{accounts}
+						selectedDid={selectedAccount}
+						onSelect={(did) => {
+							selectedAccount = did;
+							isAccountDropdownOpen = false;
+						}}
+					/>
+				</Dropdown>
+				<button onclick={handleReload} class="action-button p-2" title="reload from pocket">
+					<Icon
+						class={syncStatus === 'syncing' ? 'animate-spin' : ''}
+						icon="heroicons:arrow-path-16-solid"
+						width="20"
+					/>
+				</button>
+			{:else if hasReloadChanges}
+				<button onclick={handleSave} class="action-button animate-pulse shadow-lg">
+					save &amp; reload
+				</button>
+			{/if}
+		</div>
 	</div>
 
 	<div class="flex-1">
 		{#if tab === 'advanced'}
 			{@render advancedTab()}
 		{:else if tab === 'moderation'}
-			<div class="p-4">
-				<div class="flex h-64 items-center justify-center">
-					<div class="text-center">
-						<div class="mb-4 text-6xl opacity-50">🚧</div>
-						<h3 class="text-xl font-bold opacity-80">todo</h3>
+			<div class="space-y-4 p-4">
+				<div>
+					<h3 class="header">muted accounts</h3>
+					<div class="borders space-y-2">
+						<div class="flex gap-2">
+							<input
+								type="text"
+								bind:value={newMuteInput}
+								placeholder="did:plc:..."
+								class="single-line-input flex-1"
+							/>
+							<button onclick={handleAddMute} class="action-button">add</button>
+						</div>
+						{#if mutes.length > 0}
+							<div class="h-fit">
+								<VirtualList
+									height={Math.min(mutes.length, 6) * 44}
+									itemCount={mutes.length}
+									itemSize={44}
+								>
+									{#snippet item({ index, style }: { index: number; style: string })}
+										<MutedAccountItem
+											{style}
+											did={mutes[index]}
+											onRemove={() => handleRemoveMute(mutes[index])}
+										/>
+									{/snippet}
+								</VirtualList>
+							</div>
+						{:else}
+							<p class="py-2 text-center text-sm opacity-50">no muted accounts</p>
+						{/if}
 					</div>
 				</div>
+				{#if currentPrefs}
+					<p class="text-xs opacity-50">
+						last synced: {new Date(currentPrefs.updatedAt).toLocaleString()}
+					</p>
+				{/if}
 			</div>
 		{:else if tab === 'style'}
 			{@render styleTab()}
@@ -166,7 +303,7 @@
 		z-20 w-full max-w-2xl bg-(--nucleus-bg) p-4 pt-2 pb-1 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)]
 		"
 	>
-		<Tabs tabs={['style', 'moderation', 'advanced']} activeTab={tab} {onTabChange} />
+		<Tabs tabs={['moderation', 'style', 'advanced']} activeTab={tab} {onTabChange} />
 	</div>
 </div>
 
