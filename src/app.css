@@ -129,3 +129,15 @@ a {
 .post-dropdown {
 	@apply flex min-w-54 flex-col gap-1 rounded-sm border-2 p-1 shadow-2xl backdrop-blur-xl backdrop-brightness-60;
 }
+
+.settings-box {
+	@apply rounded-sm border-2 border-dashed border-(--nucleus-fg)/10 p-4;
+}
+
+.settings-header {
+	@apply mb-2 text-lg font-bold;
+}
+
+.settings-desc {
+	@apply mb-2 text-sm text-(--nucleus-fg)/80;
+}

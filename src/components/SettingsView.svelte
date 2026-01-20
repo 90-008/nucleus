@@ -1,10 +1,8 @@
 <script lang="ts">
-	import { defaultSettings, needsReload, settings } from '$lib/settings';
+	import { needsReload, settings } from '$lib/settings';
 	import { get } from 'svelte/store';
-	import ColorPicker from 'svelte-awesome-color-picker';
 	import Tabs from './Tabs.svelte';
 	import { portal } from 'svelte-portal';
-	import { cache } from '$lib/cache';
 	import {
 		router,
 		clients,
@@ -16,8 +14,9 @@
 	import { accounts as accountsStore, generateColorForDid } from '$lib/accounts';
 	import AccountSelector from './AccountSelector.svelte';
 	import Dropdown from './Dropdown.svelte';
-	import MutedAccountItem from './MutedAccountItem.svelte';
-	import VirtualList from '@tutorlatin/svelte-tiny-virtual-list';
+	import SettingsAdvancedTab from './SettingsAdvancedTab.svelte';
+	import SettingsStyleTab from './SettingsStyleTab.svelte';
+	import SettingsModerationTab from './SettingsModerationTab.svelte';
 	import type { Did } from '@atcute/lexicons';
 	import type { AtprotoDid } from '@atcute/lexicons/syntax';
 	import Icon from '@iconify/svelte';
@@ -47,21 +46,17 @@
 		window.location.reload();
 	};
 
-	const handleClearCache = () => {
-		cache.clear();
-		alert('cache cleared!');
-	};
-
 	const onTabChange = (tab: string) => router.replace(`/settings/${tab}`);
 
 	let selectedAccount: AtprotoDid | null = $state(null);
-	let newMuteInput = $state('');
 	let syncStatus = $state<'syncing' | 'synced' | null>(null);
 	let isAccountDropdownOpen = $state(false);
 
 	const accounts = $derived($accountsStore.filter((a) => clients.has(a.did)));
 	const selectedAccountData = $derived(accounts.find((a) => a.did === selectedAccount));
-	const currentPrefs = $derived(selectedAccount ? accountPreferences.get(selectedAccount) : null);
+	const currentPrefs = $derived(
+		selectedAccount ? (accountPreferences.get(selectedAccount) ?? null) : null
+	);
 	const mutes = $derived(currentPrefs?.mutes ?? []);
 
 	$effect(() => {
@@ -83,12 +78,10 @@
 		}, SYNC_DEBOUNCE_MS);
 	};
 
-	const handleAddMute = () => {
-		if (!selectedAccount || !newMuteInput.trim()) return;
-		const did = newMuteInput.trim() as Did;
+	const handleAddMute = (did: Did) => {
+		if (!selectedAccount) return;
 		setAccountPreferences(selectedAccount, { mutes: [...mutes, did] });
 		scheduleSyncFor(selectedAccount);
-		newMuteInput = '';
 	};
 
 	const handleRemoveMute = (did: Did) => {
@@ -105,93 +98,6 @@
 		setTimeout(() => (syncStatus = null), 2000);
 	};
 </script>
-
-{#snippet advancedTab()}
-	<div class="space-y-3 p-4">
-		<div>
-			<h3 class="header">api endpoints</h3>
-			<div class="borders space-y-4">
-				{#snippet _input(name: string, desc: string)}
-					<div>
-						<label for={name} class="header-desc block">
-							{desc}
-						</label>
-						<input
-							id={name}
-							type="url"
-							bind:value={localSettings.endpoints[name]}
-							placeholder={defaultSettings.endpoints[name]}
-							class="single-line-input"
-						/>
-					</div>
-				{/snippet}
-				{@render _input('slingshot', 'slingshot url (for fetching records & resolving identity)')}
-				{@render _input('spacedust', 'spacedust url (for notifications)')}
-				{@render _input('constellation', 'constellation url (for backlinks)')}
-				{@render _input('jetstream', 'jetstream url (for real-time updates)')}
-			</div>
-		</div>
-
-		<div class="borders">
-			<label for="social-app-url" class="mb-2 block text-sm font-semibold text-(--nucleus-fg)/80">
-				social-app url (for when copying links to posts / profiles)
-			</label>
-			<input
-				id="social-app-url"
-				type="url"
-				bind:value={localSettings.socialAppUrl}
-				placeholder={defaultSettings.socialAppUrl}
-				class="single-line-input"
-			/>
-		</div>
-
-		<h3 class="header">cache management</h3>
-		<div class="borders">
-			<p class="header-desc">clears cached data (records, DID documents, handles, etc.)</p>
-			<button onclick={handleClearCache} class="action-button"> clear cache </button>
-		</div>
-
-		<h3 class="header">reset settings</h3>
-		<div class="borders">
-			<p class="header-desc">resets all settings to their default values</p>
-			<button
-				onclick={handleReset}
-				class="action-button border-red-600 text-red-600 hover:bg-red-600/20"
-			>
-				reset to defaults
-			</button>
-		</div>
-	</div>
-{/snippet}
-
-{#snippet styleTab()}
-	<div class="space-y-5 p-4">
-		<div>
-			<h3 class="header">colors</h3>
-			<div class="borders">
-				{#snippet color(name: string, desc: string)}
-					<div>
-						<label for={name} class="header-desc block">
-							{desc}
-						</label>
-						<div class="color-picker">
-							<ColorPicker
-								bind:hex={localSettings.theme[name]}
-								isAlpha={false}
-								position="responsive"
-								label={localSettings.theme[name]}
-							/>
-						</div>
-					</div>
-				{/snippet}
-				{@render color('fg', 'foreground color')}
-				{@render color('bg', 'background color')}
-				{@render color('accent', 'accent color')}
-				{@render color('accent2', 'secondary accent color')}
-			</div>
-		</div>
-	</div>
-{/snippet}
 
 <div class="flex flex-col">
 	<div class="mb-6 flex items-center justify-between p-4 pb-0">
@@ -250,50 +156,16 @@
 
 	<div class="flex-1">
 		{#if tab === 'advanced'}
-			{@render advancedTab()}
+			<SettingsAdvancedTab bind:localSettings onReset={handleReset} />
 		{:else if tab === 'moderation'}
-			<div class="space-y-4 p-4">
-				<div>
-					<h3 class="header">muted accounts</h3>
-					<div class="borders space-y-2">
-						<div class="flex gap-2">
-							<input
-								type="text"
-								bind:value={newMuteInput}
-								placeholder="did:plc:..."
-								class="single-line-input flex-1"
-							/>
-							<button onclick={handleAddMute} class="action-button">add</button>
-						</div>
-						{#if mutes.length > 0}
-							<div class="h-fit">
-								<VirtualList
-									height={Math.min(mutes.length, 6) * 44}
-									itemCount={mutes.length}
-									itemSize={44}
-								>
-									{#snippet item({ index, style }: { index: number; style: string })}
-										<MutedAccountItem
-											{style}
-											did={mutes[index]}
-											onRemove={() => handleRemoveMute(mutes[index])}
-										/>
-									{/snippet}
-								</VirtualList>
-							</div>
-						{:else}
-							<p class="py-2 text-center text-sm opacity-50">no muted accounts</p>
-						{/if}
-					</div>
-				</div>
-				{#if currentPrefs}
-					<p class="text-xs opacity-50">
-						last synced: {new Date(currentPrefs.updatedAt).toLocaleString()}
-					</p>
-				{/if}
-			</div>
+			<SettingsModerationTab
+				{mutes}
+				{currentPrefs}
+				onAddMute={handleAddMute}
+				onRemoveMute={handleRemoveMute}
+			/>
 		{:else if tab === 'style'}
-			{@render styleTab()}
+			<SettingsStyleTab bind:localSettings />
 		{/if}
 	</div>
 
@@ -306,16 +178,3 @@
 		<Tabs tabs={['moderation', 'style', 'advanced']} activeTab={tab} {onTabChange} />
 	</div>
 </div>
-
-<style>
-	@reference "../app.css";
-	.borders {
-		@apply rounded-sm border-2 border-dashed border-(--nucleus-fg)/10 p-4;
-	}
-	.header-desc {
-		@apply mb-2 text-sm text-(--nucleus-fg)/80;
-	}
-	.header {
-		@apply mb-2 text-lg font-bold;
-	}
-</style>
