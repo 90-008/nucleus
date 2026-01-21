@@ -18,6 +18,7 @@
 	interface Props {
 		client?: AtpClient | null;
 		threads: Thread[];
+		timelineId?: string;
 		postComposerState: PostComposerState;
 		class?: string;
 		isLoggedIn?: boolean; // Controls rendering of the list vs NotLoggedIn
@@ -29,6 +30,7 @@
 	let {
 		client = null,
 		threads,
+		timelineId = undefined,
 		postComposerState = $bindable(),
 		class: className = '',
 		isLoggedIn = false,
@@ -49,6 +51,14 @@
 		if (boundaryTime === null) return threads;
 		return threads.filter((t) => t.newestTime <= boundaryTime!);
 	});
+
+	let displayCount = $state(15);
+	$effect(() => {
+		timelineId;
+		displayCount = 15;
+	});
+
+	const renderedThreads = $derived(visibleThreads.slice(0, displayCount));
 
 	$effect(() => {
 		if (threads.length > 0) {
@@ -77,9 +87,13 @@
 		loadError = '';
 
 		try {
-			await onLoadMore();
+			displayCount += 10;
+			const bufferSize = visibleThreads.length - displayCount;
+
+			if (bufferSize < 5 && !isComplete) await onLoadMore();
+
 			loaderState.loaded();
-			if (isComplete) loaderState.complete();
+			if (isComplete && displayCount >= visibleThreads.length) loaderState.complete();
 		} catch (error) {
 			loadError = `${error}`;
 			loaderState.error();
@@ -116,7 +130,7 @@
 {/snippet}
 
 {#snippet threadsView()}
-	{#each visibleThreads as thread, i (thread.rootUri)}
+	{#each renderedThreads as thread, i (thread.rootUri)}
 		<div class="flex w-full shrink-0 {reverseChronological ? 'flex-col' : 'flex-col-reverse'}">
 			{#if thread.branchParentPost}
 				{@render replyPost(thread.branchParentPost)}
@@ -165,7 +179,7 @@
 				{/if}
 			{/each}
 		</div>
-		{#if i < visibleThreads.length - 1}
+		{#if i < renderedThreads.length - 1}
 			<div
 				class="mx-8 mt-3 mb-4 h-px bg-linear-to-r from-(--nucleus-accent)/30 to-(--nucleus-accent2)/30"
 			></div>

@@ -119,6 +119,7 @@
 <GenericTimelineView
 	{client}
 	{threads}
+	timelineId={`following:${userDid}`}
 	bind:postComposerState
 	class={className}
 	isLoggedIn={!!(userDid || $accounts.length > 0)}

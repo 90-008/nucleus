@@ -85,6 +85,7 @@
 <GenericTimelineView
 	{client}
 	{threads}
+	timelineId={`replies:${did}`}
 	bind:postComposerState
 	class={className}
 	isLoggedIn={!!(did || $accounts.length > 0)}

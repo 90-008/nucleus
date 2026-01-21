@@ -46,6 +46,7 @@
 		selectedFeed;
 		feedServiceDid = null;
 		newPostsAvailable = false;
+		displayCount = 15;
 		loaderState.reset();
 		fetchFeedGenerator(client ?? viewClient, selectedFeed).then((meta) => {
 			feedServiceDid = meta?.did ?? null;
@@ -78,10 +79,13 @@
 		if (!userDid) return;
 		scrollContainer?.scrollTo({ top: 0, behavior: 'smooth' });
 		newPostsAvailable = false;
+		displayCount = 15;
 		resetFeed(userDid, selectedFeed);
 		loaderState.reset();
 		loadMore();
 	};
+
+	let displayCount = $state(15);
 
 	const feedPosts = $derived.by(() => {
 		if (!userDid) return [];
@@ -94,6 +98,8 @@
 			.filter((p): p is NonNullable<typeof p> => p !== undefined);
 	});
 
+	const renderedPosts = $derived(feedPosts.slice(0, displayCount));
+
 	const loadMore = async () => {
 		if (loading || !client || !userDid || !feedServiceDid) return;
 
@@ -101,22 +107,28 @@
 		loaderState.status = 'LOADING';
 
 		try {
-			const result = await fetchFeed(client, selectedFeed, feedServiceDid);
+			displayCount += 10;
+			const bufferSize = feedPosts.length - displayCount;
+			const cursor = feedCursors.get(userDid)?.get(selectedFeed);
 
-			if (client.user && userDid) {
-				if (!fetchingInteractions) {
-					scheduledFetchInteractions = false;
-					fetchingInteractions = true;
-					await fetchInteractionsToFeedTimelineEnd(client, userDid, selectedFeed);
-					fetchingInteractions = false;
-				} else {
-					scheduledFetchInteractions = true;
+			if (bufferSize < 5 && !cursor?.end) {
+				const result = await fetchFeed(client, selectedFeed, feedServiceDid);
+				if (client.user && userDid) {
+					if (!fetchingInteractions) {
+						scheduledFetchInteractions = false;
+						fetchingInteractions = true;
+						await fetchInteractionsToFeedTimelineEnd(client, userDid, selectedFeed);
+						fetchingInteractions = false;
+					} else {
+						scheduledFetchInteractions = true;
+					}
 				}
+				console.log('feed loaded', result?.end);
+				if (result?.end) loaderState.complete();
+			} else {
+				if (cursor?.end && displayCount >= feedPosts.length) loaderState.complete();
 			}
-
 			loaderState.loaded();
-			console.log('feed loaded', result?.end);
-			if (result?.end) loaderState.complete();
 		} catch (error) {
 			loadError = `${error}`;
 			loaderState.error();
@@ -135,7 +147,7 @@
 </script>
 
 {#snippet feedPostsView()}
-	{#each feedPosts as post, i (post.uri)}
+	{#each renderedPosts as post, i (post.uri)}
 		{@const uriParts = post.uri.split('/')}
 		{@const postDid = uriParts[2] as Did}
 		{@const postRkey = uriParts[4] as RecordKey}
@@ -155,7 +167,7 @@
 				}}
 			/>
 		</div>
-		{#if i < feedPosts.length - 1}
+		{#if i < renderedPosts.length - 1}
 			<div
 				class="mx-8 mt-3 mb-4 h-px bg-linear-to-r from-(--nucleus-accent)/30 to-(--nucleus-accent2)/30"
 			></div>

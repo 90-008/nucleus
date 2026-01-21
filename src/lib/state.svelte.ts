@@ -919,13 +919,13 @@ export const fetchInteractionsToFollowingTimelineEnd = async (
 	const feed = followingFeed.get(userDid);
 	if (!feed || feed.size === 0) return;
 
-	let minTimestamp = Date.now() * 1000;
+	let minTimestamp = Date.now();
 	let found = false;
 
 	for (const uri of feed) {
 		const post = getPostFromUri(uri);
 		if (post) {
-			const ts = new Date(post.record.createdAt).getTime() * 1000;
+			const ts = new Date(post.record.createdAt).getTime();
 			if (ts < minTimestamp) minTimestamp = ts;
 			found = true;
 		}
@@ -948,13 +948,13 @@ export const fetchInteractionsToFeedTimelineEnd = async (
 	const posts = userFeedTimelines.get(feedUri);
 	if (!posts || posts.length === 0) return;
 
-	let minTimestamp = Date.now() * 1000;
+	let minTimestamp = Date.now();
 	let found = false;
 
 	for (const uri of posts) {
 		const post = getPostFromUri(uri);
 		if (post) {
-			const ts = new Date(post.record.createdAt).getTime() * 1000;
+			const ts = new Date(post.record.createdAt).getTime();
 			if (ts < minTimestamp) minTimestamp = ts;
 			found = true;
 		}
