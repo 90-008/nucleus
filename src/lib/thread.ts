@@ -167,14 +167,32 @@ export const isOwnPost = (post: ThreadPost, accounts: Account[]) =>
 export const hasNonOwnPost = (posts: ThreadPost[], accounts: Account[]) =>
 	posts.some((post) => !isOwnPost(post, accounts));
 
-// todo: add more filtering options
 export type FilterOptions = {
 	viewOwnPosts: boolean;
+	filterRootsToDids?: Set<Did>;
 };
 
 export const filterThreads = (threads: Thread[], accounts: Account[], opts: FilterOptions) =>
 	threads.filter((thread) => {
 		if (thread.posts.length === 0) return false;
-		if (!opts.viewOwnPosts) return hasNonOwnPost(thread.posts, accounts);
+		if (!opts.viewOwnPosts) if (hasNonOwnPost(thread.posts, accounts)) return false;
+
+		if (opts.filterRootsToDids) {
+			const rootDid = extractDidFromUri(thread.rootUri);
+			if (
+				rootDid &&
+				!opts.filterRootsToDids.has(rootDid) &&
+				!accounts.some((a) => a.did === rootDid)
+			) {
+				return false;
+			}
+		}
+
 		return true;
 	});
+
+// Helper to extract DID from URI if not already imported from elsewhere
+const extractDidFromUri = (uri: ResourceUri): Did | null => {
+	const match = uri.match(/^at:\/\/(did:plc:[a-z0-9]+)/);
+	return match ? (match[1] as Did) : null;
+};

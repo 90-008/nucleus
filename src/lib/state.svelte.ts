@@ -458,16 +458,13 @@ export const fetchFollowingTimeline = async (client: AtpClient, targetDid?: Did,
 			buffer.delete(uri);
 		}
 
-		// If we had enough in buffer, return. If we exhausted buffer but needed more?
-		// For simplicity, just return. The UI will call loadMore again if needed/short.
 		return;
 	}
 
 	const followsMap = follows.get(userDid);
 	const subjects = new Set<Did>();
-	if (followsMap) {
+	if (followsMap)
 		for (const follow of followsMap.values()) subjects.add(follow.subject);
-	}
 	subjects.add(userDid);
 
 	// 2. Find the "newest" cursor(s)
@@ -529,9 +526,7 @@ export const fetchFollowingTimeline = async (client: AtpClient, targetDid?: Did,
 		if (res.cursor) userCursors!.set(did, res.cursor);
 		else userCursors!.set(did, null); // null = exhausted
 
-		for (const record of res.records) {
-			newPosts.push(record.uri);
-		}
+		for (const record of res.records) newPosts.push(record.uri);
 	}
 
 	if (newPosts.length === 0) return;

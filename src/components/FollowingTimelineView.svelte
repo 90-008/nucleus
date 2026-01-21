@@ -12,7 +12,8 @@
 		allPosts,
 		followingFeed,
 		accountPreferences,
-		fetchInteractionsToFollowingTimelineEnd
+		fetchInteractionsToFollowingTimelineEnd,
+		follows
 	} from '$lib/state.svelte';
 	import Icon from '@iconify/svelte';
 	import { buildThreads, filterThreads, type ThreadPost } from '$lib/thread';
@@ -45,8 +46,13 @@
 	const currentPrefs = $derived(userDid ? accountPreferences.get(userDid) : null);
 	const mutes = $derived(currentPrefs?.mutes ?? []);
 
-	// We use userDid as the 'root' for buildThreads merely to provide a context,
-	// but we are passing `followingFeed.get(userDid)` (merged set) as the source.
+	const followedDids = $derived.by(() => {
+		if (!userDid) return new Set<Did>();
+		const map = follows.get(userDid);
+		if (!map) return new Set<Did>();
+		return new Set(Array.from(map.values()).map((f) => f.subject));
+	});
+
 	const threads = $derived(
 		filterThreads(
 			userDid
@@ -54,7 +60,8 @@
 				: [],
 			$accounts,
 			{
-				viewOwnPosts
+				viewOwnPosts,
+				filterRootsToDids: followedDids
 			}
 		)
 	);
