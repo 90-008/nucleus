@@ -39,6 +39,26 @@
 	const selectedName = $derived(selectedFeed === null ? 'replies' : getDisplayName(selectedFeed));
 </script>
 
+{#snippet feedIcon({
+	avatar,
+	replies,
+	following
+}: {
+	avatar?: string;
+	replies?: boolean;
+	following?: boolean;
+})}
+	{#if replies}
+		<Icon icon="heroicons:chat-bubble-left-ellipsis-16-solid" width="20" />
+	{:else if following}
+		<Icon icon="heroicons:users-solid" width="20" />
+	{:else if avatar}
+		<img src={avatar} alt="" class="h-5 w-5 shrink-0 rounded-sm object-cover" />
+	{:else}
+		<Icon icon="heroicons:rss" width="20" />
+	{/if}
+{/snippet}
+
 <Dropdown
 	class="min-w-48 rounded-sm border-2 border-(--nucleus-accent) bg-(--nucleus-bg) shadow-2xl"
 	bind:isOpen
@@ -47,9 +67,13 @@
 	{#snippet trigger()}
 		<button
 			onclick={() => (isOpen = !isOpen)}
-			class="flex action-button items-center gap-1.5 text-sm hover:scale-102!"
+			class="flex action-button items-center gap-1.5 p-2 text-sm hover:scale-102!"
 		>
-			<Icon icon="heroicons:list-bullet" width="20" />
+			{@render feedIcon({
+				replies: selectedFeed === null,
+				following: selectedFeed === 'following',
+				avatar: selectedFeed ? feedMeta.get(selectedFeed)?.avatar : undefined
+			})}
 			<span>{selectedName}</span>
 			<span class="opacity-50">▾</span>
 		</button>
@@ -65,7 +89,7 @@
 				? 'bg-(--nucleus-accent)/20'
 				: ''}"
 		>
-			<Icon icon="heroicons:chat-bubble-left-ellipsis-16-solid" width="20" />
+			{@render feedIcon({ replies: true })}
 			<span>replies</span>
 		</button>
 		<button
@@ -78,7 +102,7 @@
 				? 'bg-(--nucleus-accent)/20'
 				: ''}"
 		>
-			<Icon icon="heroicons:users-solid" width="20" />
+			{@render feedIcon({ following: true })}
 			<span>following</span>
 		</button>
 		{#each sortedFeeds as savedFeed (savedFeed.feed.uri)}
@@ -92,17 +116,7 @@
 					? 'bg-(--nucleus-accent)/20'
 					: ''}"
 			>
-				{#if savedFeed.feed.avatar}
-					<img
-						src={savedFeed.feed.avatar}
-						alt=""
-						class="h-5 w-5 shrink-0 rounded-sm object-cover"
-					/>
-				{:else if savedFeed.pinned}
-					<Icon icon="heroicons:star-solid" width="20" class="text-yellow-400" />
-				{:else}
-					<Icon icon="heroicons:rss" width="20" />
-				{/if}
+				{@render feedIcon({ avatar: savedFeed.feed.avatar })}
 				<span class="truncate">{savedFeed.feed.displayName}</span>
 			</button>
 		{/each}
