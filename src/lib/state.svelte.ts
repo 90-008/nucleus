@@ -967,6 +967,7 @@ export const fetchInteractionsToFeedTimelineEnd = async (
 	);
 };
 
+export const initialDone = new SvelteSet<Did>();
 export const fetchInitial = async (account: Account) => {
 	const client = clients.get(account.did)!;
 	await Promise.all([
@@ -976,6 +977,7 @@ export const fetchInitial = async (account: Account) => {
 			Promise.all(follows.map((follow) => fetchForInteractions(client, follow.subject)) ?? [])
 		)
 	]);
+	initialDone.add(account.did);
 };
 
 export const handleJetstreamEvent = async (event: JetstreamEvent) => {

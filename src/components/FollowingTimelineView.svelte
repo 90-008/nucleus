@@ -10,7 +10,8 @@
 		accountPreferences,
 		fetchInteractionsToFollowingTimelineEnd,
 		follows,
-		followingCursors
+		followingCursors,
+		initialDone
 	} from '$lib/state.svelte';
 	import { buildThreads, filterThreads } from '$lib/thread';
 	import type { Did } from '@atcute/lexicons/syntax';
@@ -121,7 +122,7 @@
 	bind:postComposerState
 	class={className}
 	isLoggedIn={!!(userDid || $accounts.length > 0)}
-	canLoad={!!(client && userDid)}
+	canLoad={!!(client && userDid && initialDone.has(userDid))}
 	onLoadMore={loadMore}
 	{isComplete}
 />

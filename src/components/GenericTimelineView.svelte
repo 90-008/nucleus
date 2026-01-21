@@ -2,18 +2,18 @@
 	import BskyPost from './BskyPost.svelte';
 	import { type State as PostComposerState } from './PostComposer.svelte';
 	import { AtpClient } from '$lib/at/client.svelte';
-	import { accounts } from '$lib/accounts';
 	import { type ResourceUri } from '@atcute/lexicons';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { InfiniteLoader, LoaderState } from 'svelte-infinite';
 	import Icon from '@iconify/svelte';
 	import { type ThreadPost, type Thread } from '$lib/thread';
-	import type { Did } from '@atcute/lexicons/syntax';
 	import NotLoggedIn from './NotLoggedIn.svelte';
 	import LoadingSpinner from './LoadingSpinner.svelte';
 	import EndOfList from './EndOfList.svelte';
 	import LoadError from './LoadError.svelte';
 	import LoadNewPosts from './LoadNewPosts.svelte';
+	import { onMount } from 'svelte';
+	import { initialDone } from '$lib/state.svelte';
 
 	interface Props {
 		client?: AtpClient | null;
@@ -37,7 +37,6 @@
 		isComplete = false
 	}: Props = $props();
 
-	// Default canLoad to isLoggedIn if not provided, for backward compatibility/simpler usage
 	const shouldLoad = $derived(canLoad ?? isLoggedIn);
 
 	let reverseChronological = $state(true);
@@ -53,11 +52,8 @@
 
 	$effect(() => {
 		if (threads.length > 0) {
-			if (isAtTop) {
-				boundaryTime = threads[0].newestTime;
-			} else if (boundaryTime === null) {
-				boundaryTime = threads[0].newestTime;
-			}
+			if (isAtTop) boundaryTime = threads[0].newestTime;
+			else if (boundaryTime === null) boundaryTime = threads[0].newestTime;
 		}
 	});
 
@@ -95,6 +91,16 @@
 	$effect(() => {
 		const isEmpty = threads.length < 15;
 		if (isEmpty && !loading && shouldLoad && !isComplete) loadMore();
+	});
+
+	$effect(() => {
+		if (!initialDone.has(client?.user?.did ?? 'did:plc:invalid')) {
+			loading = true;
+			loaderState.status = 'LOADING';
+		} else {
+			loading = false;
+			loaderState.loaded();
+		}
 	});
 </script>
 
