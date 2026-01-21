@@ -120,9 +120,9 @@
 		} catch (error) {
 			loadError = `${error}`;
 			loaderState.error();
+		} finally {
+			loading = false;
 		}
-
-		loading = false;
 	};
 
 	$effect(() => {

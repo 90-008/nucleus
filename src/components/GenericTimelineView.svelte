@@ -87,15 +87,13 @@
 		} catch (error) {
 			loadError = `${error}`;
 			loaderState.error();
+		} finally {
 			loading = false;
-			return;
 		}
-
-		loading = false;
 	};
 
 	$effect(() => {
-		const isEmpty = threads.length === 0;
+		const isEmpty = threads.length < 15;
 		if (isEmpty && !loading && shouldLoad && !isComplete) loadMore();
 	});
 </script>
