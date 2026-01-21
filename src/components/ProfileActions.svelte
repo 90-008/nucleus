@@ -8,7 +8,6 @@
 		createBlock,
 		deleteBlock,
 		follows,
-		setAccountPreferences,
 		updateAccountPreferences
 	} from '$lib/state.svelte';
 	import { generateColorForDid } from '$lib/accounts';
@@ -33,11 +32,7 @@
 	let actionsPos = $state({ x: 0, y: 0 });
 
 	const followsMap = $derived(userDid ? follows.get(userDid) : undefined);
-	const follow = $derived(
-		followsMap
-			? Array.from(followsMap.entries()).find(([, follow]) => follow.subject === targetDid)
-			: undefined
-	);
+	const follow = $derived(followsMap ? followsMap.get(targetDid) : undefined);
 
 	const currentPrefs = $derived(userDid ? accountPreferences.get(userDid) : null);
 	const mutes = $derived(currentPrefs?.mutes ?? []);
@@ -55,8 +50,8 @@
 		if (!userDid || !client.user) return;
 
 		if (follow) {
-			const [uri] = follow;
-			followsMap?.delete(uri);
+			const { uri } = follow;
+			followsMap?.delete(targetDid);
 
 			// extract rkey from uri
 			const parsedUri = parseCanonicalResourceUri(uri);
@@ -85,8 +80,8 @@
 				rkey
 			});
 
-			if (!followsMap) follows.set(userDid, new SvelteMap([[uri, record]]));
-			else followsMap.set(uri, record);
+			if (!followsMap) follows.set(userDid, new SvelteMap([[targetDid, { uri, record }]]));
+			else followsMap.set(targetDid, { uri, record });
 
 			await client.user.atcute.post('com.atproto.repo.createRecord', {
 				input: {

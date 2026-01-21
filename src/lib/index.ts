@@ -31,6 +31,7 @@ export const replySource: BacklinksSource = 'app.bsky.feed.post:reply.parent.uri
 export const replyRootSource: BacklinksSource = 'app.bsky.feed.post:reply.root.uri';
 export const blockSource: BacklinksSource = 'app.bsky.graph.block:subject';
 
+// returns nanos
 export const timestampFromCursor = (cursor: string | undefined) => {
 	if (!cursor) return undefined;
 	try {

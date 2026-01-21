@@ -136,7 +136,6 @@ const getPostRate = (did: Did, posts: Map<ResourceUri, PostWithUri>, now: number
 
 export const calculateInteractionScores = (
 	user: Did,
-	followsMap: Map<ResourceUri, AppBskyGraphFollow.Main>,
 	allPosts: Map<Did, Map<ResourceUri, PostWithUri>>,
 	allBacklinks: Map<BacklinksSource, Map<ResourceUri, Map<Did, Set<string>>>>,
 	replyIndex: Map<Did, Set<ResourceUri>>,

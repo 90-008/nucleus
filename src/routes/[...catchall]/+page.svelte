@@ -35,6 +35,7 @@
 	import type { Sort } from '$lib/following';
 	import { SvelteMap } from 'svelte/reactivity';
 	import FeedSelector from '$components/FeedSelector.svelte';
+	import { extractDidFromUri } from '$lib';
 
 	const { data: loadData }: PageProps = $props();
 
@@ -166,9 +167,7 @@
 
 	$effect(() => {
 		const wantedDids: Did[] = ['did:web:guestbook.gaze.systems'];
-		const followDids = follows
-			.values()
-			.flatMap((followMap) => followMap.values().map((follow) => follow.subject));
+		const followDids = follows.values().flatMap((followMap) => followMap.keys());
 		const accountDids = $accounts.values().map((account) => account.did);
 		wantedDids.push(...followDids, ...accountDids);
 		// console.log('updating jetstream options:', wantedDids);
@@ -311,6 +310,10 @@
 								onPostSent={(post) => {
 									addPosts([post]);
 									addTimeline(selectedDid!, [post.uri]);
+									if (post.record.reply) {
+										const parentDid = extractDidFromUri(post.record.reply.parent.uri)!;
+										addTimeline(parentDid, [post.uri]);
+									}
 								}}
 								bind:_state={postComposerState}
 							/>

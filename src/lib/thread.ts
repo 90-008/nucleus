@@ -5,6 +5,7 @@ import type { Account } from './accounts';
 import { expect } from './result';
 import type { PostWithUri } from './at/fetch';
 import { isBlockedBy } from './state.svelte';
+import { timestampFromCursor } from '$lib';
 
 export type ThreadPost = {
 	data: PostWithUri;
@@ -42,6 +43,7 @@ export const buildThreads = (
 		const rootUri = (data.record.reply?.root.uri as ResourceUri) || uri;
 		const parentUri = (data.record.reply?.parent.uri as ResourceUri) || null;
 
+		const cursorTime = timestampFromCursor(parsedUri.rkey);
 		const post: ThreadPost = {
 			data,
 			account,
@@ -49,7 +51,7 @@ export const buildThreads = (
 			rkey: parsedUri.rkey,
 			parentUri,
 			depth: 0,
-			newestTime: new Date(data.record.createdAt).getTime(),
+			newestTime: cursorTime ? cursorTime / 1000 : new Date(data.record.createdAt).getTime(),
 			isBlocked: isBlockedBy(parsedUri.repo, account),
 			isMuted: mutes.includes(parsedUri.repo),
 		};
@@ -169,12 +171,15 @@ export const hasNonOwnPost = (posts: ThreadPost[], accounts: Account[]) =>
 
 export type FilterOptions = {
 	viewOwnPosts: boolean;
+	filterReplies?: boolean;
 	filterRootsToDids?: Set<Did>;
 };
 
 export const filterThreads = (threads: Thread[], accounts: Account[], opts: FilterOptions) =>
 	threads.filter((thread) => {
 		if (thread.posts.length === 0) return false;
+		if (opts.filterReplies && thread.posts[0].data.record.reply) return false;
+
 		if (!opts.viewOwnPosts) if (hasNonOwnPost(thread.posts, accounts)) return false;
 
 		if (opts.filterRootsToDids) {

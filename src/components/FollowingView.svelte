@@ -49,25 +49,12 @@
 
 		const interactionScores =
 			followingSort === 'conversational'
-				? calculateInteractionScores(
-						selectedDid,
-						followsMap,
-						allPosts,
-						allBacklinks,
-						replyIndex,
-						staticNow
-					)
+				? calculateInteractionScores(selectedDid, allPosts, allBacklinks, replyIndex, staticNow)
 				: null;
 
-		const userStatsList = followsMap.values().map((f) => ({
-			did: f.subject,
-			data: calculateFollowedUserStats(
-				followingSort,
-				f.subject,
-				allPosts,
-				interactionScores,
-				staticNow
-			)
+		const userStatsList = followsMap.keys().map((did) => ({
+			did,
+			data: calculateFollowedUserStats(followingSort, did, allPosts, interactionScores, staticNow)
 		}));
 
 		const following = userStatsList.filter((u) => u.data !== null);

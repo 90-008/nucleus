@@ -16,12 +16,12 @@
 		checkForNewPosts,
 		fetchInteractionsToFeedTimelineEnd
 	} from '$lib/state.svelte';
-	import Icon from '@iconify/svelte';
 	import NotLoggedIn from './NotLoggedIn.svelte';
 	import { fetchFeedGenerator } from '$lib/at/feeds';
 	import LoadingSpinner from './LoadingSpinner.svelte';
 	import EndOfList from './EndOfList.svelte';
 	import LoadError from './LoadError.svelte';
+	import LoadNewPosts from './LoadNewPosts.svelte';
 
 	interface Props {
 		client?: AtpClient | null;
@@ -168,17 +168,7 @@
 	class="min-h-full p-2 [scrollbar-color:var(--nucleus-accent)_transparent] {className}"
 	bind:this={scrollContainer}
 >
-	{#if newPostsAvailable}
-		<div class="sticky top-2 z-20 mb-4 flex w-full justify-center">
-			<button
-				class="flex action-button items-center gap-2 bg-(--nucleus-bg) hover:scale-115! enabled:hover:bg-(--nucleus-bg)!"
-				onclick={clearFeed}
-			>
-				<Icon icon="heroicons:arrow-up-16-solid" width="20" />
-				load new posts
-			</button>
-		</div>
-	{/if}
+	<LoadNewPosts visible={newPostsAvailable} onclick={clearFeed} />
 	{#if userDid || $accounts.length > 0}
 		<InfiniteLoader {loaderState} triggerLoad={loadMore} loopDetectionTimeout={0}>
 			{@render feedPostsView()}

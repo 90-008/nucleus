@@ -348,19 +348,22 @@ export const updateAccountPreferences = async (
 	await syncAccountPreferences(did);
 };
 
-export const follows = new SvelteMap<Did, SvelteMap<ResourceUri, AppBskyGraphFollow.Main>>();
+type FollowWithUri = {
+	uri: ResourceUri;
+	record: AppBskyGraphFollow.Main;
+};
+export const follows = new SvelteMap<Did, SvelteMap<Did, FollowWithUri>>();
 
 export const addFollows = (
 	did: Did,
-	followMap: Iterable<[ResourceUri, AppBskyGraphFollow.Main]>
+	followList: Iterable<FollowWithUri>
 ) => {
 	let map = follows.get(did)!;
 	if (!map) {
-		map = new SvelteMap(followMap);
+		map = new SvelteMap();
 		follows.set(did, map);
-		return;
 	}
-	for (const [uri, record] of followMap) map.set(uri, record);
+	for (const follow of followList) map.set(follow.record.subject, follow);
 };
 
 export const fetchFollows = async (
@@ -374,7 +377,10 @@ export const fetchFollows = async (
 	}
 	addFollows(
 		account.did,
-		res.value.records.map((follow) => [follow.uri, follow.value as AppBskyGraphFollow.Main])
+		res.value.records.map((follow) => ({
+			uri: follow.uri,
+			record: follow.value as AppBskyGraphFollow.Main
+		}))
 	);
 	return res.value.records.values().map((follow) => follow.value as AppBskyGraphFollow.Main);
 };
@@ -461,10 +467,7 @@ export const fetchFollowingTimeline = async (client: AtpClient, targetDid?: Did,
 		return;
 	}
 
-	const followsMap = follows.get(userDid);
-	const subjects = new Set<Did>();
-	if (followsMap)
-		for (const follow of followsMap.values()) subjects.add(follow.subject);
+	const subjects = new Set(follows.get(userDid)?.keys());
 	subjects.add(userDid);
 
 	// 2. Find the "newest" cursor(s)
@@ -1000,33 +1003,24 @@ export const handleJetstreamEvent = async (event: JetstreamEvent) => {
 			addPosts(hydrated.value.values());
 			addTimeline(did, hydrated.value.keys());
 
+			if (record.reply) {
+				const parentDid = extractDidFromUri(record.reply.parent.uri)!;
+				addTimeline(parentDid, [uri]);
+			}
+
 			// Broadcast to following feeds of local accounts
 			for (const account of get(accounts)) {
 				// does this account follow the author?
 				let isFollowing = account.did === did;
 				if (!isFollowing) {
 					const accountFollows = follows.get(account.did);
-					if (accountFollows) {
-						for (const follow of accountFollows.values()) {
-							if (follow.subject === did) {
-								isFollowing = true;
-								break;
-							}
-						}
-					}
+					if (accountFollows?.has(did)) isFollowing = true;
 				}
 
 				if (isFollowing) {
 					const feed = followingFeed.get(account.did);
-					if (feed) {
-						for (const uri of hydrated.value.keys()) feed.add(uri);
-					}
+					if (feed) for (const uri of hydrated.value.keys()) feed.add(uri);
 				}
-			}
-
-			if (record.reply) {
-				const parentDid = extractDidFromUri(record.reply.parent.uri)!;
-				addTimeline(parentDid, [uri]);
 			}
 		} else if (commit.operation === 'delete') {
 			deletePost(uri);

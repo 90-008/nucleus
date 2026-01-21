@@ -322,8 +322,6 @@
 	};
 
 	const doPost = () => {
-		if (_state.text.length === 0 || _state.text.length > 300) return;
-
 		postError = '';
 		posting = true;
 		post(_state.text)
