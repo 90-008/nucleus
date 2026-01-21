@@ -759,7 +759,7 @@ export const fetchFeed = async (
 	client: AtpClient,
 	feedUri: string,
 	feedServiceDid: string,
-	limit: number = 25
+	limit: number = 10
 ) => {
 	const userDid = client.user?.did;
 	if (!userDid) return;
@@ -778,7 +778,7 @@ export const fetchFeed = async (
 	);
 	if (!skeleton) throw `failed to fetch feed skeleton for ${feedUri}`;
 
-	const newCursor = { value: skeleton.cursor, end: !skeleton.cursor };
+	const newCursor = { value: skeleton.cursor, end: skeleton.feed.length === 0 };
 	userFeedCursors.set(feedUri, newCursor);
 
 	const uris = skeleton.feed.slice(0, limit).map((item) => item.post as ResourceUri);

@@ -115,12 +115,11 @@
 			}
 
 			loaderState.loaded();
+			console.log('feed loaded', result?.end);
 			if (result?.end) loaderState.complete();
 		} catch (error) {
 			loadError = `${error}`;
 			loaderState.error();
-			loading = false;
-			return;
 		}
 
 		loading = false;
