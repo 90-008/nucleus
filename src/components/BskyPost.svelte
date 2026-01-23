@@ -165,7 +165,7 @@
 			})
 			.then((result) => {
 				if (!result.ok) return;
-				allPosts.get(did)?.delete(aturi);
+				allPosts.delete(aturi);
 				deleteState = 'deleted';
 			});
 		actionsOpen = false;

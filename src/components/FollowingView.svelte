@@ -1,5 +1,12 @@
 <script lang="ts">
-	import { follows, allPosts, allBacklinks, currentTime, replyIndex } from '$lib/state.svelte';
+	import {
+		follows,
+		allPosts,
+		postsByDid,
+		allBacklinks,
+		currentTime,
+		replyIndex
+	} from '$lib/state.svelte';
 	import type { Did } from '@atcute/lexicons';
 	import { type AtpClient } from '$lib/at/client.svelte';
 	import VirtualList from '@tutorlatin/svelte-tiny-virtual-list';
@@ -49,12 +56,26 @@
 
 		const interactionScores =
 			followingSort === 'conversational'
-				? calculateInteractionScores(selectedDid, allPosts, allBacklinks, replyIndex, staticNow)
+				? calculateInteractionScores(
+						selectedDid,
+						allPosts,
+						postsByDid,
+						allBacklinks,
+						replyIndex,
+						staticNow
+					)
 				: null;
 
 		const userStatsList = followsMap.keys().map((did) => ({
 			did,
-			data: calculateFollowedUserStats(followingSort, did, allPosts, interactionScores, staticNow)
+			data: calculateFollowedUserStats(
+				followingSort,
+				did,
+				allPosts,
+				postsByDid,
+				interactionScores,
+				staticNow
+			)
 		}));
 
 		const following = userStatsList.filter((u) => u.data !== null);

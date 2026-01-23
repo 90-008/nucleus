@@ -102,10 +102,7 @@
 		if (!userDid) return [];
 		const uris = feedTimelines.get(userDid)?.get(selectedFeed) ?? [];
 		return uris
-			.map((uri) => {
-				const did = uri.split('/')[2] as Did;
-				return allPosts.get(did)?.get(uri);
-			})
+			.map((uri) => allPosts.get(uri))
 			.filter((p): p is NonNullable<typeof p> => p !== undefined);
 	});
 

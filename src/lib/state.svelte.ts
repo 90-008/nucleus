@@ -677,19 +677,20 @@ export const getBlockRelationship = (
 	};
 };
 
-export const allPosts = new SvelteMap<Did, SvelteMap<ResourceUri, PostWithUri>>();
+export const allPosts = new SvelteMap<ResourceUri, PostWithUri>();
+export const postsByDid = new SvelteMap<Did, SvelteSet<ResourceUri>>();
 export type DeletedPostInfo = { reply?: PostWithUri['record']['reply'] };
 export const deletedPosts = new SvelteMap<ResourceUri, DeletedPostInfo>();
+
+// posts grouped by root uri for efficient thread building
+export const postsByRootUri = new SvelteMap<ResourceUri, SvelteSet<ResourceUri>>();
 // did -> post uris that are replies to that did
 export const replyIndex = new SvelteMap<Did, SvelteSet<ResourceUri>>();
 
 export const getPost = (did: Did, rkey: RecordKey) =>
-	allPosts.get(did)?.get(toCanonicalUri({ did, collection: 'app.bsky.feed.post', rkey }));
+	allPosts.get(toCanonicalUri({ did, collection: 'app.bsky.feed.post', rkey }));
 
-export const getPostFromUri = (uri: ResourceUri) => {
-	const did = extractDidFromUri(uri);
-	return did ? allPosts.get(did)?.get(uri) : undefined;
-};
+export const getPostFromUri = (uri: ResourceUri) => allPosts.get(uri);
 
 const hydrateCacheFn: Parameters<typeof hydratePosts>[3] = (did, rkey) => {
 	const cached = getPost(did, rkey);
@@ -699,12 +700,25 @@ const hydrateCacheFn: Parameters<typeof hydratePosts>[3] = (did, rkey) => {
 export const addPosts = (newPosts: Iterable<PostWithUri>) => {
 	for (const post of newPosts) {
 		const parsedUri = expect(parseCanonicalResourceUri(post.uri));
-		let posts = allPosts.get(parsedUri.repo);
-		if (!posts) {
-			posts = new SvelteMap();
-			allPosts.set(parsedUri.repo, posts);
+		allPosts.set(post.uri, post);
+
+		// update postsByDid index
+		let didPosts = postsByDid.get(parsedUri.repo);
+		if (!didPosts) {
+			didPosts = new SvelteSet();
+			postsByDid.set(parsedUri.repo, didPosts);
 		}
-		posts.set(post.uri, post);
+		didPosts.add(post.uri);
+
+		// update postsByRootUri grouping
+		const rootUri = (post.record.reply?.root.uri as ResourceUri) || post.uri;
+		let rootGroup = postsByRootUri.get(rootUri);
+		if (!rootGroup) {
+			rootGroup = new SvelteSet();
+			postsByRootUri.set(rootUri, rootGroup);
+		}
+		rootGroup.add(post.uri);
+
 		if (post.record.reply) {
 			const link = {
 				did: parsedUri.repo,
@@ -730,9 +744,10 @@ export const addPosts = (newPosts: Iterable<PostWithUri>) => {
 
 export const deletePost = (uri: ResourceUri) => {
 	const did = extractDidFromUri(uri)!;
-	const post = allPosts.get(did)?.get(uri);
+	const post = allPosts.get(uri);
 	if (!post) return;
-	allPosts.get(did)?.delete(uri);
+	allPosts.delete(uri);
+	postsByDid.get(did)?.delete(uri);
 	// remove reply from index
 	const subjectDid = extractDidFromUri(post.record.reply?.parent.uri ?? '');
 	if (subjectDid) replyIndex.get(subjectDid)?.delete(uri);
@@ -837,7 +852,7 @@ const traversePostChain = (post: PostWithUri) => {
 	const result = [post.uri];
 	const parentUri = post.record.reply?.parent.uri;
 	if (parentUri) {
-		const parentPost = allPosts.get(extractDidFromUri(parentUri)!)?.get(parentUri);
+		const parentPost = allPosts.get(parentUri as ResourceUri);
 		if (parentPost) result.push(...traversePostChain(parentPost));
 	}
 	return result;
@@ -849,7 +864,7 @@ export const addTimeline = (did: Did, uris: Iterable<ResourceUri>) => {
 		timelines.set(did, timeline);
 	}
 	for (const uri of uris) {
-		const post = allPosts.get(did)?.get(uri);
+		const post = allPosts.get(uri);
 		// we need to traverse the post chain to add all posts in the chain to the timeline
 		// because the parent posts might not be in the timeline yet
 		const chain = post ? traversePostChain(post) : [uri];

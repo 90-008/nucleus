@@ -31,19 +31,20 @@ const STATS_CACHE_TTL = 60 * 1000;
 export const calculateFollowedUserStats = (
 	sort: Sort,
 	did: Did,
-	posts: Map<Did, Map<ResourceUri, PostWithUri>>,
+	posts: Map<ResourceUri, PostWithUri>,
+	postsByDid: Map<Did, Set<ResourceUri>>,
 	interactionScores: Map<ActorIdentifier, number> | null,
 	now: number
 ) => {
 	if (sort === 'active') {
 		const cached = userStatsCache.get(did);
 		if (cached && now - cached.timestamp < STATS_CACHE_TTL) {
-			const postsMap = posts.get(did);
-			if (postsMap && postsMap.size > 0) return { ...cached.stats, did };
+			const userPostUris = postsByDid.get(did);
+			if (userPostUris && userPostUris.size > 0) return { ...cached.stats, did };
 		}
 	}
 
-	const stats = _calculateStats(sort, did, posts, interactionScores, now);
+	const stats = _calculateStats(sort, did, posts, postsByDid, interactionScores, now);
 
 	if (stats && sort === 'active') userStatsCache.set(did, { timestamp: now, stats });
 
@@ -53,12 +54,13 @@ export const calculateFollowedUserStats = (
 const _calculateStats = (
 	sort: Sort,
 	did: Did,
-	posts: Map<Did, Map<ResourceUri, PostWithUri>>,
+	posts: Map<ResourceUri, PostWithUri>,
+	postsByDid: Map<Did, Set<ResourceUri>>,
 	interactionScores: Map<ActorIdentifier, number> | null,
 	now: number
 ) => {
-	const postsMap = posts.get(did);
-	if (!postsMap || postsMap.size === 0) return null;
+	const userPostUris = postsByDid.get(did);
+	if (!userPostUris || userPostUris.size === 0) return null;
 
 	let lastPostAtTime = 0;
 	let activeScore = 0;
@@ -66,7 +68,9 @@ const _calculateStats = (
 	const quarterPosts = 6 * 60 * 60 * 1000;
 	const gravity = 2.0;
 
-	for (const post of postsMap.values()) {
+	for (const uri of userPostUris) {
+		const post = posts.get(uri);
+		if (!post) continue;
 		const t = new Date(post.record.createdAt).getTime();
 		if (t > lastPostAtTime) lastPostAtTime = t;
 		const ageMs = Math.max(0, now - t);
@@ -136,7 +140,8 @@ const getPostRate = (did: Did, posts: Map<ResourceUri, PostWithUri>, now: number
 
 export const calculateInteractionScores = (
 	user: Did,
-	allPosts: Map<Did, Map<ResourceUri, PostWithUri>>,
+	allPosts: Map<ResourceUri, PostWithUri>,
+	postsByDid: Map<Did, Set<ResourceUri>>,
 	allBacklinks: Map<BacklinksSource, Map<ResourceUri, Map<Did, Set<string>>>>,
 	replyIndex: Map<Did, Set<ResourceUri>>,
 	now: number
@@ -154,10 +159,12 @@ export const calculateInteractionScores = (
 	};
 
 	// 1. process my posts (me -> others)
-	const myPosts = allPosts.get(user);
-	if (myPosts) {
+	const myPostUris = postsByDid.get(user);
+	if (myPostUris) {
 		const seenRoots = new Set<ResourceUri>();
-		for (const post of myPosts.values()) {
+		for (const uri of myPostUris) {
+			const post = allPosts.get(uri);
+			if (!post) continue;
 			const t = new Date(post.record.createdAt).getTime();
 
 			if (post.record.reply) {
@@ -188,8 +195,7 @@ export const calculateInteractionScores = (
 			const authorDid = extractDidFromUri(uri);
 			if (!authorDid || authorDid === user) continue;
 
-			const postsMap = allPosts.get(authorDid);
-			const post = postsMap?.get(uri);
+			const post = allPosts.get(uri);
 			if (!post) continue;
 
 			const t = new Date(post.record.createdAt).getTime();
@@ -199,8 +205,10 @@ export const calculateInteractionScores = (
 
 	// 3. process reposts on my posts
 	const repostBacklinks = allBacklinks.get(repostSource);
-	if (repostBacklinks && myPosts) {
-		for (const [uri, myPost] of myPosts) {
+	if (repostBacklinks && myPostUris) {
+		for (const uri of myPostUris) {
+			const myPost = allPosts.get(uri);
+			if (!myPost) continue;
 			const didMap = repostBacklinks.get(uri);
 			if (!didMap) continue;
 
@@ -230,8 +238,16 @@ export const calculateInteractionScores = (
 
 	// normalize by posting rate
 	for (const [did, score] of scores) {
-		const posts = allPosts.get(did);
-		const rate = posts ? getPostRate(did, posts, now) : 0;
+		const userPostUris = postsByDid.get(did);
+		let rate = 0;
+		if (userPostUris) {
+			const userPosts = new Map<ResourceUri, PostWithUri>();
+			for (const uri of userPostUris) {
+				const post = allPosts.get(uri);
+				if (post) userPosts.set(uri, post);
+			}
+			rate = getPostRate(did, userPosts, now);
+		}
 		scores.set(did, score / Math.pow(rate + rateBaseline, ratePower));
 	}
 
