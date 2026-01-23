@@ -12,6 +12,16 @@
 	}
 
 	let { did, embed }: Props = $props();
+
+	let videoPds = $state<string | undefined>();
+
+	$effect(() => {
+		if (embed.$type === 'app.bsky.embed.video' && isBlob(embed.video)) {
+			resolveDidDoc(did).then((didDoc) => {
+				if (didDoc.ok) videoPds = didDoc.value.pds;
+			});
+		}
+	});
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -38,16 +48,22 @@
 		{/if}
 	{:else if embed.$type === 'app.bsky.embed.video'}
 		{#if isBlob(embed.video)}
-			{#await resolveDidDoc(did) then didDoc}
-				{#if didDoc.ok}
+			{@const ratio = embed.aspectRatio}
+			<div
+				class="relative w-full overflow-hidden rounded-sm bg-black/5"
+				style:aspect-ratio={ratio ? `${ratio.width} / ${ratio.height}` : '16 / 9'}
+			>
+				{#if videoPds}
 					<!-- svelte-ignore a11y_media_has_caption -->
 					<video
-						class="rounded-sm"
-						src={blob(didDoc.value.pds, did, embed.video.ref.$link)}
+						class="absolute inset-0 h-full w-full"
+						src={blob(videoPds, did, embed.video.ref.$link)}
 						controls
+						playsinline
+						loop
 					></video>
 				{/if}
-			{/await}
+			</div>
 		{/if}
 	{/if}
 </div>
