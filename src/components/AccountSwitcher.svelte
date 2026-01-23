@@ -3,7 +3,6 @@
 	import { AtpClient, resolveHandle } from '$lib/at/client.svelte';
 	import type { Handle } from '@atcute/lexicons';
 	import ProfilePicture from './ProfilePicture.svelte';
-	import PfpPlaceholder from './PfpPlaceholder.svelte';
 	import Popup from './Popup.svelte';
 	import Dropdown from './Dropdown.svelte';
 	import AccountSelector from './AccountSelector.svelte';
@@ -113,11 +112,7 @@
 			onclick={toggleDropdown}
 			class="flex h-13 w-13 items-center justify-center rounded-sm shadow-md transition-all hover:scale-110 hover:shadow-xl hover:saturate-150"
 		>
-			{#if selectedDid}
-				<ProfilePicture {client} did={selectedDid} size={13} />
-			{:else}
-				<PfpPlaceholder color="var(--nucleus-accent)" size={13} />
-			{/if}
+			<ProfilePicture {client} did={selectedDid} size={13} />
 		</button>
 	{/snippet}
 

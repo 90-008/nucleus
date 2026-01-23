@@ -9,31 +9,31 @@
 
 	interface Props {
 		client: AtpClient;
-		did: Did;
 		size: number;
+		did: Did | null;
 	}
 
 	let { client, did, size }: Props = $props();
 
-	const avatarBlob = $derived(profiles.get(did)?.avatar);
-	const avatarUrl: string | null = $derived(
-		isBlob(avatarBlob) ? img('avatar_thumbnail', did, avatarBlob.ref.$link) : null
+	const avatarBlob = $derived(did ? profiles.get(did)?.avatar : null);
+	const avatarUrl = $derived(
+		did && isBlob(avatarBlob) ? img('avatar_thumbnail', did, avatarBlob.ref.$link) : null
 	);
 
-	const loadProfile = async (targetDid: Did) => {
+	const loadProfile = async (client: AtpClient, did: Did) => {
 		if (avatarBlob) return;
 
-		const profile = await client.getProfile(targetDid);
+		const profile = await client.getProfile(did);
 		if (profile.ok) profiles.set(did, profile.value);
-		else console.error(`${targetDid}: failed to load pfp: ${profile.error}`);
+		else console.error(`${did}: failed to load pfp: ${profile.error}`);
 	};
 
 	$effect(() => {
-		if (!client.user) return;
-		loadProfile(did);
+		if (!did) return;
+		loadProfile(client, did);
 	});
 
-	const color = $derived(generateColorForDid(did));
+	const color = $derived(did ? generateColorForDid(did) : 'var(--nucleus-accent)');
 </script>
 
 {#if avatarUrl}

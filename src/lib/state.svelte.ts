@@ -392,7 +392,6 @@ export const fetchForInteractions = async (client: AtpClient, subject: Did) => {
 
 	const threeDaysAgo = (Date.now() - 3 * 24 * 60 * 60 * 1000) * 1000;
 
-	// fetch only 1 item to prompt the cursor
 	const res = await client.listRecordsUntil(subject, 'app.bsky.feed.post', undefined, threeDaysAgo);
 	if (!res.ok) return;
 	const postsWithUri = res.value.records.map(
@@ -965,7 +964,10 @@ export const fetchInteractionsToFeedTimelineEnd = async (
 
 export const initialDone = new SvelteSet<Did>();
 export const fetchInitial = async (account: Account) => {
+	const start = Date.now();
 	const client = clients.get(account.did)!;
+	const profile = await client.getProfile();
+	if (profile.ok) profiles.set(account.did, profile.value);
 	await Promise.allSettled([
 		fetchBlocks(account),
 		fetchForInteractions(client, account.did),
@@ -974,6 +976,7 @@ export const fetchInitial = async (account: Account) => {
 		)
 	]);
 	initialDone.add(account.did);
+	console.log(`initial done for ${account.did} in ${Date.now() - start}ms`);
 };
 
 export const handleJetstreamEvent = async (event: JetstreamEvent) => {
