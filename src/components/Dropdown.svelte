@@ -48,13 +48,14 @@
 	let openTimer: ReturnType<typeof setTimeout>;
 
 	const updatePosition = async () => {
-		const { x, y } = await computePosition(triggerRef!, contentRef!, {
+		if (!triggerRef || !contentRef) return;
+		const { x, y } = await computePosition(triggerRef, contentRef, {
 			placement,
 			middleware: [offset(offsetDistance), flip(), shift({ padding: 8 })],
 			strategy: 'fixed'
 		});
 
-		Object.assign(contentRef!.style, {
+		Object.assign(contentRef.style, {
 			left: `${x}px`,
 			top: `${y}px`
 		});
@@ -129,8 +130,8 @@
 	});
 
 	$effect(() => {
-		if (isOpen) {
-			cleanup = autoUpdate(triggerRef!, contentRef!, updatePosition);
+		if (isOpen && triggerRef && contentRef) {
+			cleanup = autoUpdate(triggerRef, contentRef, updatePosition);
 		} else if (cleanup) {
 			cleanup();
 			cleanup = null;

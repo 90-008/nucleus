@@ -12,15 +12,13 @@
 		client: AtpClient;
 		did: Did;
 		handle?: Handle;
-		profile?: AppBskyActorProfile.Main | null;
+		profile?: AppBskyActorProfile.Main;
 	}
 
-	let {
-		client,
-		did,
-		handle = handles.get(did),
-		profile = $bindable(profiles.get(did) ?? null)
-	}: Props = $props();
+	let { client, did, handle: _handle, profile: _profile }: Props = $props();
+
+	const handle = $derived(_handle ?? handles.get(did));
+	const profile = $derived(_profile ?? profiles.get(did));
 
 	const userDid = $derived(client.user?.did);
 	const blockRel = $derived(
@@ -37,14 +35,12 @@
 				if (profile) return;
 				const res = await client.getProfile(did);
 				if (!res.ok) return;
-				profile = res.value;
 				profiles.set(did, res.value);
 			})(),
 			(async () => {
 				if (handle) return;
 				const res = await resolveDidDoc(did);
 				if (!res.ok) return;
-				handle = res.value.handle;
 				handles.set(did, res.value.handle);
 			})()
 		]);

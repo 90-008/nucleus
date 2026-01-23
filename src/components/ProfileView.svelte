@@ -30,9 +30,9 @@
 	const profile = $derived(profiles.get(actor as Did));
 	const displayName = $derived(profile?.displayName ?? '');
 	const handle = $derived(isHandle(actor) ? actor : handles.get(actor as Did));
+	let did = $derived(isDid(actor) ? actor : null);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let did = $state(isDid(actor) ? actor : null);
 
 	let userBlocked = $state(false);
 	let blockedByTarget = $state(false);

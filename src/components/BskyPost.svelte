@@ -8,7 +8,7 @@
 		type RecordKey,
 		type ResourceUri
 	} from '@atcute/lexicons';
-	import { expect, ok } from '$lib/result';
+	import { err, expect, ok, type Result } from '$lib/result';
 	import { accounts, generateColorForDid } from '$lib/accounts';
 	import ProfilePicture from './ProfilePicture.svelte';
 	import BskyPost from './BskyPost.svelte';
@@ -87,25 +87,27 @@
 	);
 	const showAsMuted = $derived(isMuted && !expandDisallowed);
 
-	let handle: Handle = $state(handles.get(did) ?? 'handle.invalid');
+	const handle = $derived(handles.get(did) ?? 'handle.invalid');
 	onMount(() => {
 		resolveDidDoc(did).then((res) => {
-			if (res.ok) {
-				handle = res.value.handle;
-				handles.set(did, handle);
-			}
+			if (res.ok) handles.set(did, res.value.handle);
 			return res;
 		});
 	});
-	const post = data
-		? Promise.resolve(ok(data))
-		: client.getRecord(AppBskyFeedPost.mainSchema, did, rkey);
-	let profile: AppBskyActorProfile.Main | null = $state(profiles.get(did) ?? null);
+	const profile = $derived(profiles.get(did));
 	onMount(async () => {
 		const p = await client.getProfile(did);
 		if (!p.ok) return;
-		profile = p.value;
-		profiles.set(did, profile);
+		profiles.set(did, p.value);
+	});
+
+	// svelte-ignore state_referenced_locally
+	let post: Result<PostWithUri, string> = $state(data ? ok(data) : err("post couldn't be loaded"));
+	$effect(() => {
+		client.getRecord(AppBskyFeedPost.mainSchema, did, rkey).then((res) => {
+			if (!res.ok) return;
+			post = res;
+		});
 	});
 
 	const postId = $derived(

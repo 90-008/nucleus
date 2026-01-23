@@ -2,9 +2,12 @@
 	import BskyPost from './BskyPost.svelte';
 	import { type State as PostComposerState } from './PostComposer.svelte';
 	import { AtpClient } from '$lib/at/client.svelte';
+	import { estimatePostHeight } from '$lib/post-height';
+
 	import { accounts } from '$lib/accounts';
 	import type { Did, RecordKey } from '@atcute/lexicons/syntax';
 	import { InfiniteLoader, LoaderState } from 'svelte-infinite';
+	import VirtualList from '@tutorlatin/svelte-tiny-virtual-list';
 	import {
 		allPosts,
 		viewClient,
@@ -41,13 +44,20 @@
 
 	let feedServiceDid = $state<string | null>(null);
 	let newPostsAvailable = $state(false);
+	let virtualList = $state<VirtualList | null>(null);
+	let scrollToIndex = $state<number | undefined>(undefined);
+
+	const viewKey = $derived(`${userDid ?? 'anon'}-${selectedFeed}`);
 
 	$effect(() => {
-		selectedFeed;
+		viewKey; // dependency
 		feedServiceDid = null;
 		newPostsAvailable = false;
 		displayCount = 15;
+		measuredHeights = [];
 		loaderState.reset();
+		scrollToIndex = undefined;
+
 		fetchFeedGenerator(client ?? viewClient, selectedFeed).then((meta) => {
 			feedServiceDid = meta?.did ?? null;
 		});
@@ -68,7 +78,6 @@
 	});
 
 	const loaderState = new LoaderState();
-	let scrollContainer = $state<HTMLDivElement>();
 	let loading = $state(false);
 	let loadError = $state('');
 
@@ -77,9 +86,11 @@
 
 	export const clearFeed = () => {
 		if (!userDid) return;
-		scrollContainer?.scrollTo({ top: 0, behavior: 'smooth' });
+		scrollToIndex = 0;
+		setTimeout(() => (scrollToIndex = undefined), 100);
 		newPostsAvailable = false;
 		displayCount = 15;
+		measuredHeights = [];
 		resetFeed(userDid, selectedFeed);
 		loaderState.reset();
 		loadMore();
@@ -98,7 +109,20 @@
 			.filter((p): p is NonNullable<typeof p> => p !== undefined);
 	});
 
-	const renderedPosts = $derived(feedPosts.slice(0, displayCount));
+	let measuredHeights: number[] = $state([]);
+	const itemHeights = $derived.by(() => {
+		const heights = measuredHeights.slice(0, feedPosts.length);
+		while (heights.length < feedPosts.length) {
+			heights.push(estimatePostHeight(feedPosts[heights.length]));
+		}
+		return heights;
+	});
+
+	const averageHeight = $derived.by(() => {
+		if (measuredHeights.length === 0) return 150;
+		const sum = measuredHeights.reduce((a, b) => a + b, 0);
+		return sum / measuredHeights.length;
+	});
 
 	const loadMore = async () => {
 		if (loading || !client || !userDid || !feedServiceDid) return;
@@ -144,55 +168,85 @@
 			if (!cursor?.end) loadMore();
 		}
 	});
+
+	const renderItem = (index: number) => {
+		const post = feedPosts[index];
+		if (!post) return { post: null, postDid: null, postRkey: null };
+		const uriParts = post.uri.split('/');
+		const postDid = uriParts[2] as Did;
+		const postRkey = uriParts[4] as RecordKey;
+		return { post, postDid, postRkey };
+	};
 </script>
 
-{#snippet feedPostsView()}
-	{#each renderedPosts as post, i (post.uri)}
-		{@const uriParts = post.uri.split('/')}
-		{@const postDid = uriParts[2] as Did}
-		{@const postRkey = uriParts[4] as RecordKey}
-		<div class="mb-1.5">
-			<BskyPost
-				client={client!}
-				did={postDid}
-				rkey={postRkey}
-				data={post}
-				onQuote={(p) => {
-					postComposerState.focus = 'focused';
-					postComposerState.quoting = p;
-				}}
-				onReply={(p) => {
-					postComposerState.focus = 'focused';
-					postComposerState.replying = p;
-				}}
-			/>
-		</div>
-		{#if i < renderedPosts.length - 1}
-			<div
-				class="mx-8 mt-3 mb-4 h-px bg-linear-to-r from-(--nucleus-accent)/30 to-(--nucleus-accent2)/30"
-			></div>
-		{/if}
-	{/each}
-{/snippet}
-
-<div
-	class="min-h-full p-2 [scrollbar-color:var(--nucleus-accent)_transparent] {className}"
-	bind:this={scrollContainer}
->
+<div class="h-full [scrollbar-color:var(--nucleus-accent)_transparent] {className}">
 	<LoadNewPosts visible={newPostsAvailable} onclick={clearFeed} />
 	{#if userDid || $accounts.length > 0}
-		<InfiniteLoader {loaderState} triggerLoad={loadMore} loopDetectionTimeout={0}>
-			{@render feedPostsView()}
-			{#snippet noData()}
-				<EndOfList />
-			{/snippet}
-			{#snippet loading()}
-				<LoadingSpinner />
-			{/snippet}
-			{#snippet error()}
-				<LoadError error={loadError} onRetry={loadMore} />
-			{/snippet}
-		</InfiniteLoader>
+		{#key viewKey}
+			<VirtualList
+				bind:this={virtualList}
+				height="100%"
+				itemCount={feedPosts.length}
+				itemSize={itemHeights}
+				estimatedItemSize={averageHeight}
+				scrollToIndex={feedPosts.length > 0 ? scrollToIndex : undefined}
+			>
+				{#snippet item({ index, style }: { index: number; style: string })}
+					{@const { post, postDid, postRkey } = renderItem(index)}
+					<div
+						style="{style} height: auto;"
+						bind:clientHeight={
+							() => {
+								// we need to return this so the bind works
+								return measuredHeights[index] ?? estimatePostHeight(post);
+							},
+							(h) => {
+								// update the height
+								if (measuredHeights[index] !== h) measuredHeights[index] = h;
+							}
+						}
+					>
+						<div
+							class="mx-2 mb-1.5 border-b border-dashed border-[color-mix(in_srgb,var(--nucleus-accent)_30%,transparent)] pb-3 last:border-0"
+						>
+							{#if post && postDid && postRkey}
+								<BskyPost
+									client={client!}
+									did={postDid}
+									rkey={postRkey}
+									data={post}
+									onQuote={(p) => {
+										postComposerState.focus = 'focused';
+										postComposerState.quoting = p;
+									}}
+									onReply={(p) => {
+										postComposerState.focus = 'focused';
+										postComposerState.replying = p;
+									}}
+								/>
+							{/if}
+						</div>
+					</div>
+				{/snippet}
+
+				{#snippet footer()}
+					<div class="pb-20">
+						<InfiniteLoader {loaderState} triggerLoad={loadMore} loopDetectionTimeout={0}>
+							<div class="h-px w-px opacity-0"></div>
+							{#snippet noData()}
+								<EndOfList />
+							{/snippet}
+							{#snippet loading()}
+								<LoadingSpinner />
+							{/snippet}
+							{#snippet error()}
+								<LoadError error={loadError} onRetry={loadMore} />
+							{/snippet}
+						</InfiniteLoader>
+					</div>
+				{/snippet}
+			</VirtualList>
+		{/key}
 	{:else}
 		<NotLoggedIn />
 	{/if}

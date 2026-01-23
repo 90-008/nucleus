@@ -15,36 +15,25 @@
 
 	let { client, did, size }: Props = $props();
 
-	// svelte-ignore state_referenced_locally
-	let avatarBlob = $state(profiles.get(did)?.avatar);
+	const avatarBlob = $derived(profiles.get(did)?.avatar);
 	const avatarUrl: string | null = $derived(
 		isBlob(avatarBlob) ? img('avatar_thumbnail', did, avatarBlob.ref.$link) : null
 	);
 
 	const loadProfile = async (targetDid: Did) => {
-		const cachedBlob = profiles.get(did)?.avatar;
-		if (cachedBlob) {
-			avatarBlob = cachedBlob;
-			return;
-		}
+		if (avatarBlob) return;
 
-		try {
-			const profile = await client.getProfile(targetDid);
-			if (profile.ok) {
-				avatarBlob = profile.value.avatar;
-				profiles.set(did, profile.value);
-			} else avatarBlob = undefined;
-		} catch (e) {
-			console.error(`${targetDid}: failed to load pfp`, e);
-			avatarBlob = undefined;
-		}
+		const profile = await client.getProfile(targetDid);
+		if (profile.ok) profiles.set(did, profile.value);
+		else console.error(`${targetDid}: failed to load pfp: ${profile.error}`);
 	};
 
 	$effect(() => {
+		client;
 		loadProfile(did);
 	});
 
-	let color = $derived(generateColorForDid(did));
+	const color = $derived(generateColorForDid(did));
 </script>
 
 {#if avatarUrl}

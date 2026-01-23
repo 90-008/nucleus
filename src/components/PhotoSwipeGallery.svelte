@@ -62,7 +62,7 @@
 </script>
 
 <div class="gallery styling-twitter" data-total={images.length} bind:this={element}>
-	{#each images as img, i (img.src)}
+	{#each images as img, i (`${img.src}#${i}`)}
 		{@const thumb = img.thumbnail ?? img}
 		{@const isHidden = i > 3}
 		{@const isOverlay = i === 3 && images.length > 4}
