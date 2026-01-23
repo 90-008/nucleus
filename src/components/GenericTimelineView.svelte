@@ -50,8 +50,6 @@
 
 	let isAtTop = $state(true);
 	let boundaryTime = $state<number | null>(null);
-	let virtualList = $state<VirtualList | null>(null);
-	let scrollToIndex = $state<number | undefined>(undefined);
 
 	const visibleThreads = $derived.by(() => {
 		if (boundaryTime === null) return threads;
@@ -62,22 +60,17 @@
 		timelineId;
 		displayCount = 15;
 		measuredHeights = [];
-		scrollToIndex = undefined;
 	});
 
 	// const renderedThreads = $derived(visibleThreads.slice(0, displayCount));
 
 	$effect(() => {
-		if (threads.length > 0) {
-			if (isAtTop) boundaryTime = threads[0].newestTime;
-			else if (boundaryTime === null) boundaryTime = threads[0].newestTime;
-		}
+		if (threads.length > 0 && boundaryTime === null) boundaryTime = threads[0].newestTime;
 	});
 
 	const showNewPosts = () => {
 		boundaryTime = threads[0]?.newestTime ?? null;
-		// @ts-ignore
-		virtualList?.scrollToIndex(0);
+		window.scrollTo({ top: 0, behavior: 'instant' });
 		isAtTop = true;
 	};
 
@@ -194,13 +187,11 @@
 	{#if isLoggedIn}
 		{#key timelineId}
 			<VirtualList
-				bind:this={virtualList}
 				height="100%"
 				itemCount={visibleThreads.length}
 				itemSize={itemHeights}
 				estimatedItemSize={averageHeight}
 				onAfterScroll={onScroll}
-				scrollToIndex={visibleThreads.length > 0 ? scrollToIndex : undefined}
 			>
 				{#snippet item({ index, style }: { index: number; style: string })}
 					{@const thread = renderItem(index)}
