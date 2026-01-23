@@ -10,7 +10,7 @@
 		fetchInteractionsToTimelineEnd,
 		accountPreferences
 	} from '$lib/state.svelte';
-	import { buildThreads, filterThreads } from '$lib/thread';
+	import { buildThreadsFiltered } from '$lib/thread';
 	import type { Did } from '@atcute/lexicons/syntax';
 	import GenericTimelineView from './GenericTimelineView.svelte';
 
@@ -31,19 +31,26 @@
 	}: Props = $props();
 
 	let viewOwnPosts = $state(true);
+	let displayCount = $state(10);
 
 	const userDid = $derived(client?.user?.did);
 	const did = $derived(targetDid ?? userDid);
 
 	const currentPrefs = $derived(userDid ? accountPreferences.get(userDid) : null);
-	const mutes = $derived(currentPrefs?.mutes ?? []);
+	const mutes = $derived(new Set(currentPrefs?.mutes ?? []));
 
 	const threads = $derived(
-		filterThreads(
-			did && timelines.has(did) ? buildThreads(did, timelines.get(did)!, allPosts, mutes) : [],
-			$accounts,
-			{ viewOwnPosts }
-		)
+		did && timelines.has(did)
+			? buildThreadsFiltered(
+					did,
+					timelines.get(did)!,
+					allPosts,
+					mutes,
+					$accounts,
+					{ viewOwnPosts },
+					displayCount
+				)
+			: []
 	);
 
 	let fetchingInteractions = $state(false);
@@ -87,6 +94,7 @@
 	{threads}
 	timelineId={`replies:${did}`}
 	bind:postComposerState
+	bind:displayCount
 	class={className}
 	isLoggedIn={!!(did || $accounts.length > 0)}
 	canLoad={!!(client && userDid && did)}

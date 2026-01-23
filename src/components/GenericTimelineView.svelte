@@ -23,10 +23,11 @@
 		timelineId?: string;
 		postComposerState: PostComposerState;
 		class?: string;
-		isLoggedIn?: boolean; // Controls rendering of the list vs NotLoggedIn
-		canLoad?: boolean; // Controls whether we can actually load more data
+		isLoggedIn?: boolean;
+		canLoad?: boolean;
 		onLoadMore: () => Promise<void>;
 		isComplete?: boolean;
+		displayCount?: number;
 	}
 
 	let {
@@ -38,7 +39,8 @@
 		isLoggedIn = false,
 		canLoad = undefined,
 		onLoadMore,
-		isComplete = false
+		isComplete = false,
+		displayCount = $bindable(15)
 	}: Props = $props();
 
 	const shouldLoad = $derived(canLoad ?? isLoggedIn);
@@ -56,7 +58,6 @@
 		return threads.filter((t) => t.newestTime <= boundaryTime!);
 	});
 
-	let displayCount = $state(15);
 	$effect(() => {
 		timelineId;
 		displayCount = 15;
@@ -157,7 +158,7 @@
 	};
 
 	$effect(() => {
-		const isEmpty = threads.length < 15;
+		const isEmpty = threads.length < 10;
 		if (isEmpty && !loading && shouldLoad && !isComplete) loadMore();
 	});
 
@@ -244,6 +245,7 @@
 													postComposerState.replying = post;
 												}}
 												{...post}
+												blockRelationship={post.blockRelationship}
 											/>
 										</div>
 									{:else if mini}

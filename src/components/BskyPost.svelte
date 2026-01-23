@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { resolveDidDoc, type AtpClient } from '$lib/at/client.svelte';
-	import { AppBskyActorProfile, AppBskyEmbedRecord, AppBskyFeedPost } from '@atcute/bluesky';
+	import { AppBskyEmbedRecord, AppBskyFeedPost } from '@atcute/bluesky';
 	import {
 		parseCanonicalResourceUri,
 		type Did,
@@ -51,7 +51,7 @@
 		onQuote?: (quote: PostWithUri) => void;
 		onReply?: (reply: PostWithUri) => void;
 		cornerFragment?: Snippet;
-		isBlocked?: boolean;
+		blockRelationship?: { userBlocked: boolean; blockedByTarget: boolean };
 		isMuted?: boolean;
 	}
 
@@ -66,7 +66,7 @@
 		onReply,
 		isOnPostComposer = false /* replyBacklinks */,
 		cornerFragment,
-		isBlocked = false,
+		blockRelationship = undefined,
 		isMuted = false
 	}: Props = $props();
 
@@ -79,26 +79,26 @@
 	let expandDisallowed = $state(false);
 	const blockRel = $derived(
 		user && !isOnPostComposer
-			? getBlockRelationship(user.did, did)
+			? (blockRelationship ?? getBlockRelationship(user.did, did))
 			: { userBlocked: false, blockedByTarget: false }
 	);
 	const showAsBlocked = $derived(
-		(isBlocked || blockRel.userBlocked || blockRel.blockedByTarget) && !expandDisallowed
+		(blockRel.userBlocked || blockRel.blockedByTarget) && !expandDisallowed
 	);
 	const showAsMuted = $derived(isMuted && !expandDisallowed);
 
 	const handle = $derived(handles.get(did) ?? 'handle.invalid');
-	onMount(() => {
+	$effect(() => {
 		resolveDidDoc(did).then((res) => {
 			if (res.ok) handles.set(did, res.value.handle);
-			return res;
 		});
 	});
 	const profile = $derived(profiles.get(did));
-	onMount(async () => {
-		const p = await client.getProfile(did);
-		if (!p.ok) return;
-		profiles.set(did, p.value);
+	$effect(() => {
+		client.getProfile(did).then((res) => {
+			if (!res.ok) return;
+			profiles.set(did, res.value);
+		});
 	});
 
 	// svelte-ignore state_referenced_locally

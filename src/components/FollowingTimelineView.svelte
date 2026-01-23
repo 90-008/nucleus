@@ -13,7 +13,7 @@
 		followingCursors,
 		initialDone
 	} from '$lib/state.svelte';
-	import { buildThreads, filterThreads } from '$lib/thread';
+	import { buildThreadsFiltered } from '$lib/thread';
 	import type { Did } from '@atcute/lexicons/syntax';
 	import GenericTimelineView from './GenericTimelineView.svelte';
 
@@ -32,11 +32,12 @@
 	}: Props = $props();
 
 	let viewOwnPosts = $state(true);
+	let displayCount = $state(10);
 
 	const userDid = $derived(targetDid ?? client?.user?.did);
 
 	const currentPrefs = $derived(userDid ? accountPreferences.get(userDid) : null);
-	const mutes = $derived(currentPrefs?.mutes ?? []);
+	const mutes = $derived(new Set(currentPrefs?.mutes ?? []));
 
 	const followedDids = $derived.by(() => {
 		if (!userDid) return new Set<Did>();
@@ -46,17 +47,17 @@
 	});
 
 	const threads = $derived(
-		filterThreads(
-			userDid
-				? buildThreads(userDid, followingFeed.get(userDid) ?? new SvelteSet(), allPosts, mutes)
-				: [],
-			$accounts,
-			{
-				viewOwnPosts,
-				filterReplies: true,
-				filterRootsToDids: followedDids
-			}
-		)
+		userDid
+			? buildThreadsFiltered(
+					userDid,
+					followingFeed.get(userDid) ?? new SvelteSet(),
+					allPosts,
+					mutes,
+					$accounts,
+					{ viewOwnPosts, filterReplies: true, filterRootsToDids: followedDids },
+					displayCount
+				)
+			: []
 	);
 
 	const isComplete = $derived.by(() => {
@@ -121,6 +122,7 @@
 	{threads}
 	timelineId={`following:${userDid}`}
 	bind:postComposerState
+	bind:displayCount
 	class={className}
 	isLoggedIn={!!(userDid || $accounts.length > 0)}
 	canLoad={!!(client && userDid && initialDone.has(userDid))}

@@ -519,8 +519,8 @@ export const fetchFollowingTimeline = async (client: AtpClient, targetDid?: Did,
 		})
 	);
 
-	// 4. Update state
-	const newPosts: ResourceUri[] = [];
+	// 4. Update state - use records directly from listRecords instead of re-fetching
+	const validPosts: PostWithUri[] = [];
 	for (const result of results) {
 		if (!result) continue;
 		const { did, res } = result;
@@ -529,21 +529,17 @@ export const fetchFollowingTimeline = async (client: AtpClient, targetDid?: Did,
 		if (res.cursor) userCursors!.set(did, res.cursor);
 		else userCursors!.set(did, null); // null = exhausted
 
-		for (const record of res.records) newPosts.push(record.uri);
+		for (const record of res.records) {
+			validPosts.push({
+				uri: record.uri,
+				cid: record.cid,
+				record: record.value as AppBskyFeedPost.Main
+			});
+		}
 	}
 
-	if (newPosts.length === 0) return;
+	if (validPosts.length === 0) return;
 
-	// fetch each post record
-	const posts = await Promise.all(
-		newPosts.map(async (uri) => {
-			const result = await client.getRecordUri(AppBskyFeedPost.mainSchema, uri);
-			if (!result.ok) return null;
-			return { uri: result.value.uri, cid: result.value.cid, record: result.value.record };
-		})
-	);
-
-	const validPosts = posts.filter((p): p is PostWithUri => p !== null);
 	addPosts(validPosts);
 
 	for (const post of validPosts) userFeed.add(post.uri);
@@ -970,11 +966,11 @@ export const fetchInteractionsToFeedTimelineEnd = async (
 export const initialDone = new SvelteSet<Did>();
 export const fetchInitial = async (account: Account) => {
 	const client = clients.get(account.did)!;
-	await Promise.all([
+	await Promise.allSettled([
 		fetchBlocks(account),
 		fetchForInteractions(client, account.did),
 		fetchFollows(account).then((follows) =>
-			Promise.all(follows.map((follow) => fetchForInteractions(client, follow.subject)) ?? [])
+			Promise.allSettled(follows.map((follow) => fetchForInteractions(client, follow.subject)) ?? [])
 		)
 	]);
 	initialDone.add(account.did);

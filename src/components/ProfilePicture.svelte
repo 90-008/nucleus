@@ -29,7 +29,7 @@
 	};
 
 	$effect(() => {
-		client;
+		if (!client.user) return;
 		loadProfile(did);
 	});
 

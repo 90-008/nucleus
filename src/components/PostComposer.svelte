@@ -625,6 +625,7 @@
 						<!-- svelte-ignore a11y_no_static_element_interactions -->
 						<div
 							class="composer relative flex cursor-text items-center gap-0 py-0! transition-all hover:brightness-110"
+							style="--acc-color: {color};"
 							onmousedown={(e) => {
 								if (e.defaultPrevented) return;
 								_state.focus = 'focused';
@@ -639,6 +640,7 @@
 								type="text"
 								placeholder="what's on your mind?"
 								class="min-w-0 flex-1 border-none bg-transparent outline-none placeholder:text-(--nucleus-fg)/45 focus:ring-0"
+								style="--acc-color: {color};"
 							/>
 							{#if _state.quoting}
 								{@render attachmentIndicator(_state.quoting, 'quoting')}
