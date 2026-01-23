@@ -293,6 +293,11 @@
 							{/snippet}
 							{#snippet loading()}
 								<LoadingSpinner />
+								{#if !shouldLoad}
+									<p class="text-center text-xl opacity-80">
+										warming up... <span class="text-2xl">◔.◔</span>
+									</p>
+								{/if}
 							{/snippet}
 							{#snippet error()}
 								<LoadError error={loadError} onRetry={loadMore} />
