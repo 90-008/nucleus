@@ -1,4 +1,3 @@
-import { get, writable } from 'svelte/store';
 import {
 	AtpClient,
 	setRecordCache,
@@ -34,8 +33,12 @@ import { Router } from './router.svelte';
 import { accounts, type Account } from './accounts';
 import { getPreferences, putPreferences, type Preferences } from './at/pocket';
 
-export const notificationStream = writable<NotificationsStream | null>(null);
-export const jetstream = writable<JetstreamSubscription | null>(null);
+export const notificationStream = {
+	current: $state<NotificationsStream | null>(null)
+};
+export const jetstream = {
+	current: $state<JetstreamSubscription | null>(null)
+};
 
 export const profiles = new SvelteMap<Did, AppBskyActorProfile.Main>();
 export const handles = new SvelteMap<Did, Handle>();
@@ -239,7 +242,9 @@ export const createPostBacklink = async (
 	});
 };
 
-export const pulsingPostId = writable<string | null>(null);
+export const pulsingPostId = {
+	current: $state<string | null>(null)
+};
 
 export const viewClient = new AtpClient();
 export const clients = new SvelteMap<Did, AtpClient>();

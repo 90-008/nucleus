@@ -28,7 +28,7 @@
 	} from '$lib/state.svelte';
 	import type { PostWithUri } from '$lib/at/fetch';
 	import { onMount, type Snippet } from 'svelte';
-	import { derived } from 'svelte/store';
+
 	import Dropdown from './Dropdown.svelte';
 	import { settings } from '$lib/settings';
 	import RichText from './RichText.svelte';
@@ -113,7 +113,7 @@
 	const postId = $derived(
 		`timeline-post-${did.replace(/[^a-zA-Z0-9]/g, '_')}-${rkey}-${quoteDepth}`
 	);
-	const isPulsing = derived(pulsingPostId, (pulsingPostId) => pulsingPostId === postId);
+	const isPulsing = $derived(pulsingPostId.current === postId);
 
 	const scrollToAndPulse = (targetUri: ResourceUri) => {
 		const targetId = `timeline-post-${targetUri}-0`;
@@ -127,8 +127,8 @@
 				'--nucleus-selected-post',
 				generateColorForDid(expect(parseCanonicalResourceUri(targetUri)).repo)
 			);
-			pulsingPostId.set(targetId);
-			setTimeout(() => pulsingPostId.set(null), 1200);
+			pulsingPostId.current = targetId;
+			setTimeout(() => (pulsingPostId.current = null), 1200);
 		}, 400);
 	};
 
@@ -280,7 +280,7 @@
 					oncontextmenu={handleRightClick}
 					class="
 				group rounded-sm border-2 p-2 shadow-lg backdrop-blur-sm transition-all
-				{$isPulsing ? 'animate-pulse-highlight' : ''}
+				{isPulsing ? 'animate-pulse-highlight' : ''}
 				{isOnPostComposer ? 'backdrop-brightness-20' : ''}
 				"
 					style="

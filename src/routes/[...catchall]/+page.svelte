@@ -25,7 +25,6 @@
 		loadAccountPreferences,
 		resetFeed
 	} from '$lib/state.svelte';
-	import { get } from 'svelte/store';
 	import Icon from '@iconify/svelte';
 	import { sessions } from '$lib/at/oauth';
 	import type { AtprotoDid, Did } from '@atcute/lexicons/syntax';
@@ -111,25 +110,19 @@
 		window.addEventListener('scroll', handleScroll);
 
 		accounts.subscribe((newAccounts) => {
-			get(notificationStream)?.stop();
+			notificationStream.current?.stop();
 			// jetstream.set(null);
 			if (newAccounts.length === 0) return;
-			notificationStream.set(
-				streamNotifications(
-					newAccounts.map((account) => account.did),
-					'app.bsky.feed.post:reply.parent.uri',
-					'app.bsky.feed.post:embed.record.record.uri',
-					'app.bsky.feed.post:embed.record.uri',
-					'app.bsky.feed.repost:subject.uri',
-					'app.bsky.feed.like:subject.uri',
-					'app.bsky.graph.follow:subject',
-					'app.bsky.graph.block:subject'
-				)
+			notificationStream.current = streamNotifications(
+				newAccounts.map((account) => account.did),
+				'app.bsky.feed.post:reply.parent.uri',
+				'app.bsky.feed.post:embed.record.record.uri',
+				'app.bsky.feed.post:embed.record.uri',
+				'app.bsky.feed.repost:subject.uri',
+				'app.bsky.feed.like:subject.uri',
+				'app.bsky.graph.follow:subject',
+				'app.bsky.graph.block:subject'
 			);
-		});
-		notificationStream.subscribe((stream) => {
-			if (!stream) return;
-			stream.listen(handleNotification);
 		});
 
 		console.log(`creating jetstream subscription to ${$settings.endpoints.jetstream}`);
@@ -139,7 +132,7 @@
 			// this is here because if wantedDids is zero jetstream will send all events
 			wantedDids: ['did:web:guestbook.gaze.systems']
 		});
-		jetstream.set(jetstreamSub);
+		jetstream.current = jetstreamSub;
 
 		(async () => {
 			console.log('polling for jetstream...');
@@ -171,7 +164,14 @@
 		const accountDids = $accounts.values().map((account) => account.did);
 		wantedDids.push(...followDids, ...accountDids);
 		// console.log('updating jetstream options:', wantedDids);
-		$jetstream?.updateOptions({ wantedDids });
+		jetstream.current?.updateOptions({ wantedDids });
+	});
+
+	$effect(() => {
+		const stream = notificationStream.current;
+		if (stream) {
+			stream.listen(handleNotification);
+		}
 	});
 </script>
 
