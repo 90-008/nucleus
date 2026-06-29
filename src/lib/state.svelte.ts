@@ -1,3 +1,4 @@
+import { get } from 'svelte/store';
 import {
 	AtpClient,
 	setRecordCache,
@@ -302,8 +303,8 @@ export const loadAccountPreferences = async (account: Account) => {
 	}
 
 	// both exist - last modified wins
-	const localTime = new Date(localPrefs!.updatedAt).getTime();
-	const remoteTime = new Date(remotePrefs!.updatedAt).getTime();
+	const localTime = Date.parse(localPrefs!.updatedAt);
+	const remoteTime = Date.parse(remotePrefs!.updatedAt);
 
 	if (localTime > remoteTime) {
 		accountPreferences.set(account.did, localPrefs!);
@@ -322,7 +323,7 @@ export const setAccountPreferences = (
 	const updated: Preferences = {
 		...existing,
 		...partial,
-		updatedAt: new Date().toISOString()
+		updatedAt: new SvelteDate().toISOString()
 	};
 
 	accountPreferences.set(did, updated);
@@ -454,8 +455,8 @@ export const fetchFollowingTimeline = async (
 			const postA = getPostFromUri(a);
 			const postB = getPostFromUri(b);
 			return (
-				new Date(postB?.record.createdAt ?? 0).getTime() -
-				new Date(postA?.record.createdAt ?? 0).getTime()
+				(Date.parse(postB?.record.createdAt ?? '') || 0) -
+				(Date.parse(postA?.record.createdAt ?? '') || 0)
 			);
 		});
 
@@ -468,7 +469,7 @@ export const fetchFollowingTimeline = async (
 		return;
 	}
 
-	const subjects = new Set(follows.get(userDid)?.keys());
+	const subjects = new SvelteSet(follows.get(userDid)?.keys());
 	subjects.add(userDid);
 
 	// 2. Find the "newest" cursor(s)
@@ -940,7 +941,7 @@ export const fetchInteractionsToFollowingTimelineEnd = async (client: AtpClient,
 	for (const uri of feed) {
 		const post = getPostFromUri(uri);
 		if (post) {
-			const ts = new Date(post.record.createdAt).getTime() * 1000;
+			const ts = Date.parse(post.record.createdAt) * 1000;
 			if (ts < minTimestamp) minTimestamp = ts;
 			found = true;
 		}
@@ -969,7 +970,7 @@ export const fetchInteractionsToFeedTimelineEnd = async (
 	for (const uri of posts) {
 		const post = getPostFromUri(uri);
 		if (post) {
-			const ts = new Date(post.record.createdAt).getTime() * 1000;
+			const ts = Date.parse(post.record.createdAt) * 1000;
 			if (ts < minTimestamp) minTimestamp = ts;
 			found = true;
 		}
