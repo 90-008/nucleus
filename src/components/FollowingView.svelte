@@ -9,7 +9,7 @@
 	} from '$lib/state.svelte';
 	import type { Did } from '@atcute/lexicons';
 	import { type AtpClient } from '$lib/at/client.svelte';
-	import VirtualList from '@tutorlatin/svelte-tiny-virtual-list';
+	import { createVirtualizer } from '@tanstack/svelte-virtual';
 	import {
 		calculateFollowedUserStats,
 		calculateInteractionScores,
@@ -121,6 +121,23 @@
 			return () => observer.disconnect();
 		}
 	});
+
+	let parentRef = $state<HTMLDivElement | null>(null);
+	const virtualizer = createVirtualizer({
+		count: 0,
+		getScrollElement: () => parentRef,
+		estimateSize: () => 76,
+		overscan: 5
+	});
+
+	$effect(() => {
+		$virtualizer.setOptions({
+			count: sortedFollowing.length,
+			getScrollElement: () => parentRef,
+			estimateSize: () => 76,
+			overscan: 5
+		});
+	});
 </script>
 
 <div class="flex h-full flex-col p-2">
@@ -157,19 +174,24 @@
 				></div>
 			</div>
 		{:else if listHeight > 0}
-			<VirtualList height={listHeight} itemCount={sortedFollowing.length} itemSize={76}>
-				{#snippet item({ index, style }: { index: number; style: string })}
-					{@const user = sortedFollowing[index]}
-					<FollowingItem
-						{style}
-						did={user.did}
-						stats={user.data!}
-						{client}
-						sort={followingSort}
-						{currentTime}
-					/>
-				{/snippet}
-			</VirtualList>
+			<div
+				bind:this={parentRef}
+				style="height: {listHeight}px; overflow-y: auto; overflow-x: hidden; position: relative;"
+			>
+				<div style="height: {$virtualizer.getTotalSize()}px; width: 100%; position: relative;">
+					{#each $virtualizer.getVirtualItems() as virtualItem (virtualItem.key)}
+						{@const user = sortedFollowing[virtualItem.index]}
+						<FollowingItem
+							style="position: absolute; top: 0; left: 0; width: 100%; height: {virtualItem.size}px; transform: translateY({virtualItem.start}px);"
+							did={user.did}
+							stats={user.data!}
+							{client}
+							sort={followingSort}
+							{currentTime}
+						/>
+					{/each}
+				</div>
+			</div>
 		{/if}
 	</div>
 </div>

@@ -108,7 +108,6 @@ a {
 }
 
 @keyframes pulse-highlight {
-
 	0%,
 	100% {
 		box-shadow: 0 0 0 0 var(--nucleus-selected-post);

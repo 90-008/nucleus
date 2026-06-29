@@ -5,7 +5,7 @@
 	import { type ResourceUri } from '@atcute/lexicons';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { InfiniteLoader, LoaderState } from 'svelte-infinite';
-	import VirtualList from '@tutorlatin/svelte-tiny-virtual-list';
+	import { createVirtualizer } from '@tanstack/svelte-virtual';
 	import Icon from '@iconify/svelte';
 	import { type ThreadPost, type Thread } from '$lib/thread';
 	import NotLoggedIn from './NotLoggedIn.svelte';
@@ -13,7 +13,7 @@
 	import EndOfList from './EndOfList.svelte';
 	import LoadError from './LoadError.svelte';
 	import LoadNewPosts from './LoadNewPosts.svelte';
-	import { onMount } from 'svelte';
+
 	import { initialDone } from '$lib/state.svelte';
 	import { estimatePostHeight } from '$lib/post-height';
 
@@ -48,7 +48,6 @@
 	let reverseChronological = $state(true);
 	const expandedThreads = new SvelteSet<ResourceUri>();
 
-	let isAtTop = $state(true);
 	let boundaryTime = $state<number | null>(null);
 
 	const visibleThreads = $derived.by(() => {
@@ -57,9 +56,8 @@
 	});
 
 	$effect(() => {
-		timelineId;
+		void timelineId;
 		displayCount = 15;
-		measuredHeights = [];
 	});
 
 	// const renderedThreads = $derived(visibleThreads.slice(0, displayCount));
@@ -70,13 +68,9 @@
 
 	const showNewPosts = () => {
 		boundaryTime = threads[0]?.newestTime ?? null;
-		window.scrollTo({ top: 0, behavior: 'instant' });
-		isAtTop = true;
-	};
-
-	const onScroll = (event: { event: Event; offset: number }) => {
-		const { offset } = event;
-		isAtTop = offset < 300;
+		if (parentRef) {
+			parentRef.scrollTo({ top: 0, behavior: 'instant' });
+		}
 	};
 
 	const loaderState = new LoaderState();
@@ -112,20 +106,28 @@
 		return height;
 	};
 
-	let measuredHeights: number[] = $state([]);
-	const itemHeights = $derived.by(() => {
-		const heights = measuredHeights.slice(0, visibleThreads.length);
-		while (heights.length < visibleThreads.length) {
-			heights.push(estimateThreadHeight(visibleThreads[heights.length]));
-		}
-		return heights;
+	let parentRef = $state<HTMLDivElement | null>(null);
+	const virtualizer = createVirtualizer({
+		count: 0,
+		getScrollElement: () => parentRef,
+		estimateSize: (index) => estimateThreadHeight(visibleThreads[index]),
+		overscan: 5,
+		getItemKey: (index) => visibleThreads[index]?.rootUri ?? index
 	});
 
-	const averageHeight = $derived.by(() => {
-		if (measuredHeights.length === 0) return 300;
-		const sum = measuredHeights.reduce((a, b) => a + b, 0);
-		return sum / measuredHeights.length;
+	$effect(() => {
+		$virtualizer.setOptions({
+			count: visibleThreads.length,
+			getScrollElement: () => parentRef,
+			estimateSize: (index) => estimateThreadHeight(visibleThreads[index]),
+			overscan: 5,
+			getItemKey: (index) => visibleThreads[index]?.rootUri ?? index
+		});
 	});
+
+	const measureElement = (node: HTMLElement) => {
+		$virtualizer.measureElement(node);
+	};
 
 	const loadMore = async () => {
 		if (loading || !shouldLoad) return;
@@ -186,117 +188,107 @@
 	/>
 	{#if isLoggedIn}
 		{#key timelineId}
-			<VirtualList
-				height="100%"
-				itemCount={visibleThreads.length}
-				itemSize={itemHeights}
-				estimatedItemSize={averageHeight}
-				onAfterScroll={onScroll}
+			<div
+				bind:this={parentRef}
+				class="h-full overflow-x-hidden overflow-y-auto"
+				style="position: relative;"
 			>
-				{#snippet item({ index, style }: { index: number; style: string })}
-					{@const thread = renderItem(index)}
-					<div
-						style="{style} height: auto;"
-						bind:clientHeight={
-							() => {
-								// we need to return this so the bind works
-								return measuredHeights[index] ?? estimateThreadHeight(thread);
-							},
-							(h) => {
-								// update the height
-								if (measuredHeights[index] !== h) measuredHeights[index] = h;
-							}
-						}
-					>
-						{#if thread}
-							<div
-								class="flex w-full shrink-0 {reverseChronological
-									? 'flex-col'
-									: 'flex-col-reverse'}"
-							>
-								{#if thread.branchParentPost}
-									{@render replyPost(thread.branchParentPost)}
-								{/if}
-								{#each thread.posts as post, idx (post.data.uri)}
-									{@const mini =
-										!expandedThreads.has(thread.rootUri) &&
-										thread.posts.length > 4 &&
-										idx > 0 &&
-										idx < thread.posts.length - 2}
-									{#if !mini}
-										<div class="mb-1.5">
-											<BskyPost
-												client={client!}
-												onQuote={(post) => {
-													postComposerState.focus = 'focused';
-													postComposerState.quoting = post;
-												}}
-												onReply={(post) => {
-													postComposerState.focus = 'focused';
-													postComposerState.replying = post;
-												}}
-												{...post}
-												blockRelationship={post.blockRelationship}
-											/>
-										</div>
-									{:else if mini}
-										{#if idx === 1}
-											{@render replyPost(post, !reverseChronological)}
-											<button
-												class="mx-1.5 mt-1.5 mb-2.5 flex items-center gap-1.5 text-[color-mix(in_srgb,var(--nucleus-fg)_50%,var(--nucleus-accent))]/70 transition-colors hover:text-(--nucleus-accent)"
-												onclick={() => expandedThreads.add(thread.rootUri)}
-											>
-												<div
-													class="mr-1 h-px w-20 rounded border-y-2 border-dashed opacity-50"
-												></div>
-												<Icon
-													class="shrink-0"
-													icon={reverseChronological
-														? 'heroicons:bars-arrow-up-solid'
-														: 'heroicons:bars-arrow-down-solid'}
-													width={32}
-												/><span class="shrink-0 pb-1">view full chain</span>
-												<div
-													class="ml-1 h-px w-full rounded border-y-2 border-dashed opacity-50"
-												></div>
-											</button>
-										{:else if idx === thread.posts.length - 3}
-											{@render replyPost(post)}
-										{/if}
-									{/if}
-								{/each}
-							</div>
-							{#if index < visibleThreads.length - 1}
+				<div style="height: {$virtualizer.getTotalSize()}px; width: 100%; position: relative;">
+					{#each $virtualizer.getVirtualItems() as virtualItem (virtualItem.key)}
+						{@const thread = renderItem(virtualItem.index)}
+						<div
+							data-index={virtualItem.index}
+							use:measureElement
+							style="position: absolute; top: 0; left: 0; width: 100%; transform: translateY({virtualItem.start}px);"
+						>
+							{#if thread}
 								<div
-									class="mx-8 mt-3 mb-4 h-px bg-linear-to-r from-(--nucleus-accent)/30 to-(--nucleus-accent2)/30"
-								></div>
-							{/if}
-						{/if}
-					</div>
-				{/snippet}
-
-				{#snippet footer()}
-					<div class="pb-20">
-						<InfiniteLoader {loaderState} triggerLoad={loadMore} loopDetectionTimeout={0}>
-							<div class="h-px w-px opacity-0"></div>
-							{#snippet noData()}
-								<EndOfList />
-							{/snippet}
-							{#snippet loading()}
-								<LoadingSpinner />
-								{#if !shouldLoad}
-									<p class="text-center text-xl opacity-80">
-										warming up... <span class="text-2xl">◔.◔</span>
-									</p>
+									class="flex w-full shrink-0 {reverseChronological
+										? 'flex-col'
+										: 'flex-col-reverse'}"
+								>
+									{#if thread.branchParentPost}
+										{@render replyPost(thread.branchParentPost)}
+									{/if}
+									{#each thread.posts as post, idx (post.data.uri)}
+										{@const mini =
+											!expandedThreads.has(thread.rootUri) &&
+											thread.posts.length > 4 &&
+											idx > 0 &&
+											idx < thread.posts.length - 2}
+										{#if !mini}
+											<div class="mb-1.5">
+												<BskyPost
+													client={client!}
+													onQuote={(post) => {
+														postComposerState.focus = 'focused';
+														postComposerState.quoting = post;
+													}}
+													onReply={(post) => {
+														postComposerState.focus = 'focused';
+														postComposerState.replying = post;
+													}}
+													{...post}
+													blockRelationship={post.blockRelationship}
+												/>
+											</div>
+										{:else if mini}
+											{#if idx === 1}
+												{@render replyPost(post, !reverseChronological)}
+												<button
+													class="mx-1.5 mt-1.5 mb-2.5 flex items-center gap-1.5 text-[color-mix(in_srgb,var(--nucleus-fg)_50%,var(--nucleus-accent))]/70 transition-colors hover:text-(--nucleus-accent)"
+													onclick={() => expandedThreads.add(thread.rootUri)}
+												>
+													<div
+														class="mr-1 h-px w-20 rounded border-y-2 border-dashed opacity-50"
+													></div>
+													<Icon
+														class="shrink-0"
+														icon={reverseChronological
+															? 'heroicons:bars-arrow-up-solid'
+															: 'heroicons:bars-arrow-down-solid'}
+														width={32}
+													/><span class="shrink-0 pb-1">view full chain</span>
+													<div
+														class="ml-1 h-px w-full rounded border-y-2 border-dashed opacity-50"
+													></div>
+												</button>
+											{:else if idx === thread.posts.length - 3}
+												{@render replyPost(post)}
+											{/if}
+										{/if}
+									{/each}
+								</div>
+								{#if virtualItem.index < visibleThreads.length - 1}
+									<div
+										class="mx-8 mt-3 mb-4 h-px bg-linear-to-r from-(--nucleus-accent)/30 to-(--nucleus-accent2)/30"
+									></div>
 								{/if}
-							{/snippet}
-							{#snippet error()}
-								<LoadError error={loadError} onRetry={loadMore} />
-							{/snippet}
-						</InfiniteLoader>
-					</div>
-				{/snippet}
-			</VirtualList>
+							{/if}
+						</div>
+					{/each}
+				</div>
+
+				<div class="pb-20">
+					<InfiniteLoader {loaderState} triggerLoad={loadMore} loopDetectionTimeout={0}>
+						<div class="h-px w-px opacity-0"></div>
+						{#snippet noData()}
+							<EndOfList />
+						{/snippet}
+						{#snippet loading()}
+							<LoadingSpinner />
+							{#if !shouldLoad}
+								<p class="text-center text-xl opacity-80">
+									warming up... <span class="text-2xl">◔.◔</span>
+								</p>
+							{/if}
+						{/snippet}
+						{#snippet error()}
+							<LoadError error={loadError} onRetry={loadMore} />
+						{/snippet}
+					</InfiniteLoader>
+				</div>
+			</div>
 		{/key}
 	{:else}
 		<NotLoggedIn />

@@ -165,7 +165,9 @@ export const buildThreadsFiltered = (
 			childrenMap.get(post.parentUri)!.push(post);
 		}
 
-		childrenMap.values().forEach((children) => children.sort((a, b) => b.newestTime - a.newestTime));
+		childrenMap
+			.values()
+			.forEach((children) => children.sort((a, b) => b.newestTime - a.newestTime));
 
 		const createThread = (
 			posts: ThreadPost[],
@@ -262,4 +264,3 @@ const extractDidFromUri = (uri: ResourceUri): Did | null => {
 	const match = uri.match(/^at:\/\/(did:plc:[a-z0-9]+)/);
 	return match ? (match[1] as Did) : null;
 };
-

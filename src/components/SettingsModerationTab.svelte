@@ -1,6 +1,6 @@
 <script lang="ts">
 	import MutedAccountItem from './MutedAccountItem.svelte';
-	import VirtualList from '@tutorlatin/svelte-tiny-virtual-list';
+	import { createVirtualizer } from '@tanstack/svelte-virtual';
 	import type { ActorIdentifier, Did } from '@atcute/lexicons';
 	import { allBacklinks, createBlock, deleteBlock, clients } from '$lib/state.svelte';
 	import { blockSource } from '$lib';
@@ -57,6 +57,40 @@
 		if (!client) return;
 		await deleteBlock(client, did);
 	};
+
+	let mutesParentRef = $state<HTMLDivElement | null>(null);
+	const mutesVirtualizer = createVirtualizer({
+		count: 0,
+		getScrollElement: () => mutesParentRef,
+		estimateSize: () => 44,
+		overscan: 5
+	});
+
+	$effect(() => {
+		$mutesVirtualizer.setOptions({
+			count: mutes.length,
+			getScrollElement: () => mutesParentRef,
+			estimateSize: () => 44,
+			overscan: 5
+		});
+	});
+
+	let blocksParentRef = $state<HTMLDivElement | null>(null);
+	const blocksVirtualizer = createVirtualizer({
+		count: 0,
+		getScrollElement: () => blocksParentRef,
+		estimateSize: () => 44,
+		overscan: 5
+	});
+
+	$effect(() => {
+		$blocksVirtualizer.setOptions({
+			count: blocks.length,
+			getScrollElement: () => blocksParentRef,
+			estimateSize: () => 44,
+			overscan: 5
+		});
+	});
 </script>
 
 <div class="space-y-4 p-4">
@@ -78,19 +112,23 @@
 			</div>
 			{#if mutes.length > 0}
 				<div class="h-fit">
-					<VirtualList
-						height={Math.min(mutes.length, 6) * 44}
-						itemCount={mutes.length}
-						itemSize={44}
+					<div
+						bind:this={mutesParentRef}
+						style="height: {Math.min(mutes.length, 6) *
+							44}px; overflow-y: auto; overflow-x: hidden; position: relative;"
 					>
-						{#snippet item({ index, style }: { index: number; style: string })}
-							<MutedAccountItem
-								{style}
-								did={mutes[index]}
-								onRemove={() => onRemoveMute(mutes[index])}
-							/>
-						{/snippet}
-					</VirtualList>
+						<div
+							style="height: {$mutesVirtualizer.getTotalSize()}px; width: 100%; position: relative;"
+						>
+							{#each $mutesVirtualizer.getVirtualItems() as virtualItem (virtualItem.key)}
+								<MutedAccountItem
+									style="position: absolute; top: 0; left: 0; width: 100%; height: {virtualItem.size}px; transform: translateY({virtualItem.start}px);"
+									did={mutes[virtualItem.index]}
+									onRemove={() => onRemoveMute(mutes[virtualItem.index])}
+								/>
+							{/each}
+						</div>
+					</div>
 				</div>
 			{:else}
 				<p class="py-2 text-center text-sm opacity-50">no muted accounts</p>
@@ -116,19 +154,23 @@
 			</div>
 			{#if blocks.length > 0}
 				<div class="h-fit">
-					<VirtualList
-						height={Math.min(blocks.length, 6) * 44}
-						itemCount={blocks.length}
-						itemSize={44}
+					<div
+						bind:this={blocksParentRef}
+						style="height: {Math.min(blocks.length, 6) *
+							44}px; overflow-y: auto; overflow-x: hidden; position: relative;"
 					>
-						{#snippet item({ index, style }: { index: number; style: string })}
-							<MutedAccountItem
-								{style}
-								did={blocks[index]}
-								onRemove={() => handleRemoveBlock(blocks[index])}
-							/>
-						{/snippet}
-					</VirtualList>
+						<div
+							style="height: {$blocksVirtualizer.getTotalSize()}px; width: 100%; position: relative;"
+						>
+							{#each $blocksVirtualizer.getVirtualItems() as virtualItem (virtualItem.key)}
+								<MutedAccountItem
+									style="position: absolute; top: 0; left: 0; width: 100%; height: {virtualItem.size}px; transform: translateY({virtualItem.start}px);"
+									did={blocks[virtualItem.index]}
+									onRemove={() => handleRemoveBlock(blocks[virtualItem.index])}
+								/>
+							{/each}
+						</div>
+					</div>
 				</div>
 			{:else}
 				<p class="py-2 text-center text-sm opacity-50">no blocked accounts</p>

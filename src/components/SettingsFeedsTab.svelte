@@ -1,6 +1,6 @@
 <script lang="ts">
 	import FeedItem from './FeedItem.svelte';
-	import VirtualList from '@tutorlatin/svelte-tiny-virtual-list';
+	import { createVirtualizer } from '@tanstack/svelte-virtual';
 	import type { FeedGenerator } from '$lib/at/feeds';
 	import { fetchFeedGenerator, parseFeedUri } from '$lib/at/feeds';
 	import type { SavedFeed } from '$lib/settings';
@@ -30,6 +30,23 @@
 
 	const sortedFeeds = $derived([...feeds].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)));
 	const isValidUri = $derived(parseFeedUri(newFeedInput.trim()) !== null);
+
+	let parentRef = $state<HTMLDivElement | null>(null);
+	const virtualizer = createVirtualizer({
+		count: 0,
+		getScrollElement: () => parentRef,
+		estimateSize: () => 44,
+		overscan: 5
+	});
+
+	$effect(() => {
+		$virtualizer.setOptions({
+			count: sortedFeeds.length,
+			getScrollElement: () => parentRef,
+			estimateSize: () => 44,
+			overscan: 5
+		});
+	});
 </script>
 
 <div class="space-y-4 p-4">
@@ -47,20 +64,22 @@
 			</div>
 			{#if sortedFeeds.length > 0}
 				<div class="h-fit">
-					<VirtualList
-						height={Math.min(sortedFeeds.length, 7) * 44}
-						itemCount={sortedFeeds.length}
-						itemSize={44}
+					<div
+						bind:this={parentRef}
+						style="height: {Math.min(sortedFeeds.length, 7) *
+							44}px; overflow-y: auto; overflow-x: hidden; position: relative;"
 					>
-						{#snippet item({ index, style }: { index: number; style: string })}
-							<FeedItem
-								{style}
-								data={sortedFeeds[index]}
-								onRemove={() => onRemoveFeed(sortedFeeds[index].feed.uri)}
-								onTogglePin={() => onTogglePin(sortedFeeds[index].feed.uri)}
-							/>
-						{/snippet}
-					</VirtualList>
+						<div style="height: {$virtualizer.getTotalSize()}px; width: 100%; position: relative;">
+							{#each $virtualizer.getVirtualItems() as virtualItem (virtualItem.key)}
+								<FeedItem
+									style="position: absolute; top: 0; left: 0; width: 100%; height: {virtualItem.size}px; transform: translateY({virtualItem.start}px);"
+									data={sortedFeeds[virtualItem.index]}
+									onRemove={() => onRemoveFeed(sortedFeeds[virtualItem.index].feed.uri)}
+									onTogglePin={() => onTogglePin(sortedFeeds[virtualItem.index].feed.uri)}
+								/>
+							{/each}
+						</div>
+					</div>
 				</div>
 			{:else}
 				<p class="py-2 text-center text-sm opacity-50">no saved feeds</p>

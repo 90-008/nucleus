@@ -17,11 +17,11 @@ export type RoutePath = RouteConfig['path'];
 type ExtractParams<Path extends string> =
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	Path extends `${infer Start}/:${infer Param}/${infer Rest}`
-	? { [K in Param | keyof ExtractParams<`/${Rest}`>]: string }
-	: // eslint-disable-next-line @typescript-eslint/no-unused-vars
-	Path extends `${infer Start}/:${infer Param}`
-	? { [K in Param]: string }
-	: Record<string, never>;
+		? { [K in Param | keyof ExtractParams<`/${Rest}`>]: string }
+		: // eslint-disable-next-line @typescript-eslint/no-unused-vars
+			Path extends `${infer Start}/:${infer Param}`
+			? { [K in Param]: string }
+			: Record<string, never>;
 
 export type Route<K extends RoutePath = RoutePath> = {
 	[T in K]: {

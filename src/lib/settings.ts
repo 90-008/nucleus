@@ -12,8 +12,8 @@ export type ApiEndpoints = Record<string, string> & {
 };
 
 export type SavedFeed = {
-	feed: FeedGenerator,
-	pinned: boolean,
+	feed: FeedGenerator;
+	pinned: boolean;
 };
 
 export type Settings = {
@@ -101,4 +101,3 @@ export const needsReload = (current: Settings, other: Settings): boolean => {
 		current.endpoints.cdn !== other.endpoints.cdn
 	);
 };
-

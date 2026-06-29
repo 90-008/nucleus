@@ -32,11 +32,7 @@ import {
 } from '$lib';
 import { Router } from './router.svelte';
 import { accounts, type Account } from './accounts';
-import {
-	getPreferences,
-	putPreferences,
-	type Preferences
-} from './at/pocket';
+import { getPreferences, putPreferences, type Preferences } from './at/pocket';
 
 export const notificationStream = writable<NotificationsStream | null>(null);
 export const jetstream = writable<JetstreamSubscription | null>(null);
@@ -354,10 +350,7 @@ type FollowWithUri = {
 };
 export const follows = new SvelteMap<Did, SvelteMap<Did, FollowWithUri>>();
 
-export const addFollows = (
-	did: Did,
-	followList: Iterable<FollowWithUri>
-) => {
+export const addFollows = (did: Did, followList: Iterable<FollowWithUri>) => {
 	let map = follows.get(did)!;
 	if (!map) {
 		map = new SvelteMap();
@@ -423,7 +416,11 @@ export const fetchForInteractions = async (client: AtpClient, subject: Did) => {
 	await Promise.all([repostSource].map((s) => fetchLinksUntil(subject, client, s, timestamp)));
 };
 
-export const fetchFollowingTimeline = async (client: AtpClient, targetDid?: Did, limit: number = 10) => {
+export const fetchFollowingTimeline = async (
+	client: AtpClient,
+	targetDid?: Did,
+	limit: number = 10
+) => {
 	// 1. Identify candidates (active follows + self)
 	const userDid = targetDid ?? client.user?.did;
 	if (!userDid) return;
@@ -759,7 +756,10 @@ export const postCursors = new SvelteMap<Did, { value?: string; end: boolean }>(
 
 // feed state: Did -> feedUri -> post URIs
 export const feedTimelines = new SvelteMap<Did, SvelteMap<string, ResourceUri[]>>();
-export const feedCursors = new SvelteMap<Did, SvelteMap<string, { value?: string; end: boolean }>>();
+export const feedCursors = new SvelteMap<
+	Did,
+	SvelteMap<string, { value?: string; end: boolean }>
+>();
 
 export const followingFeed = new SvelteMap<Did, SvelteSet<ResourceUri>>(); // merged timeline: UserDid -> Set<Uri>
 export const followingBuffer = new SvelteMap<Did, SvelteSet<ResourceUri>>(); // buffer: UserDid -> Set<Uri>
@@ -823,7 +823,11 @@ export const fetchFeed = async (
 	return newCursor;
 };
 
-export const checkForNewPosts = async (client: AtpClient, feedUri: string, feedServiceDid: string) => {
+export const checkForNewPosts = async (
+	client: AtpClient,
+	feedUri: string,
+	feedServiceDid: string
+) => {
 	const userDid = client.user?.did;
 	if (!userDid) return false;
 
@@ -846,7 +850,6 @@ export const resetFeed = (did: Did, feedUri: string) => {
 	feedTimelines.get(did)?.delete(feedUri);
 	feedCursors.get(did)?.delete(feedUri);
 };
-
 
 const traversePostChain = (post: PostWithUri) => {
 	const result = [post.uri];
@@ -919,10 +922,7 @@ export const fetchInteractionsToTimelineEnd = async (
 	);
 };
 
-export const fetchInteractionsToFollowingTimelineEnd = async (
-	client: AtpClient,
-	userDid: Did
-) => {
+export const fetchInteractionsToFollowingTimelineEnd = async (client: AtpClient, userDid: Did) => {
 	const userCursors = followingCursors.get(userDid);
 	if (!userCursors) return;
 
@@ -987,7 +987,9 @@ export const fetchInitial = async (account: Account) => {
 		fetchBlocks(account),
 		fetchForInteractions(client, account.did),
 		fetchFollows(account).then((follows) =>
-			Promise.allSettled(follows.map((follow) => fetchForInteractions(client, follow.subject)) ?? [])
+			Promise.allSettled(
+				follows.map((follow) => fetchForInteractions(client, follow.subject)) ?? []
+			)
 		)
 	]);
 	initialDone.add(account.did);

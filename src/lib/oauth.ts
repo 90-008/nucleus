@@ -19,6 +19,6 @@ export const oauthMetadata = {
 export const redirectUri = `${domain}/`;
 export const clientId = dev
 	? `http://localhost` +
-	`?redirect_uri=${encodeURIComponent(redirectUri)}` +
-	`&scope=${encodeURIComponent(oauthMetadata.scope)}`
+		`?redirect_uri=${encodeURIComponent(redirectUri)}` +
+		`&scope=${encodeURIComponent(oauthMetadata.scope)}`
 	: oauthMetadata.client_id;
