@@ -81,6 +81,7 @@ export const buildThreadsFiltered = (
 
 		for (const uri of postUris) {
 			if (!timeline.has(uri)) continue;
+
 			const did = extractDidFromUri(uri);
 			if (!did) continue;
 			const parts = uri.split('/');
