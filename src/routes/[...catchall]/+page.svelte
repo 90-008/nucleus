@@ -125,9 +125,9 @@
 			);
 		});
 
-		console.log(`creating jetstream subscription to ${$settings.endpoints.jetstream}`);
+		console.log(`creating jetstream subscription to ${settings.current.endpoints.jetstream}`);
 		const jetstreamSub = new JetstreamSubscription({
-			url: $settings.endpoints.jetstream,
+			url: settings.current.endpoints.jetstream,
 			wantedCollections: ['app.bsky.feed.post'],
 			// this is here because if wantedDids is zero jetstream will send all events
 			wantedDids: ['did:web:guestbook.gaze.systems']

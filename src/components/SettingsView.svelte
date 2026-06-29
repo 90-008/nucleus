@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { needsReload, settings } from '$lib/settings';
-	import { get } from 'svelte/store';
+
 	import Tabs from './Tabs.svelte';
 	import { portal } from 'svelte-portal';
 	import {
@@ -29,11 +29,11 @@
 
 	let { tab }: Props = $props();
 
-	let localSettings = $state(get(settings));
-	let hasReloadChanges = $derived(needsReload($settings, localSettings));
+	let localSettings = $state($state.snapshot(settings.current));
+	let hasReloadChanges = $derived(needsReload(settings.current, localSettings));
 
 	$effect(() => {
-		$settings.theme = localSettings.theme;
+		settings.current = { ...settings.current, theme: localSettings.theme };
 	});
 
 	const handleSave = () => {

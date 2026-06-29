@@ -58,7 +58,7 @@
 				{:else if feature.$type === 'app.bsky.richtext.facet#tag'}
 					<a
 						class="text-(--nucleus-accent2)"
-						href={`${$settings.socialAppUrl}/search?q=${encodeURIComponent('#' + feature.tag)}`}
+						href={`${settings.current.socialAppUrl}/search?q=${encodeURIComponent('#' + feature.tag)}`}
 						target="_blank"
 						rel="noopener noreferrer">{@render plainText(text)}</a
 					>

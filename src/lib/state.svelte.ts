@@ -1115,11 +1115,86 @@ export const handleNotification = async (event: NotificationsStreamEvent) => {
 	}
 };
 
+export const gcPosts = () => {
+	const activeUris = new SvelteSet<ResourceUri>();
+
+	// 1. Collect all URIs from timelines
+	for (const timeline of timelines.values()) {
+		for (const uri of timeline) {
+			activeUris.add(uri);
+		}
+	}
+
+	// 2. Collect all URIs from feedTimelines
+	for (const feedMap of feedTimelines.values()) {
+		for (const feedUris of feedMap.values()) {
+			for (const uri of feedUris) {
+				activeUris.add(uri);
+			}
+		}
+	}
+
+	// 3. Collect all URIs from followingFeed
+	for (const feed of followingFeed.values()) {
+		for (const uri of feed) {
+			activeUris.add(uri);
+		}
+	}
+
+	// 4. Collect all URIs from followingBuffer
+	for (const buffer of followingBuffer.values()) {
+		for (const uri of buffer) {
+			activeUris.add(uri);
+		}
+	}
+
+	// 5. Clean up allPosts
+	let prunedCount = 0;
+	for (const uri of allPosts.keys()) {
+		if (!activeUris.has(uri)) {
+			allPosts.delete(uri);
+			prunedCount++;
+
+			// remove from other index maps
+			postsByDid.forEach((set) => set.delete(uri));
+			postsByRootUri.forEach((set) => set.delete(uri));
+			replyIndex.forEach((set) => set.delete(uri));
+			deletedPosts.delete(uri);
+		}
+	}
+
+	// 6. Clean up empty sets/maps in index maps to prevent memory leak
+	for (const [did, set] of postsByDid) {
+		if (set.size === 0) postsByDid.delete(did);
+	}
+	for (const [rootUri, set] of postsByRootUri) {
+		if (set.size === 0) postsByRootUri.delete(rootUri);
+	}
+	for (const [did, set] of replyIndex) {
+		if (set.size === 0) replyIndex.delete(did);
+	}
+
+	if (prunedCount > 0) {
+		console.log(
+			`[GC] Pruned ${prunedCount} unused posts from cache. Active posts: ${allPosts.size}`
+		);
+	}
+};
+
 export const currentTime = new SvelteDate();
 
-if (typeof window !== 'undefined')
+if (typeof window !== 'undefined') {
 	setInterval(() => {
 		currentTime.setTime(Date.now());
 	}, 1000);
+
+	// Run post cache garbage collection every 3 minutes
+	setInterval(
+		() => {
+			gcPosts();
+		},
+		1000 * 60 * 3
+	);
+}
 
 export const router = new Router();

@@ -454,7 +454,9 @@
 			placement="bottom-end"
 		>
 			{@render dropdownItem('heroicons:link-20-solid', 'copy link to post', () =>
-				navigator.clipboard.writeText(`${$settings.socialAppUrl}/profile/${did}/post/${rkey}`)
+				navigator.clipboard.writeText(
+					`${settings.current.socialAppUrl}/profile/${did}/post/${rkey}`
+				)
 			)}
 			{@render dropdownItem(undefined, 'copy at uri', () =>
 				navigator.clipboard.writeText(post.uri)

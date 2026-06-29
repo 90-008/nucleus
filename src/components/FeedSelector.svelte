@@ -14,7 +14,7 @@
 
 	let isOpen = $state(false);
 
-	const savedFeeds = $derived($settings.feeds);
+	const savedFeeds = $derived(settings.current.feeds);
 	const sortedFeeds = $derived(
 		[...savedFeeds].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
 	);

@@ -1,4 +1,3 @@
-import { writable } from 'svelte/store';
 import { defaultTheme, type Theme } from './theme';
 import type { FeedGenerator } from './at/feeds';
 
@@ -37,59 +36,70 @@ export const defaultSettings: Settings = {
 	feeds: []
 };
 
-const createSettingsStore = () => {
-	// Prevent SSR crash if localStorage is missing
-	const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('settings') : null;
+const applyThemeToDocument = (theme: Theme) => {
+	if (typeof document === 'undefined') return;
+	document.documentElement.style.setProperty('--nucleus-bg', theme.bg);
+	document.documentElement.style.setProperty('--nucleus-fg', theme.fg);
+	document.documentElement.style.setProperty('--nucleus-accent', theme.accent);
+	document.documentElement.style.setProperty('--nucleus-accent2', theme.accent2);
 
-	const initial: Partial<Settings> = stored ? JSON.parse(stored) : defaultSettings;
-	initial.endpoints = { ...defaultSettings.endpoints, ...initial.endpoints };
-	initial.theme = { ...defaultSettings.theme, ...initial.theme };
-	initial.socialAppUrl = initial.socialAppUrl ?? defaultSettings.socialAppUrl;
-	initial.feeds = initial.feeds ?? defaultSettings.feeds;
+	const oldMeta = document.querySelector('meta[name="theme-color"]');
+	if (oldMeta) oldMeta.remove();
 
-	const { subscribe, set, update } = writable<Settings>(initial as Settings);
-
-	subscribe((settings) => {
-		if (typeof document === 'undefined') return;
-		const theme = settings.theme;
-		document.documentElement.style.setProperty('--nucleus-bg', theme.bg);
-		document.documentElement.style.setProperty('--nucleus-fg', theme.fg);
-		document.documentElement.style.setProperty('--nucleus-accent', theme.accent);
-		document.documentElement.style.setProperty('--nucleus-accent2', theme.accent2);
-
-		const oldMeta = document.querySelector('meta[name="theme-color"]');
-		if (oldMeta) oldMeta.remove();
-
-		const metaThemeColor = document.createElement('meta');
-		metaThemeColor.setAttribute('name', 'theme-color');
-		metaThemeColor.setAttribute('content', theme.bg);
-		document.head.appendChild(metaThemeColor);
-	});
-
-	return {
-		subscribe,
-		set: (value: Settings) => {
-			if (typeof localStorage !== 'undefined')
-				localStorage.setItem('settings', JSON.stringify(value));
-			set(value);
-		},
-		update: (fn: (value: Settings) => Settings) => {
-			update((value) => {
-				const newValue = fn(value);
-				if (typeof localStorage !== 'undefined')
-					localStorage.setItem('settings', JSON.stringify(newValue));
-				return newValue;
-			});
-		},
-		reset: () => {
-			if (typeof localStorage !== 'undefined')
-				localStorage.setItem('settings', JSON.stringify(defaultSettings));
-			set(defaultSettings);
-		}
-	};
+	const metaThemeColor = document.createElement('meta');
+	metaThemeColor.setAttribute('name', 'theme-color');
+	metaThemeColor.setAttribute('content', theme.bg);
+	document.head.appendChild(metaThemeColor);
 };
 
-export const settings = createSettingsStore();
+// Private reactive state
+let _settings = $state<Settings>(defaultSettings);
+
+if (typeof localStorage !== 'undefined') {
+	const stored = localStorage.getItem('settings');
+	if (stored) {
+		try {
+			const parsed = JSON.parse(stored);
+			_settings = {
+				endpoints: { ...defaultSettings.endpoints, ...parsed.endpoints },
+				theme: { ...defaultSettings.theme, ...parsed.theme },
+				socialAppUrl: parsed.socialAppUrl ?? defaultSettings.socialAppUrl,
+				feeds: parsed.feeds ?? defaultSettings.feeds
+			};
+		} catch (e) {
+			console.error('Failed to parse settings from localStorage', e);
+		}
+	}
+}
+
+// Apply theme initially if in browser
+if (typeof document !== 'undefined') {
+	applyThemeToDocument(_settings.theme);
+}
+
+export const settings = {
+	get current() {
+		return _settings;
+	},
+	set current(value: Settings) {
+		_settings = value;
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem('settings', JSON.stringify(value));
+		}
+		applyThemeToDocument(value.theme);
+	},
+	// Compatibility wrapper for settings.set
+	set(value: Settings) {
+		this.current = value;
+	},
+	// Compatibility wrapper for settings.update
+	update(fn: (value: Settings) => Settings) {
+		this.current = fn(this.current);
+	},
+	reset() {
+		this.current = defaultSettings;
+	}
+};
 
 export const needsReload = (current: Settings, other: Settings): boolean => {
 	return (
