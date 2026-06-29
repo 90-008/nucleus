@@ -121,3 +121,64 @@ bd prime                # Refresh Beads context
 - Run `bd prime` when Beads context is missing or stale.
 - Keep persistent project memory in Beads via `bd remember`; do not create ad hoc memory files.
 <!-- END BEADS CODEX SETUP -->
+
+# Project Guide & Tech Stack
+
+## Tech Stack
+- **Runtime**: Deno 2.x (use `deno install`, `deno task`, etc., NEVER use `npx` or `npm` directly unless necessary)
+- **Framework**: Svelte 5 (uses Runes like `$state`, `$derived`, `$effect`)
+- **Virtualization**: `@tanstack/svelte-virtual` (replaces old `@tutorlatin/svelte-tiny-virtual-list`)
+- **Styling**: Tailwind CSS v4
+
+## Virtualization Guidelines (TanStack Virtual)
+When implementing list/timeline virtualization, follow these patterns to prevent bugs and Svelte 5 compilation warnings:
+
+1. **Reactivity & Options Updates**:
+   To avoid Svelte 5 "capturing local state" warnings, initialize the virtualizer with `count: 0` and update it reactively using `$effect` and `$virtualizer.setOptions(...)`:
+   ```typescript
+   let parentRef = $state<HTMLDivElement | null>(null);
+   
+   const virtualizer = createVirtualizer({
+       count: 0,
+       getScrollElement: () => parentRef,
+       estimateSize: () => 44,
+       overscan: 5
+   });
+
+   $effect(() => {
+       $virtualizer.setOptions({
+           count: items.length,
+           getScrollElement: () => parentRef,
+           estimateSize: () => 44,
+           overscan: 5
+       });
+   });
+   ```
+
+2. **Dynamic Height Measurement**:
+   Always provide `getItemKey` using a unique identifier (like post/thread URI) to prevent cache collisions when the list changes. Use a Svelte action `use:measureElement` to measure DOM nodes dynamically:
+   ```typescript
+   const measureElement = (node: HTMLElement) => {
+       $virtualizer.measureElement(node);
+   };
+   ```
+   And in the markup, set `data-index` and use the action:
+   ```svelte
+   <div
+       data-index={virtualItem.index}
+       use:measureElement
+       style="position: absolute; top: 0; left: 0; width: 100%; transform: translateY({virtualItem.start}px);"
+   >
+       <!-- content -->
+   </div>
+   ```
+
+3. **Reactive Scrolling**:
+   To scroll to a target index reactively, use an `$effect`:
+   ```typescript
+   $effect(() => {
+       if (scrollToIndex !== undefined) {
+           $virtualizer.scrollToIndex(scrollToIndex);
+       }
+   });
+   ```
